@@ -1,0 +1,12 @@
+
+## Mimic CUDA defines
+MH_ADD = 0
+MH_DEL = 1
+MH_NOP = 2
+
+G_LOGISTIC_NORMAL  = 0
+
+LOGISTIC_NORMAL_SUM      = 0
+LOGISTIC_NORMAL_VARIANCE = 1
+DEBUG_SUM_DS             = 2
+    
