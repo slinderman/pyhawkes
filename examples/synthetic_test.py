@@ -1,8 +1,15 @@
-from pyhawkes.cuda.base_model import *
-from pyhawkes.utils.data_manager import *
-from pyhawkes.utils.stat_manager import *
-from pyhawkes.utils.sample_parser import *
-from pyhawkes.utils.utils import *
+import os
+import numpy as np
+import scipy.io
+import time
+
+from ConfigParser import ConfigParser
+
+from pyhawkes.cuda.base_model import BaseModel
+from pyhawkes.utils.data_manager import DataManager, DataSet
+from pyhawkes.utils.stat_manager import StatManager
+from pyhawkes.utils.sample_parser import parse_sample
+from pyhawkes.utils.utils import get_unique_file_name, initialize_logger
 
 import logging
 log = logging.getLogger("global_log")
@@ -192,10 +199,7 @@ def save_synth_data(synthData, trainModel):
     scipy.io.savemat(mat_file, synthDataDict, appendmat=True, oned_as='column')
 
 
-if __name__ == "__main__":
-    perfDict = {}
-    startPerfTimer(perfDict, "TOTAL")
-    
+def run_synthetic_test():
     # Parse the command line params
     (options, _) = parse_command_line_args()
     
@@ -283,3 +287,5 @@ if __name__ == "__main__":
 
     # Finally, shutdown the logger to flush to file
     logging.shutdown()
+
+run_synthetic_test()

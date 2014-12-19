@@ -1,10 +1,16 @@
+import os
+import numpy as np
+import scipy.io
+import time
 import traceback
 
-from pyhawkes.cuda.base_model import *
-from pyhawkes.utils.utils import *
-from pyhawkes.utils.data_manager import *
-from pyhawkes.utils.stat_manager import *
-from pyhawkes.utils.sample_parser import *
+from ConfigParser import ConfigParser
+
+from pyhawkes.cuda.base_model import BaseModel
+from pyhawkes.utils.data_manager import DataManager
+from pyhawkes.utils.stat_manager import StatManager
+from pyhawkes.utils.sample_parser import parse_sample
+from pyhawkes.utils.utils import initialize_logger
 
 import logging
 log = logging.getLogger("global_log")
@@ -126,7 +132,7 @@ def get_initial_sample(sampleFile):
         return None
     
     log.info("Loading samples files")
-    samples = scipy.io.loadmat(options.sampleFile)
+    samples = scipy.io.loadmat(sampleFile)
     
     # Convert the last sample to a parameter database
     init_db = parse_sample(samples,int(samples["N_samples"]-1))
@@ -169,79 +175,70 @@ def parse_command_line_args():
     return (options, args)
 
 def run_mcmc():
-    """
-    Run the MCMC algorithm.
-    """
-    #  Initialize the Model
-    log.info("Initializing Model")
-    model = BaseModel(dataManager, options.configFile, trainData)
-    
-    # HACK: We need to initialize the model before registering the stat manager because
-    # some statistics' shapes depend on K, and K is not know until after initialization.
-    # Ideally we would be able to submit samples of different size to the stat manager
-    # and it should detect at save time whether all the samples are a consistent shape and
-    # can be compressed into a single array. 
-    model.initializeFromPrior()
-    
-    # Register model callbacks with the stat manager
-    model.registerStatManager(statManager)
-    
-    # Restart the sampler with a draw from the prior
-    if options.sampleFile != None:
-        init_db = get_initial_sample(options.sampleFile)
-        model.initializeFromDict(init_db)
-    else:
-        # Restart the sampler with a draw from the prior
-        model.initializeFromPrior()
-        
-    # Print log likelihood
-    log.info("init ll: %f", model.computeLogLikelihood())
-        
-    # Start the Gibbs sampler
-    run_gibbs_sampler(model,
-                    statManager,
-                    burnin=params["burnin"], 
-                    samples=params["samples"], 
-                    thin=params["thin"], 
-                    print_intvl=params["print_intvl"], 
-                    )
-    
-    log.info("Computing rescaled spike times for KS statistic")
-    compute_ks_statistic(model, statManager)
-    
-    log.info("Computing conditional intensity")
-    compute_conditional_intensity(model, statManager)
 
-if __name__ == "__main__":
-    perfDict = {}
-    startPerfTimer(perfDict, "TOTAL")
-        
     # Parse the command line params
     (options, _) = parse_command_line_args()
-    
+
     # Load params from config file
     params = parse_global_config_settings(options.configFile)
-    
+
     # Initialize the logger
     initialize_logger(params)
-    
+
     # Initialize the random seed
     initialize_randomness(params)
-    
+
     try:
         save_output = params["save_on_exception"]
-        
+
         #  Load the specified data
         log.info("Initializing DataManager")
         dataManager = DataManager(options.configFile, dataFile=options.dataFile)
         trainData = dataManager.preprocess_for_inference()
-        
+
         #  Initialize the stat manager
         statManager = StatManager(options.configFile, resultsFile=options.outputFile)
-        
-        # Run MCMC
-        run_mcmc()
-        
+
+        #  Initialize the Model
+        log.info("Initializing Model")
+        model = BaseModel(dataManager, options.configFile, trainData)
+
+        # HACK: We need to initialize the model before registering the stat manager because
+        # some statistics' shapes depend on K, and K is not know until after initialization.
+        # Ideally we would be able to submit samples of different size to the stat manager
+        # and it should detect at save time whether all the samples are a consistent shape and
+        # can be compressed into a single array.
+        model.initializeFromPrior()
+
+        # Register model callbacks with the stat manager
+        model.registerStatManager(statManager)
+
+        # Restart the sampler with a draw from the prior
+        if options.sampleFile != None:
+            init_db = get_initial_sample(options.sampleFile)
+            model.initializeFromDict(init_db)
+        else:
+            # Restart the sampler with a draw from the prior
+            model.initializeFromPrior()
+
+        # Print log likelihood
+        log.info("init ll: %f", model.computeLogLikelihood())
+
+        # Start the Gibbs sampler
+        run_gibbs_sampler(model,
+                        statManager,
+                        burnin=params["burnin"],
+                        samples=params["samples"],
+                        thin=params["thin"],
+                        print_intvl=params["print_intvl"],
+                        )
+
+        log.info("Computing rescaled spike times for KS statistic")
+        compute_ks_statistic(model, statManager)
+
+        log.info("Computing conditional intensity")
+        compute_conditional_intensity(model, statManager)
+
         save_output = True
         
     except Exception as e:
@@ -257,3 +254,5 @@ if __name__ == "__main__":
             statManager.save_stats()
         # Finally, shutdown the logger to flush to file
         logging.shutdown()
+
+run_mcmc()
