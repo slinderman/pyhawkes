@@ -2,32 +2,23 @@
 Impulse response models include a shared-parameter logistic normal model
 and a logistic normal model with unique params for every process pair
 """
-
+import os
 import numpy as np
-import string 
+import string
 import logging
-
-import pycuda.autoinit
-import pycuda.compiler as nvcc
-import pycuda.driver as cuda
-import pycuda.gpuarray as gpuarray
-import pycuda.curandom as curandom
-
 from ConfigParser import ConfigParser
+
+import pycuda.gpuarray as gpuarray
 
 from hawkes_consts import *
 
-import sys
-import os
-sys.path.append(os.path.join("..","utils"))
-from utils import *
+from pyhawkes.utils.utils import pprint_dict, compile_kernels
 
-sys.path.append(os.path.join("..","common"))
 from model_extension import ModelExtension
 
 log = logging.getLogger("global_log")
 
-def constructImpulseResponseModel(impulse_model, baseModel, configFile):
+def construct_impulse_response_model(impulse_model, baseModel, configFile):
     """
     Return an instance of the impulse response model specified in parameters
     """
@@ -45,7 +36,7 @@ def constructImpulseResponseModel(impulse_model, baseModel, configFile):
 #        log.info("Creating logistic normal unique model")
 #        return LogisticNormalUniqueIRModel(baseModel, configFile)
     else:
-        log.error("Unsupported weight model: %s", weight_model)
+        log.error("Unsupported weight model: %s", impulse_model)
         exit()
         
 class LogisticNormalSharedIRModel(ModelExtension):
@@ -70,7 +61,7 @@ class LogisticNormalSharedIRModel(ModelExtension):
         # Allocate memory on GPU for inference
         # Initialize host params        
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Impulse Model Params")
+        pprint_dict(self.params, "Impulse Model Params")
         
         
         self.initializeGpuKernels()
@@ -163,7 +154,7 @@ class LogisticNormalSharedIRModel(ModelExtension):
         
         src_consts = {"B" : self.params["blockSz"]}
         
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
         
     def initializeGpuMemory(self):
         K = self.modelParams["proc_id_model","K"]
@@ -433,7 +424,7 @@ class LogisticNormalIRModel(ModelExtension):
         # Allocate memory on GPU for inference
         # Initialize host params        
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Impulse Model Params")
+        pprint_dict(self.params, "Impulse Model Params")
         
         
         self.initializeGpuKernels()
@@ -501,6 +492,7 @@ class LogisticNormalIRModel(ModelExtension):
         Compute the impulse response density at the time intervals in dS_gpu 
         """
         K = self.modelParams["proc_id_model","K"]
+        N = self.base.data.N
         gS_gpu = gpuarray.empty_like(dS_gpu)
         
         # Update GS using the impulse response parameters
@@ -530,7 +522,7 @@ class LogisticNormalIRModel(ModelExtension):
         
         src_consts = {"B" : self.params["blockSz"]}
         
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
         
     def initializeGpuMemory(self):
         K = self.modelParams["proc_id_model","K"]
@@ -832,7 +824,7 @@ class UniformIRModel(ModelExtension):
         # Allocate memory on GPU for inference
         # Initialize host params        
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Impulse Model Params")
+        pprint_dict(self.params, "Impulse Model Params")
         
     def parseConfigurationFile(self, configFile):
         

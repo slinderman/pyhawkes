@@ -1,18 +1,14 @@
 import numpy as np
-import string 
 import logging
 
 import os
 import sys
 
-import pycuda.autoinit
-import pycuda.compiler as nvcc
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
-import pycuda.curandom as curandom
 
-from pyhawkes.utils.utils import *
-from pyhawkes.utils.elliptical_slice import *
+from pyhawkes.utils.utils import pprint_dict, compile_kernels, log_sum_exp_sample
+from pyhawkes.utils.elliptical_slice import elliptical_slice
 
 from graph_model_extension import GraphModelExtension
 
@@ -37,7 +33,7 @@ class StochasticBlockModelCoupledWithW(GraphModelExtension):
         # Allocate memory on GPU for background rate inference
         # Initialize host params        
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Weight and Graph Model Params")
+        pprint_dict(self.params, "Weight and Graph Model Params")
         
         self.initializeGpuKernels()
     
@@ -130,7 +126,7 @@ class StochasticBlockModelCoupledWithW(GraphModelExtension):
         
         # Before compiling, make sure utils.cu is in the sys path
         sys.path.append(self.params["cu_dir"])
-        sbmwGpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        sbmwGpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
         
         # Update kernel list
         self.gpuKernels.update(sbmwGpuKernels)
@@ -499,7 +495,7 @@ class StochasticBlockModelCoupledWithW(GraphModelExtension):
                     ln_pYk[r] += np.sum(np.log(1-self.modelParams["graph_model","B"][np.ix_(Y[i2],[r])]))
             
             try:
-                Y[k] = logSumExpSample(ln_pYk)
+                Y[k] = log_sum_exp_sample(ln_pYk)
             except:
                 exit()
                 

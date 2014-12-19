@@ -175,7 +175,7 @@ def cleanup():
     Cleanup and save stats on SIGINT
     """
     # Save results to .mat file
-    statManager.saveStats()
+    statManager.save_stats()
     # Finally, shutdown the logger to flush to file
     logging.shutdown()
     # Make sure you exit!
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     params = parseGlobalConfigSettings(options.configFile)
     
     # Initialize the logger
-    initializeLogger(params)
+    initialize_logger(params)
     
     # Initialize the random seed
     initializeRandomness(params)
@@ -243,7 +243,7 @@ if __name__ == "__main__":
                         )
         
     # Save results to .mat file
-    statManager.saveStats()
+    statManager.save_stats()
 
     # Finally, shutdown the logger to flush to file
     logging.shutdown()

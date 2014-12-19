@@ -14,12 +14,7 @@ import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 import pycuda.curandom as curandom
 
-from ConfigParser import ConfigParser
-
-import sys
-import os
-sys.path.append(os.path.join("..","utils"))
-from utils import *
+from pyhawkes.utils.utils import *
 
 # Define constant for the sparse matrix preprocessing
 G_LOGISTIC_NORMAL = 0
@@ -255,13 +250,13 @@ class DataManager:
         """
         Load the data and preprocess it on the GPU.  
         """
-        self.parseConfigFile(configFile)
+        self.parse_config_file(configFile)
         if not dataFile is None:
             self.params["data_file"] = dataFile
         
-        pprintDict(self.params, "Data Manager Params")
+        pprint_dict(self.params, "Data Manager Params")
         
-    def preprocessForInference(self, sortByBlock=False):
+    def preprocess_for_inference(self, sortByBlock=False):
         """
         Load all of the data 
         """        
@@ -271,7 +266,7 @@ class DataManager:
         
         return data
     
-    def preprocessForCrossValidation(self, sortByBlock=False):
+    def preprocess_for_cross_validation(self, sortByBlock=False):
         """
         Load all of the data 
         """        
@@ -281,7 +276,7 @@ class DataManager:
         
         return data
         
-    def preprocessForPredictionTest(self, Tsplit=0, trainFrac=0.9, sortByBlock=False):
+    def preprocess_for_prediction_test(self, Tsplit=0, trainFrac=0.9, sortByBlock=False):
         """
         Load all of the data onto the GPU for parameter inference
         """
@@ -289,13 +284,13 @@ class DataManager:
         mat_file = os.path.join(self.params["data_dir"], self.params["data_file"])    
         data.loadFromFile(mat_file)
         
-        (trainData, testData) = self.splitTestTrainData(data, Tsplit, trainFrac, sortByBlock=sortByBlock)
+        (trainData, testData) = self.split_test_train_data(data, Tsplit, trainFrac, sortByBlock=sortByBlock)
         log.info("Train: %d spikes in time [%.2f,%.2f]", trainData.N, trainData.Tstart,trainData.Tstop)
         log.info("Test: %d spikes in time [%.2f,%.2f]", testData.N, testData.Tstart,testData.Tstop)
         
         return (trainData, testData)
     
-    def parseConfigFile(self, configFile):
+    def parse_config_file(self, configFile):
         """
         Parse the config file for data manager params
         """
@@ -307,8 +302,8 @@ class DataManager:
         defaultParams["xv_file"] = "not given"
         
         # CUDA kernels are defined externally in a .cu file
-        defaultParams["cu_dir"]  = "."
-        defaultParams["cu_file"] = "hawkes_mcmc_kernels.cu"
+        defaultParams["cu_dir"]  = os.path.join("pyhawkes", "cuda", "cpp")
+        defaultParams["cu_file"] = "preprocessing_unknown_procs.cu"
         
         # Block size
         defaultParams["blockSz"] = 1024
@@ -338,7 +333,7 @@ class DataManager:
         self.params["dt_max"]       = cfgParser.getfloat("preprocessing", "dt_max")
         self.params["max_hist"]     = cfgParser.getint("preprocessing", "max_hist")
     
-    def initializeGpuKernels(self):
+    def initialize_gpu_kernels(self):
         kernelSrc = os.path.join(self.params["cu_dir"], self.params["cu_file"])
         
         kernelNames = ["computeColumnSizes", 
@@ -346,9 +341,9 @@ class DataManager:
                        "computeDx"]
         
         src_consts = {"B" : self.params["blockSz"]}
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, srcParams=src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, srcParams=src_consts)
         
-    def initializeKnownProcGpuKernels(self):
+    def initialize_known_proc_gpu_kernels(self):
         kernelSrc = os.path.join(self.params["cu_dir"], self.params["cu_file"])
         
         kernelNames = ["computeColPtrs",
@@ -360,10 +355,10 @@ class DataManager:
                        
         
         src_consts = {"B" : self.params["blockSz"]}
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, srcParams=src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, srcParams=src_consts)
     
 
-    def splitTestTrainData(self, alldata, Tsplit=0, trainFrac=0.9, sortByBlock=False):
+    def split_test_train_data(self, alldata, Tsplit=0, trainFrac=0.9, sortByBlock=False):
         """
         Split the data into test and train subsets
         alldata must be a sorted Dataset
@@ -428,7 +423,7 @@ class DataManager:
         
         return data
         
-    def computeSparseSpikeIntvlMatrices(self, dataSet1, dataSet2):
+    def compute_sparse_spike_intvl_matrices(self, dataSet1, dataSet2):
         """
         preprocess the given datasets by computing the intervals between spikes on S1
         and spikes on S2 and storing them in a sparse matrix format on the GPU.
@@ -438,7 +433,7 @@ class DataManager:
         they are sorted in increasing order of S.
         """        
         # Initialize the kernels with the size of the dataset
-        self.initializeKnownProcGpuKernels()
+        self.initialize_known_proc_gpu_kernels()
         
         # Temporarily copy both sets of spike times to the GPU
         S1_gpu =  gpuarray.to_gpu(dataSet1.S.astype(np.float32))
@@ -574,7 +569,7 @@ class DataManager:
         
         return gpuData
         
-    def computeSparseSpikeIntvlMatrixUnknownProcs(self, S1, S2):
+    def compute_sparse_spike_intvl_matrix_unknown_procs(self, S1, S2):
         """
         In the case where the process identities are unknown and to be inferred, 
         it does not make sense to have a grid of sparse matrices for each pair of 
@@ -582,7 +577,7 @@ class DataManager:
         
         """
         # Initialize the kernels with the size of the dataset
-        self.initializeGpuKernels()
+        self.initialize_gpu_kernels()
         
         # Temporarily copy both sets of spike times to the GPU
         N1 = len(S1)

@@ -5,49 +5,22 @@ ImplemeN_knotss differeN_knots models for the background rate. Namely:
 
 This abstracts the details of sampling
 """
-
+import os
+import logging
 import numpy as np
 import scipy.linalg
 
-import string
-import logging
-
-import pycuda.autoinit
-import pycuda.compiler as nvcc
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
-import pycuda.curandom as curandom
+
 
 from ConfigParser import ConfigParser
 
-import sys
-import os
-sys.path.append(os.path.join("..","utils"))
-from pyhawkes.utils.utils import *
-from pyhawkes.utils.elliptical_slice import *
+from pyhawkes.utils.utils import pprint_dict, compile_kernels
+from pyhawkes.utils.elliptical_slice import elliptical_slice
 from model_extension import ModelExtension
 
 log = logging.getLogger("global_log")
-
-#def constructBackgroundRateModel(bkgd_model, baseModel, configFile):
-#    """
-#    Generic factory method to be called by base model
-#    """
-#    if bkgd_model == "homogenous":
-#        log.info("Creating homogenous background rate model")
-#        return HomogenousRateModel(baseModel, configFile)
-#    elif bkgd_model == "gp":
-#        log.info("Creating Gaussian process weight model")
-#        return GaussianProcRateModel(baseModel, configFile)
-#    elif bkgd_model == "glm":
-#        log.info("Creating GLM background model")
-#        return GlmBackgroundModel(baseModel, configFile)
-#    elif bkgd_model == "shared_gp":
-#        log.info("Creating Shared Gaussian process weight model")
-#        return SharedGpBkgdModel(baseModel, configFile)
-#    else:
-#        raise Exception("Unsupported background rate model: %s" % bkgd_model)
-#
 
 class HomogenousRateModel(ModelExtension):
     def __init__(self, baseModel, configFile):
@@ -64,10 +37,9 @@ class HomogenousRateModel(ModelExtension):
         # Allocate memory on GPU for background rate inference
         # Initialize host params
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Background Model Params")
+        pprint_dict(self.params, "Background Model Params")
 
         self.initializeGpuKernels()
-#        self.initializeGpuMemory()
 
     def parseConfigurationFile(self, configFile):
         """
@@ -116,7 +88,7 @@ class HomogenousRateModel(ModelExtension):
 
         src_consts = {"B" : self.params["blockSz"]}
 
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
 
 
     def initializeGpuMemory(self):
@@ -425,7 +397,7 @@ class GaussianProcRateModel(ModelExtension):
         self.gpuPtrs.addDatabase("bkgd_model")
 
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Background Model Params")
+        pprint_dict(self.params, "Background Model Params")
 
 #        self.calculateNumKnots()
         self.initializeGpuKernels()
@@ -479,7 +451,7 @@ class GaussianProcRateModel(ModelExtension):
 
         src_consts = {"B" : self.params["blockSz"]}
 
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
 
     def initializeGpuMemory(self):
         K = self.modelParams["proc_id_model","K"]
@@ -1049,7 +1021,7 @@ class GlmBackgroundModel(ModelExtension):
         self.gpuPtrs.addDatabase("bkgd_model")
 
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Background Model Params")
+        pprint_dict(self.params, "Background Model Params")
 
 #        self.calculateNumKnots()
         self.initializeGpuKernels()
@@ -1093,7 +1065,7 @@ class GlmBackgroundModel(ModelExtension):
 
         src_consts = {"B" : self.params["blockSz"]}
 
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
 
     def initializeGpuMemory(self):
         K = self.modelParams["proc_id_model","K"]
@@ -1456,7 +1428,7 @@ class SharedGpBkgdModel(ModelExtension):
         self.gpuPtrs.addDatabase("bkgd_model")
 
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Background Model Params")
+        pprint_dict(self.params, "Background Model Params")
 
 #        self.calculateNumKnots()
         self.initializeGpuKernels()
@@ -1524,7 +1496,7 @@ class SharedGpBkgdModel(ModelExtension):
 
         src_consts = {"B" : self.params["blockSz"]}
 
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
 
     def initializeGpuMemory(self):
         K = self.modelParams["proc_id_model","K"]

@@ -5,27 +5,21 @@ For now the only model is a time-homogenous weight matrix, but in the future thi
 could be extended to include time-varying weights.
 """
 import sys
-
+import os
 import numpy as np
-import string 
 import logging
+import ConfigParser
 
-import pycuda.autoinit
-import pycuda.compiler as nvcc
-import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
-import pycuda.curandom as curandom
 
-from graph_models import *
+from graph_models import StochasticBlockModel, ErdosRenyiModel
 
-from pyhawkes.utils.utils import *
-
-sys.path.append(os.path.join("..","common"))
+from pyhawkes.utils.utils import pprint_dict, compile_kernels
 from model_extension import ModelExtension
 
 log = logging.getLogger("global_log")
 
-def constructWeightModel(weight_model, baseModel, configFile):
+def construct_weight_model(weight_model, baseModel, configFile):
     """
     Return an instance of the graph model specified in parameters
     """
@@ -61,7 +55,7 @@ class HomogenousWeightModel(ModelExtension):
         # Allocate memory on GPU for background rate inference
         # Initialize host params        
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Weight Model Params")
+        pprint_dict(self.params, "Weight Model Params")
         
         
         self.initializeGpuKernels()
@@ -150,7 +144,7 @@ class HomogenousWeightModel(ModelExtension):
         
         # Before compiling, make sure utils.cu is in the sys path
         sys.path.append(self.params["cu_dir"])
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
                 
     def initializeGpuMemory(self):
         K = self.modelParams["proc_id_model","K"]
@@ -210,7 +204,7 @@ class HomogenousWeightModel(ModelExtension):
         K = self.modelParams["proc_id_model","K"]
         
         # Copy over the existing W
-        Wold = gpuPtrs["weight_model","W"].get()
+        Wold = self.gpuPtrs["weight_model","W"].get()
         
         # Update with the new params
         Wnew = np.zeros((K+1,K+1), dtype=np.float32)
@@ -409,7 +403,7 @@ class SymmetricWeightModel(ModelExtension):
         # Allocate memory on GPU for background rate inference
         # Initialize host params        
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Weight Model Params")
+        pprint_dict(self.params, "Weight Model Params")
         
         self.initializeGpuKernels()
         self.initializeGpuMemory()
@@ -458,7 +452,7 @@ class SymmetricWeightModel(ModelExtension):
         
         # Before compiling, make sure utils.cu is in the sys path
         sys.path.append(self.params["cu_dir"])
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
                 
     def initializeGpuMemory(self):
         K = self.modelParams["proc_id_model","K"]

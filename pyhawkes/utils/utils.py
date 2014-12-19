@@ -1,6 +1,5 @@
 from ConfigParser import ConfigParser
 import time
-import os
 import io
 import logging
 
@@ -8,7 +7,6 @@ import numpy as np
 import scipy.stats as stats
 import scipy
 
-import pycuda.autoinit
 import pycuda.compiler as nvcc
 import pycuda.driver as cuda
 
@@ -16,7 +14,7 @@ perfTimers = {}
 
 log = logging.getLogger("global_log")
 
-def getUniqueFileName(filedir, filename):
+def get_unique_file_name(filedir, filename):
     """
     Get a unique filename by appending filename with .x, where x
     is the next untaken number
@@ -37,7 +35,7 @@ def getUniqueFileName(filedir, filename):
     return unique_name
     
 
-def initializeLogger(params):
+def initialize_logger(params):
     """
     Initialize a logger object. 
     Automatically detect conflicting log names.
@@ -46,7 +44,7 @@ def initializeLogger(params):
     import fnmatch
 
     # Get the number of conflicting log files
-    log_file = getUniqueFileName(params["log_dir"], params["log_file"])
+    log_file = get_unique_file_name(params["log_dir"], params["log_file"])
     log_path = os.path.join(params["log_dir"], log_file)
 
     # Initialize the global logger
@@ -128,7 +126,7 @@ def showKernelMemoryInfo(kernel, name=""):
     mbpt=kernel.max_threads_per_block
     print("""%s Memory USAGE:\nLocal:%d,\nShared:%d,\nRegisters:%d,\nConst:%d,\nMax Threads/B:%d"""%(name, local,shared,regs,const,mbpt))
     
-def compileKernels(srcFile, kernelNames, srcParams=None):
+def compile_kernels(srcFile, kernelNames, srcParams=None):
     """
     Load the GPU kernels from the specified CUDA C file 
     """
@@ -157,7 +155,7 @@ def compileKernels(srcFile, kernelNames, srcParams=None):
         
     return kernels
         
-def logSumExpSample(lnp):
+def log_sum_exp_sample(lnp):
     """
     Sample uniformly from a vector of unnormalized log probs using 
     the log-sum-exp trick
@@ -278,7 +276,7 @@ def logistic(x,lam_max=1.0):
 def logit(x,lam_max=1.0):
     return np.log(x/lam_max)-np.log(1-(x/lam_max))
 
-def pprintDict(D, name, level=logging.DEBUG):
+def pprint_dict(D, name, level=logging.DEBUG):
     """
     Pretty print a dictionary
     """

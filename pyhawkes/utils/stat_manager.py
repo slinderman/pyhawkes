@@ -2,10 +2,10 @@
 Class to handle stat collection
 """
 import os
-
 import numpy as np
 import scipy.io
-from utils import *
+import ConfigParser
+from utils import get_unique_file_name
 
 import logging
 log = logging.getLogger("global_log")
@@ -216,7 +216,7 @@ class StatManager:
         """
         self.samples[name] = value
     
-    def saveStats(self):
+    def save_stats(self):
         """
         Save a dictionary of results as a mat file. Only saves the numpy array samples.
         """
@@ -249,7 +249,7 @@ class StatManager:
                 results[key] = value  
            
         # Save the results to a mat file
-        unique_fname = getUniqueFileName(self.params["results_dir"], self.params["results_file"] + self.name)
+        unique_fname = get_unique_file_name(self.params["results_dir"], self.params["results_file"] + self.name)
         mat_file = os.path.join(self.params["results_dir"], unique_fname)
         log.info("Saving results to %s", mat_file)
         scipy.io.savemat(mat_file, results, appendmat=True, oned_as='column')

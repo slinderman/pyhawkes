@@ -11,7 +11,7 @@ log = logging.getLogger("global_log")
 
 defaultConfigFile = None
 
-def parseGlobalConfigSettings(configFile):
+def parse_global_config_settings(configFile):
     defaultParams = {}
     # Data is passed in as a .mat file
     defaultParams["results_dir"] = "."
@@ -56,7 +56,7 @@ def parseGlobalConfigSettings(configFile):
     
     return params
 
-def initializeRandomness(params):
+def initialize_randomness(params):
     """
     Initialize the random number generator used on GPU
     """
@@ -69,7 +69,7 @@ def initializeRandomness(params):
         log.info("Using specified seed: %d", seed)
         np.random.seed(seed)
 
-def runGibbsSampler(model, statManager, burnin=100000, samples=10000, thin=10, print_intvl=100, perfDict=None):
+def run_gibbs_sampler(model, statManager, burnin=100000, samples=10000, thin=10, print_intvl=100, perfDict=None):
     """
     Run the Gibbs Sampler 
     """
@@ -100,7 +100,7 @@ def runGibbsSampler(model, statManager, burnin=100000, samples=10000, thin=10, p
         else:
             statManager.collectSamples()
 
-def computeKsStatistic(trainModel, statManager):
+def compute_ks_statistic(trainModel, statManager):
     """
     Once the model has been trained, compute the KS statistic 
     """
@@ -111,7 +111,7 @@ def computeKsStatistic(trainModel, statManager):
     for k in np.arange(K):
         statManager.setSingleSample("rescaled_S_%d" % k, rescaled_S[C==k])
 
-def computeConditionalIntensity(model, statManager):
+def compute_conditional_intensity(model, statManager):
     n_t = 10000
     # Save the conditional intensity
     t = np.linspace(model.data.Tstart, model.data.Tstop,n_t)
@@ -134,7 +134,7 @@ def get_initial_sample(sampleFile):
     return init_db
 
 
-def parseCommandLineArgs():
+def parse_command_line_args():
     """
     Parse command line parameters
     """
@@ -198,7 +198,7 @@ def run_mcmc():
     log.info("init ll: %f", model.computeLogLikelihood())
         
     # Start the Gibbs sampler
-    runGibbsSampler(model, 
+    run_gibbs_sampler(model,
                     statManager,
                     burnin=params["burnin"], 
                     samples=params["samples"], 
@@ -207,26 +207,26 @@ def run_mcmc():
                     )
     
     log.info("Computing rescaled spike times for KS statistic")
-    computeKsStatistic(model, statManager)
+    compute_ks_statistic(model, statManager)
     
     log.info("Computing conditional intensity")
-    computeConditionalIntensity(model, statManager)
+    compute_conditional_intensity(model, statManager)
 
 if __name__ == "__main__":
     perfDict = {}
     startPerfTimer(perfDict, "TOTAL")
         
     # Parse the command line params
-    (options, _) = parseCommandLineArgs() 
+    (options, _) = parse_command_line_args()
     
     # Load params from config file
-    params = parseGlobalConfigSettings(options.configFile)
+    params = parse_global_config_settings(options.configFile)
     
     # Initialize the logger
-    initializeLogger(params)
+    initialize_logger(params)
     
     # Initialize the random seed
-    initializeRandomness(params)
+    initialize_randomness(params)
     
     try:
         save_output = params["save_on_exception"]
@@ -234,7 +234,7 @@ if __name__ == "__main__":
         #  Load the specified data
         log.info("Initializing DataManager")
         dataManager = DataManager(options.configFile, dataFile=options.dataFile)
-        trainData = dataManager.preprocessForInference()
+        trainData = dataManager.preprocess_for_inference()
         
         #  Initialize the stat manager
         statManager = StatManager(options.configFile, resultsFile=options.outputFile)
@@ -254,6 +254,6 @@ if __name__ == "__main__":
     finally:
         # Save results to .mat file
         if save_output:
-            statManager.saveStats()
+            statManager.save_stats()
         # Finally, shutdown the logger to flush to file
         logging.shutdown()

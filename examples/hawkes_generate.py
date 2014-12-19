@@ -5,15 +5,10 @@ Scott Linderman
 Generate data from a Hawkes process with given parameters.
 """
 import numpy as np
-import scipy.special
-import scipy.sparse.linalg
 
-from hawkes_consts import *
+from pyhawkes.cuda.hawkes_consts import G_LOGISTIC_NORMAL
 
-from pyhawkes.utils.utils import *
-import pyhawkes.utils.poisson_process as pp
-
-def sampleHawkesModelParams(K, T, gParams):
+def sample_hawkes_model_params(K, T, gParams):
     """
     Sample parameters for a Hawkes process from prior distributions
     """
@@ -45,7 +40,7 @@ def sampleHawkesModelParams(K, T, gParams):
 
     return mParams
 
-def generateHawkesProcess(K, T, gParams, mParams):
+def generate_hawkes_process(K, T, gParams, mParams):
     """
     Generate data from a Hawkes process with priors given
     in the param dict
@@ -69,7 +64,7 @@ def generateHawkesProcess(K, T, gParams, mParams):
         # N vector changes each time generateHawkesHelper is called  
         Nk = N[k] 
         for s in S[k][0:Nk]:
-            generateHawkesHelper(K, T, gParams, mParams, S, N, s, k, round=0)
+            generate_hawkes_helper(K, T, gParams, mParams, S, N, s, k, round=0)
             
     # Trim and sort spikes in chronolocial order
     for k in np.arange(K):
@@ -78,7 +73,7 @@ def generateHawkesProcess(K, T, gParams, mParams):
         
     return (S,N)
     
-def generateTestHawkesProcess(K, T, gParams, mParams):
+def generate_test_hawkes_process(K, T, gParams, mParams):
     """
     Generate data from a Hawkes process with priors given
     in the param dict
@@ -102,7 +97,7 @@ def generateTestHawkesProcess(K, T, gParams, mParams):
         # N vector changes each time generateHawkesHelper is called  
         Nk = N[k] 
         for s in S[k][0:Nk]:
-            generateHawkesHelper(K, T, gParams, mParams, S, N, s, k, round=0)
+            generate_hawkes_helper(K, T, gParams, mParams, S, N, s, k, round=0)
             
     # Trim and sort spikes in chronolocial order
     for k in np.arange(K):
@@ -111,7 +106,7 @@ def generateTestHawkesProcess(K, T, gParams, mParams):
         
     return (S,N)    
 
-def generateHawkesHelper(K, T, gParams, mParams, S, N, s_pa, k_pa, round=0):
+def generate_hawkes_helper(K, T, gParams, mParams, S, N, s_pa, k_pa, round=0):
     """
     Recursively generate new generations of spikes with 
     given impulse response parameters. Takes in a single spike 
@@ -159,7 +154,7 @@ def generateHawkesHelper(K, T, gParams, mParams, S, N, s_pa, k_pa, round=0):
         
         # Generate offspring from child spikes
         for s in s_ch:
-            generateHawkesHelper(K, T, gParams, mParams, S, N, s, k_ch, round=round+1)
+            generate_hawkes_helper(K, T, gParams, mParams, S, N, s, k_ch, round=round+1)
   
 def flattenSpikeDict(Sdict,N,K,T):
     """
@@ -202,13 +197,13 @@ if __name__ == "__main__":
     K = 2
     T = 10
     gParams = parseConfigFile(configFile, configDir)
-    mParams = sampleHawkesModelParams(K, T, gParams)
+    mParams = sample_hawkes_model_params(K, T, gParams)
     mParams["A"] = np.array([[0, 1], [0, 0]])
     mParams["W"] = np.array([[0, 10], [0, 0]])
     mParams["g_mu"] = 0
     mParams["g_tau"] = 100
     mParams["mu"] = 1 * np.ones((2,))
-    (S,N) = generateTestHawkesProcess(K, T, gParams, mParams) 
+    (S,N) = generate_test_hawkes_process(K, T, gParams, mParams)
     
     print N
     

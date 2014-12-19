@@ -1,15 +1,18 @@
+import os
 import numpy as np
 import scipy.cluster.vq
+from ConfigParser import ConfigParser
 
+import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-from pyhawkes.utils.utils import *
+from pyhawkes.utils.utils import pprint_dict, compile_kernels, wishrnd, log_sum_exp_sample
 from model_extension import ModelExtension
 
 import logging
 log = logging.getLogger("global_log")
 
-def constructProcessIdModel(proc_id_model, baseModel, configFile):
+def construct_process_id_model(proc_id_model, baseModel, configFile):
     """
     Return an instance of the process ID model specified in parameters
     """
@@ -111,7 +114,7 @@ class SpatialGmmProcessIdModel(ModelExtension):
             
         # Parse the configuration file to get params
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Process ID Model Params")
+        pprint_dict(self.params, "Process ID Model Params")
         
         self.initializeGpuKernels()
         
@@ -176,7 +179,7 @@ class SpatialGmmProcessIdModel(ModelExtension):
                        "computeXVarSum",
                        "computePerSpikePrCn"]
         src_consts = {"B" : self.params["blockSz"]}
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
         
     def initializeGpuMemory(self):
         K = self.params["K"]
@@ -439,7 +442,7 @@ class SpatialGmmProcessIdModel(ModelExtension):
             prcn[:] = np.sum(blockLogPrSum, 1)
             
             try:           
-                cn = logSumExpSample(prcn)               
+                cn = log_sum_exp_sample(prcn)
                 
             except Exception as ex:
                 log.info("Exception on spike %d!", n)
@@ -566,7 +569,7 @@ class MetaProcessIdModel(ModelExtension):
             
         # Parse the configuration file to get params
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Process ID Model Params")
+        pprint_dict(self.params, "Process ID Model Params")
         
         self.initializeGpuKernels()
         
@@ -608,7 +611,7 @@ class MetaProcessIdModel(ModelExtension):
         kernelSrc = os.path.join(self.params["cu_dir"], self.params["cu_file"])
         kernelNames = ["computeLogQratio"]
         src_consts = {"B" : self.params["blockSz"]}
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
     
     def initializeModelParamsFromPrior(self):
         # Copy over the true process IDs

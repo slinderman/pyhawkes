@@ -3,29 +3,21 @@ The default parent model is to choose among the potential parents
 according to their relative probability. I can't really imagine
 another model, but for consistency we define this as an extension.
 """
-
-"""
-Impulse response models include a shared-parameter logistic normal model
-and a logistic normal model with unique params for every process pair
-"""
-
+import os
 import numpy as np
 import logging
+from ConfigParser import ConfigParser
 
-import pycuda.autoinit
-import pycuda.compiler as nvcc
-import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
-import pycuda.curandom as curandom
 
-from pyhawkes.utils.utils import *
+from pyhawkes.utils.utils import compile_kernels
 from model_extension import ModelExtension
 
 from graph_models import EmptyGraphModel
 
 log = logging.getLogger("global_log")
 
-def constructParentModel(parent_model, baseModel, configFile):
+def construct_parent_model(parent_model, baseModel, configFile):
     """
     Return an instance of the impulse response model specified in parameters
     """
@@ -86,7 +78,7 @@ class DefaultParentModel(ModelExtension):
         
         src_consts = {"B" : self.params["blockSz"]}
         
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
     
     def initializeGpuMemory(self):
         """

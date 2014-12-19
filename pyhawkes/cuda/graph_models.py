@@ -8,20 +8,17 @@ Each class supports the following functions
 """
 
 import numpy as np
-import string 
 import logging
-
-
 from ConfigParser import ConfigParser
 
-from pyhawkes.utils.utils import *
-from pyhawkes.utils.elliptical_slice import *
-from pyhawkes.utils.hmc import *
+import pycuda.gpuarray as gpuarray
+
 
 from graph_model_extension import GraphModelExtension
-
-# Import other graph models
 from coupled_sbm_w_model import StochasticBlockModelCoupledWithW
+
+from pyhawkes.utils.utils import pprint_dict, log_sum_exp_sample
+from pyhawkes.utils.hmc import hmc
 
 log = logging.getLogger("global_log")
 
@@ -64,7 +61,7 @@ class CompleteGraphModel(GraphModelExtension):
     def __init__(self, baseModel, configFile):
         super(CompleteGraphModel,self).__init__(baseModel, configFile)
         
-        pprintDict(self.params, "Graph Model Params")
+        pprint_dict(self.params, "Graph Model Params")
                         
     def getConditionalEdgePr(self, ki, kj):
         """
@@ -174,7 +171,7 @@ class EmptyGraphModel(GraphModelExtension):
     def __init__(self, baseModel, configFile):
         super(EmptyGraphModel,self).__init__(baseModel, configFile)
         
-        pprintDict(self.params, "Graph Model Params")
+        pprint_dict(self.params, "Graph Model Params")
         
         
     
@@ -285,7 +282,7 @@ class ErdosRenyiModel(GraphModelExtension):
         super(ErdosRenyiModel,self).__init__(baseModel, configFile)
         
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Graph Model Params")
+        pprint_dict(self.params, "Graph Model Params")
         
         
     def parseConfigurationFile(self, configFile):
@@ -522,7 +519,7 @@ class StochasticBlockModel(GraphModelExtension):
         super(StochasticBlockModel,self).__init__(baseModel, configFile)
         
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Graph Model Params")
+        pprint_dict(self.params, "Graph Model Params")
     
     def parseConfigurationFile(self, configFile):
         
@@ -916,7 +913,7 @@ class StochasticBlockModel(GraphModelExtension):
 #                    Y[k] = r
 #                    break
             try:
-                Y[k] = logSumExpSample(ln_pYk)
+                Y[k] = log_sum_exp_sample(ln_pYk)
             except:
                 log.info(self.modelParams["graph_model","B"])
                 exit()
@@ -1011,7 +1008,7 @@ class LatentDistanceModel(GraphModelExtension):
         super(LatentDistanceModel,self).__init__(baseModel, configFile)
         
         self.parseConfigurationFile(configFile)
-        pprintDict(self.params, "Graph Model Params")
+        pprint_dict(self.params, "Graph Model Params")
         
         self.params["registered"] = False 
         

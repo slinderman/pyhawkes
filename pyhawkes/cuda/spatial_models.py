@@ -2,12 +2,11 @@
 Spatial models multiplicatively scale the temporal rate according to
 a spatial probability distribution.
 """
-import logging
 
-import numpy as np
 import scipy.io
+import logging
+from ConfigParser import ConfigParser
 
-from pyhawkes.utils.utils import *
 from model_extension import ModelExtension
 
 log = logging.getLogger("global_log")

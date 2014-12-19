@@ -1,18 +1,14 @@
+import numpy as np
+import os
+import logging
+import scipy.io
+from ConfigParser import ConfigParser
+
+import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 
-import numpy as np
-import string 
-import logging
-
-from pyhawkes.utils.utils import *
-
-from ConfigParser import ConfigParser
+from pyhawkes.utils.utils import pprint_dict, compile_kernels
 from model_extension import ModelExtension
-
-import scipy.io 
-
-# Parallelize sampling of columns of A
-import threading
 
 log = logging.getLogger("global_log")
 
@@ -88,7 +84,7 @@ class GraphModelExtension(ModelExtension):
                        "computeLkhdRatioA",
                        "sampleA"]
         src_consts = {"B" : self.params["blockSz"]}
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
         
     
     def initializeGpuMemory(self):

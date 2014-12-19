@@ -1,18 +1,21 @@
-from graph_models import *
-from background_models import *
-from spatial_models import *
+import logging
+import ConfigParser
+
+from graph_models import EmptyGraphModel, CompleteGraphModel, ErdosRenyiModel, StochasticBlockModel, LatentDistanceModel
+from background_models import HomogenousRateModel, GaussianProcRateModel, GlmBackgroundModel, SharedGpBkgdModel
+from spatial_models import DefaultSpatialModel
 
 from coupled_sbm_w_model import StochasticBlockModelCoupledWithW 
 
-from cluster_model import *
-from location_model import *
+from cluster_model import ClusterModel
+from location_model import LocationModel
 
+log = logging.getLogger("global_log")
 
-# Models are singleton classes. Save their instances as they are 
-# created
+# Models are singleton classes. Save their instances as they are  created
 model_instances = {}
 
-def mfConstructModelExtensions(baseModel, configFile):
+def mf_construct_model_extensions(baseModel, configFile):
     """
     Initialize a model by iterating through the config file
     """
@@ -78,7 +81,7 @@ def mfConstructGraphModel(graph_model, baseModel, configFile):
     return inst
         
 
-def mfConstructBackgroundRateModel(bkgd_model, baseModel, configFile):
+def mf_construct_background_rate_model(bkgd_model, baseModel, configFile):
     """
     Generic factory method to be called by base model
     """
@@ -102,7 +105,7 @@ def mfConstructBackgroundRateModel(bkgd_model, baseModel, configFile):
     model_instances[(baseModel,bkgd_model)] = inst
     return inst
 
-def constructSpatialModel(parent_model, baseModel, configFile):
+def construct_spatial_model(parent_model, baseModel, configFile):
     """
     Return an instance of the spatial model specified in parameters
     """

@@ -2,15 +2,22 @@
 Base model handles the basic parameters of the Hawkes model, most importantly 
 the parents of each spike. To sample these the model must have access to  Model extensions handle 
 """
-
+import numpy as np
+import os
 import logging
+import ConfigParser
 
-from weight_models import *
-from impulse_models import *
-from process_id_models import *
-from parent_models import *
-from model_factory import *
-from pyhawkes.utils.utils import *
+import pycuda.gpuarray as gpuarray
+import pycuda.curandom as curandom
+
+from weight_models import construct_weight_model
+from impulse_models import construct_impulse_response_model
+from process_id_models import construct_process_id_model
+from parent_models import construct_parent_model
+from model_factory import mf_construct_background_rate_model, mfConstructGraphModel, \
+                          mf_construct_model_extensions, construct_spatial_model
+
+from pyhawkes.utils.utils import pprint_dict, compile_kernels
 import pyhawkes.utils.poisson_process as pp
 from pyhawkes.utils.param_db import ParamsDatabase
 
@@ -22,7 +29,7 @@ class BaseModel:
         Construct a new base model.
         """
         self.parseConfigFile(configFile)
-        pprintDict(self.params, "Base Model Params")
+        pprint_dict(self.params, "Base Model Params")
         
         # Save a pointer to the data and compute the intervals between spikes
         self.dm = dataManager
@@ -122,7 +129,7 @@ class BaseModel:
             Sreal = self.data.S[Sreal_inds]
             
             log.debug("N real spikes: %d", len(Sreal))
-            self.dSS = self.dm.computeSparseSpikeIntvlMatrixUnknownProcs(Sreal, self.data.S)
+            self.dSS = self.dm.compute_sparse_spike_intvl_matrix_unknown_procs(Sreal, self.data.S)
             
             # Update the row indices 
             rowInds = self.dSS["rowIndices"].get()
@@ -130,7 +137,7 @@ class BaseModel:
             self.dSS["rowIndices"].set(rowIndsNew.astype(np.int32))
             
         else:
-            self.dSS = self.dm.computeSparseSpikeIntvlMatrixUnknownProcs(self.data.S, self.data.S)
+            self.dSS = self.dm.compute_sparse_spike_intvl_matrix_unknown_procs(self.data.S, self.data.S)
     
     def initializeRandomness(self):
         """
@@ -148,7 +155,7 @@ class BaseModel:
         
         src_consts = {"B" : self.params["blockSz"]}
         
-        self.gpuKernels = compileKernels(kernelSrc, kernelNames, src_consts)
+        self.gpuKernels = compile_kernels(kernelSrc, kernelNames, src_consts)
         
     def constructModelExtensions(self, configFile):
         """
@@ -159,16 +166,16 @@ class BaseModel:
             graph model
         """
         self.extensions = {}
-        self.extensions["bkgd_model"] = mfConstructBackgroundRateModel(self.params["bkgd_model"], self, configFile)
+        self.extensions["bkgd_model"] = mf_construct_background_rate_model(self.params["bkgd_model"], self, configFile)
         self.extensions["graph_model"] = mfConstructGraphModel(self.params["graph_model"], self, configFile)
-        self.extensions["weight_model"] = constructWeightModel(self.params["weight_model"], self, configFile)
-        self.extensions["impulse_model"] = constructImpulseResponseModel(self.params["impulse_model"], self, configFile)
-        self.extensions["proc_id_model"] = constructProcessIdModel(self.params["proc_id_model"], self, configFile)
-        self.extensions["parent_model"] = constructParentModel(self.params["parent_model"], self, configFile)
-        self.extensions["spatial_model"] = constructSpatialModel(self.params["spatial_model"], self, configFile)
+        self.extensions["weight_model"] = construct_weight_model(self.params["weight_model"], self, configFile)
+        self.extensions["impulse_model"] = construct_impulse_response_model(self.params["impulse_model"], self, configFile)
+        self.extensions["proc_id_model"] = construct_process_id_model(self.params["proc_id_model"], self, configFile)
+        self.extensions["parent_model"] = construct_parent_model(self.params["parent_model"], self, configFile)
+        self.extensions["spatial_model"] = construct_spatial_model(self.params["spatial_model"], self, configFile)
         
         # TODO: Replace this with fully fledged model factory
-        more_extensions = mfConstructModelExtensions(self, configFile)
+        more_extensions = mf_construct_model_extensions(self, configFile)
         self.extensions.update(more_extensions)
         
     def initializeFromDict(self, paramsDB):
@@ -336,7 +343,7 @@ class BaseModel:
         # Add each spike's impulse responses to the conditional intensity
         # Leverage the dataManager code to compute interspike intervals 
         # now between spikes and time points.
-        dST = self.dm.computeSparseSpikeIntvlMatrixUnknownProcs(self.data.S, t)
+        dST = self.dm.compute_sparse_spike_intvl_matrix_unknown_procs(self.data.S, t)
                 
         # Compute the impulse density for each spike-time pt pair
         gST = self.extensions["impulse_model"].computeIrDensity(dST["dS"])

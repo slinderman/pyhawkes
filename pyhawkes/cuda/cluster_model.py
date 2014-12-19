@@ -1,10 +1,11 @@
+import os
 import numpy as np
+import scipy.io
+import logging
 from ConfigParser import ConfigParser
 
-
 from model_extension import ModelExtension
-from pyhawkes.utils.utils import *
-
+from pyhawkes.utils.utils import log_sum_exp_sample
 
 log = logging.getLogger("global_log")
 
@@ -172,7 +173,7 @@ class ClusterModel(ModelExtension):
                     
             # Sample block assignment with log-sum-exp trick 
             try:
-                Y[k] = logSumExpSample(ln_pYk)
+                Y[k] = log_sum_exp_sample(ln_pYk)
             except Exception as e:
                 log.error("Caught exception in log-sum-exp")
                 log.info(ln_pYk)

@@ -7,9 +7,9 @@ from pyhawkes.utils.utils import *
 import logging
 log = logging.getLogger("global_log")
 
-defaultConfigFile = os.path.join("config", "chicago_proc_unknown.cfg")
+default_config_file = os.path.join("config", "synthetic_test_30K_1000T_er.cfg")
 
-def parseGlobalConfigSettings(configFile):
+def parse_global_config_settings(configFile):
     defaultParams = {}
     # Data is passed in as a .mat file
     defaultParams["results_dir"] = "."
@@ -56,7 +56,7 @@ def parseGlobalConfigSettings(configFile):
     
     return params
 
-def initializeRandomness(params):
+def initialize_randomness(params):
     """
     Initialize the random number generator used on GPU
     """
@@ -69,7 +69,7 @@ def initializeRandomness(params):
         log.info("Using specified seed: %d", seed)
         np.random.seed(seed)
 
-def runGibbsSampler(trainModel, 
+def run_gibbs_sampler(trainModel,
                     statManager, 
                     trainStatManager, 
                     burnin=100000, 
@@ -106,7 +106,7 @@ def runGibbsSampler(trainModel,
             statManager.collectSamples()
             trainStatManager.collectSamples()
 
-def computeKsStatistic(trainModel, statManager):
+def compute_ks_statistic(trainModel, statManager):
     """
     Once the model has been trained, compute the KS statistic 
     """
@@ -133,14 +133,14 @@ def get_initial_sample(sampleFile):
     return init_db
 
 
-def parseCommandLineArgs():
+def parse_command_line_args():
     """
     Parse command line parameters
     """
     from optparse import OptionParser
     
     parser = OptionParser()
-    parser.add_option("-c", "--configFile", dest="configFile", default=defaultConfigFile,
+    parser.add_option("-c", "--configFile", dest="configFile", default=default_config_file,
                       help="Use this configuration file, either as filename in the config directory, or as a path")
     
     parser.add_option("-s", "--sampleFile", dest="sampleFile", default=None,
@@ -167,12 +167,12 @@ def parseCommandLineArgs():
     print "Using configuration file: %s" % options.configFile
     return (options, args)
 
-def saveSynthData(synthData, trainModel):
+def save_synth_data(synthData, trainModel):
     """
     Save the synthetic data for comparison with other models
     """
     # Save the results to a mat file
-    unique_fname = getUniqueFileName(params["data_dir"], params["data_file"])
+    unique_fname = get_unique_file_name(params["data_dir"], params["data_file"])
     mat_file = os.path.join(params["data_dir"], unique_fname)
     log.info("Saving synthetic data to to %s", mat_file)
     
@@ -197,19 +197,19 @@ if __name__ == "__main__":
     startPerfTimer(perfDict, "TOTAL")
     
     # Parse the command line params
-    (options, _) = parseCommandLineArgs() 
+    (options, _) = parse_command_line_args()
     
     # Load params from config file
-    params = parseGlobalConfigSettings(options.configFile)
+    params = parse_global_config_settings(options.configFile)
     if options.outputFile != None:
         params["data_file"] = options.outputFile
     
     # Initialize the logger
-    initializeLogger(params)
+    initialize_logger(params)
     log.info("Synthetic test: K=%d T=%f", params["K"], params["T"])
     
     # Initialize the random seed
-    initializeRandomness(params)
+    initialize_randomness(params)
     
     #  Initialize data manager
     log.info("Initializing DataManager")
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     synthData.loadFromArray(N, params["K"], 0, params["T"], S, C)
     log.info("Synthetic dataset has %d spikes", N)
     
-    saveSynthData(synthData, trainModel)
+    save_synth_data(synthData, trainModel)
 
     # Initialize the test model with the synthetic data
     log.info("Initializing test Model")
@@ -268,7 +268,7 @@ if __name__ == "__main__":
 
     # Start the Gibbs sampler
     log.info("Running Gibbs Sampler.")
-    runGibbsSampler(testModel,
+    run_gibbs_sampler(testModel,
                     testStatsManager,
                     trainStatsManager,
                     burnin=params["burnin"],
@@ -278,8 +278,8 @@ if __name__ == "__main__":
                     )
 
     # Save results to .mat file
-    trainStatsManager.saveStats()
-    testStatsManager.saveStats()
+    trainStatsManager.save_stats()
+    testStatsManager.save_stats()
 
     # Finally, shutdown the logger to flush to file
     logging.shutdown()
