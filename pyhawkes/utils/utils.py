@@ -1,4 +1,4 @@
-from ConfigParser import ConfigParser
+import os
 import time
 import io
 import logging
@@ -19,7 +19,6 @@ def get_unique_file_name(filedir, filename):
     Get a unique filename by appending filename with .x, where x
     is the next untaken number
     """
-    import os
     import fnmatch
     
     # Get the number of conflicting log files
@@ -40,9 +39,6 @@ def initialize_logger(params):
     Initialize a logger object. 
     Automatically detect conflicting log names.
     """
-    import os
-    import fnmatch
-
     # Get the number of conflicting log files
     log_file = get_unique_file_name(params["log_dir"], params["log_file"])
     log_path = os.path.join(params["log_dir"], log_file)
@@ -103,8 +99,6 @@ def printPerfTimers(perfDict):
         print "%s:  %f" % (k,v)
             
 def showDeviceAttributes():
-    
-    import pycuda.driver as cuda
 
     (free,total)=cuda.mem_get_info()
     print("Global memory occupancy:%f%% free"%(free*100/total))
@@ -258,16 +252,7 @@ def matrixNormalRnd(M,sqrtV,sqrtinvK,nsmpls=1):
     
     # Reshape into correct form    
     S = np.reshape(S,M.shape,order="F")
-    
-#    if len(mu)>1:
-#        log.info("Debug MNR")
-#        log.info(M)
-#        log.info(sqrtV)
-#        log.info(sqrtinvK)
-#    log.info(sqrtSigma)
-#        log.info(z)
-#        log.info(S)
-    
+
     return S
 
 def logistic(x,lam_max=1.0):
