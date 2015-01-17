@@ -1,0 +1,3 @@
+[submodule "pyhawkes/deps/pybasicbayes"]
+	path = pyhawkes/deps/pybasicbayes
+	url = git@github.com:mattjj/pybasicbayes.git
