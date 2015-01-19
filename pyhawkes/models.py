@@ -208,6 +208,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Update the weight model given the parents assignments
         self.weight_model.resample(
+            model=self,
             N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
             Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 
@@ -216,7 +217,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         for _,_,_,p in self.data_list:
             p.resample(self.bias_model, self.weight_model, self.impulse_model)
 
-    def compute_rate(self, index=0, S=None):
+    def compute_rate(self, index=0, proc=None, S=None):
         """
         Compute the rate function for a given data set
         :param index:   An integer specifying which dataset (if S is None)
@@ -236,23 +237,41 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
             S, _, F, _ = self.data_list[index]
             T,K = S.shape
 
-        # Compute the rate
-        R = np.zeros((T,K))
+        if proc is None:
+            # Compute the rate
+            R = np.zeros((T,K))
 
-        # Background rate
-        R += self.bias_model.lambda0[None,:]
+            # Background rate
+            R += self.bias_model.lambda0[None,:]
 
-        # Compute the sum of weighted sum of impulse responses
-        H = self.weight_model.A[:,:,None] * \
-            self.weight_model.W[:,:,None] * \
-            self.impulse_model.beta
+            # Compute the sum of weighted sum of impulse responses
+            H = self.weight_model.A[:,:,None] * \
+                self.weight_model.W[:,:,None] * \
+                self.impulse_model.beta
 
-        H = np.transpose(H, [2,0,1])
+            H = np.transpose(H, [2,0,1])
 
-        for k2 in xrange(self.K):
-            R[:,k2] += np.tensordot(F, H[:,:,k2], axes=([2,1], [0,1]))
+            for k2 in xrange(self.K):
+                R[:,k2] += np.tensordot(F, H[:,:,k2], axes=([2,1], [0,1]))
 
-        return R
+            return R
+
+        else:
+            assert isinstance(proc, int) and proc < self.K, "Proc must be an int"
+            # Compute the rate
+            R = np.zeros((T,))
+
+            # Background rate
+            R += self.bias_model.lambda0[proc]
+
+            # Compute the sum of weighted sum of impulse responses
+            H = self.weight_model.A[:,proc,None] * \
+                self.weight_model.W[:,proc,None] * \
+                self.impulse_model.beta[:,proc,:]
+
+            R += np.tensordot(F, H, axes=([1,2], [0,1]))
+
+            return R
 
     def _poisson_log_likelihood(self, S, R):
         """
@@ -273,17 +292,42 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         R = self.compute_rate(S=S)
         return self._poisson_log_likelihood(S, R)
 
+    def log_likelihood(self):
+        """
+        Compute the joint log probability of the data and the parameters
+        :return:
+        """
+        ll = 0
+
+        # Get the likelihood of the datasets
+        for ind,(S,_,_,_)  in enumerate(self.data_list):
+            R = self.compute_rate(index=ind)
+            ll += self._poisson_log_likelihood(S,R)
+
+        return ll
+
+    def _log_likelihood_single_process(self, k):
+        """
+        Helper function to compute the log likelihood of a single process
+        :param k: process to compute likelihood for
+        :return:
+        """
+        ll = 0
+
+        # Get the likelihood of the datasets
+        for ind,(S,_,_,_)  in enumerate(self.data_list):
+            Rk = self.compute_rate(index=ind)
+            ll += self._poisson_log_likelihood(S[:,k], Rk)
+
+        return ll
+
+
     def log_probability(self):
         """
         Compute the joint log probability of the data and the parameters
         :return:
         """
-        lp = 0
-
-        # Get the likelihood of the datasets
-        for ind,(S,_,_,_)  in enumerate(self.data_list):
-            R = self.compute_rate(index=ind)
-            lp += self._poisson_log_likelihood(S,R)
+        lp = self.log_likelihood()
 
         # Get the parameter priors
         lp += self.bias_model.log_probability()

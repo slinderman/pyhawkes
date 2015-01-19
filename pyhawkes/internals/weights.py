@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.special import gammaln
+from scipy.misc import logsumexp
 
 from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
 
@@ -90,15 +91,38 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         raise NotImplementedError()
 
 
-    def _resample_A_given_W(self):
+    def _resample_A_given_W(self, model):
         """
         Resample A given W. This must be immediately followed by an
         update of z | A, W.
         :return:
         """
-        pass
+        for k1 in xrange(self.K):
+            for k2 in xrange(self.K):
+                if model is None:
+                    ll0 = 0
+                    ll1 = 0
+                else:
+                    # Compute the log likelihood of the events given W and A=0
+                    self.A[k1,k2] = 0
+                    ll0 = model._log_likelihood_single_process(k2)
 
-    def _get_suff_statistics(self, N, Z, F, beta):
+                    # Compute the log likelihood of the events given W and A=1
+                    self.A[k1,k2] = 1
+                    ll1 = model._log_likelihood_single_process(k2)
+
+                # Sample A given conditional probability
+                lp0 = ll0 + np.log(1.0 - self.network.rho)
+                lp1 = ll1 + np.log(self.network.rho)
+                Z  = logsumexp([lp0, lp1])
+
+                # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
+                #           = lp1 - ln(exp(lp0) + exp(lp1))
+                #           = lp1 - Z
+
+                self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
+
+    def _get_suff_statistics(self, N, Z):
         """
         Compute the sufficient statistics from the data set.
         :param data: a TxK array of event counts assigned to the background process
@@ -147,20 +171,22 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                    and N.shape == (self.K,)), \
             "N must be a K-vector and Z must be a TxKxKxB array of parent counts"
 
-        ss = self._get_suff_statistics(N,Z,F,beta)
+        ss = self._get_suff_statistics(N, Z)
         alpha_post = self.network.alpha + ss[0,:]
         beta_post  = self.network.beta + ss[1,:]
 
         self.W = np.array(np.random.gamma(alpha_post,
                                           1.0/beta_post)).reshape((self.K, self.K))
 
-    def resample(self, N=None, Z=None, F=None, beta=None):
+    def resample(self, model=None, N=None, Z=None, F=None, beta=None):
         """
         Resample A and W given the parents
         :param N:   A length-K vector specifying how many events occurred
                     on each of the K processes
         :param Z:   A TxKxKxB array of parent assignment counts
         """
+        # Resample W | A
         self.resample_W_given_A_and_z(N, Z, F, beta)
 
-        # TODO: Resample A given W
+        # Resample A given W
+        self._resample_A_given_W(model)

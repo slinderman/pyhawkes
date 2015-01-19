@@ -65,7 +65,7 @@ def demo():
     print "A true:        ", true_model.weight_model.A
     print "W true:        ", true_model.weight_model.W
     print "beta true:     ", true_model.impulse_model.beta
-    print "Lambda0 true:  ", true_model.bias_model.lambda0
+    print "lambda0 true:  ", true_model.bias_model.lambda0
     print ""
     print "A mean:        ", A_mean
     print "W mean:        ", W_mean
