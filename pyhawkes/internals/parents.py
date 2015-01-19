@@ -37,7 +37,7 @@ class Parents(GibbsSampling):
         Check that Z adds up to the correct amount
         :return:
         """
-        Zsum = self.Z0 + self.Z.sum(axis=(2,3))
+        Zsum = self.Z0 + self.Z.sum(axis=(1,3))
         # assert np.allclose(self.S, Zsum), "_check_Z failed. Zsum does not add up to S!"
         if not np.allclose(self.S, Zsum):
             print "_check_Z failed. Zsum does not add up to S!"
@@ -71,7 +71,7 @@ class Parents(GibbsSampling):
                 assert pkb.shape == (self.K, self.B)
 
                 # Combine the probabilities into a normalized vector of length KB+1
-                p = np.concatenate([p0, pkb.ravel()])
+                p = np.concatenate([p0, pkb.reshape((self.K*self.B,))])
                 p = p / p.sum()
 
                 # Sample a multinomial distribution to assign events to parents

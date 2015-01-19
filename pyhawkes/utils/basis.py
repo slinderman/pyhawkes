@@ -57,7 +57,8 @@ class Basis(object):
 
         # Normalize so that the interpolated basis has volume 1
         if norm:
-            ibasis /= np.trapz(ibasis,t_int,axis=0)
+            # ibasis /= np.trapz(ibasis,t_int,axis=0)
+            ibasis /= (dt * np.sum(ibasis, axis=0))
 
         return ibasis
 
@@ -71,7 +72,7 @@ class CosineBasis(Basis):
     def __init__(self,
                  B, dt, dt_max,
                  orth=False,
-                 norm=False,
+                 norm=True,
                  n_eye=0,
                  a=1.0/120,
                  b=0.5,

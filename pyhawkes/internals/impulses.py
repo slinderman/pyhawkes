@@ -63,6 +63,9 @@ class DirichletImpulseResponses(GibbsSampling):
         # Add the likelihood of x
         return self.K**2 * Z + ((gamma-1.0)[None,None,:] * np.log(x)).sum()
 
+    def log_probability(self):
+        return self.log_likelihood(self.beta)
+
     def _get_suff_statistics(self, data):
         """
         Compute the sufficient statistics from the data set.

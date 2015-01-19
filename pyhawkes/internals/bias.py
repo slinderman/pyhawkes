@@ -32,22 +32,25 @@ class GammaBias(GibbsSampling):
         return self.K * (self.alpha * np.log(self.beta) - gammaln(self.alpha)) + \
                ((self.alpha-1) * np.log(x) - self.beta * x).sum()
 
+    def log_probability(self):
+        return self.log_likelihood(self.lambda0)
+
     def rvs(self,size=[]):
         return np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K,))
 
-    def _get_suff_statistics(self, data):
+    def _get_suff_statistics(self, Z0):
         """
         Compute the sufficient statistics from the data set.
-        :param data: a TxK array of event counts assigned to the background process
+        :param Z0: a TxK array of event counts assigned to the background process
         :return:
         """
         ss = np.zeros((2, self.K))
 
-        if len(data) > 0:
+        if len(Z0) > 0:
             # ss[0,k] = sum_t Z0[t,k]
-            ss[0,:] = data.sum(axis=0)
+            ss[0,:] = Z0.sum(axis=0)
             # ss[1,k] = T * dt
-            T = data.shape[0]
+            T = Z0.shape[0]
             ss[1,:] = T * self.dt
 
         return ss

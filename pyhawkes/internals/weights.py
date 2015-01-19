@@ -70,6 +70,9 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
 
         return ll
 
+    def log_probability(self):
+        return self.log_likelihood((self.A, self.W))
+
     def rvs(self,size=[]):
         A = np.random.rand(self.K, self.K) < self.network.rho
         W = np.random.gamma(self.network.alpha, 1.0/self.network.beta,
@@ -95,7 +98,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         """
         pass
 
-    def _get_suff_statistics(self, N, Z):
+    def _get_suff_statistics(self, N, Z, F, beta):
         """
         Compute the sufficient statistics from the data set.
         :param data: a TxK array of event counts assigned to the background process
@@ -107,11 +110,21 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
             ss[0,:,:] = Z.sum(axis=(0,3))
             # ss[1,k1,k2] = N[k1] * A[k1,k2]
-            ss[1,:,:] = np.repeat(N[:,None], self.K, axis=1) * self.A
+            ss[1,:,:] = N[:,None] * self.A
+
+        # # For comparison, compute the exact sufficient statistics for ss[1,:,:]
+        # if F is not None and beta is not None:
+        #     ss_dbg = np.zeros((self.K, self.K))
+        #     for k1 in range(self.K):
+        #         for k2 in range(self.K):
+        #             ss_dbg[k1,k2] = (F[:,k1,:].dot(beta[k1,k2,:])).sum()
+        #
+        #     err = np.amax(abs(ss_dbg - ss[1,:,:]) / ss[1,:,:])
+        #     print "beta_W err: ", err
 
         return ss
 
-    def resample_W_given_A_and_z(self, N, Z):
+    def resample_W_given_A_and_z(self, N, Z, F, beta):
         """
         Resample the weights given A and z.
         :return:
@@ -125,20 +138,20 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                    and N.shape == (self.K,)), \
             "N must be a K-vector and Z must be a TxKxKxB array of parent counts"
 
-        ss = self._get_suff_statistics(N,Z)
+        ss = self._get_suff_statistics(N,Z,F,beta)
         alpha_post = self.network.alpha + ss[0,:]
         beta_post  = self.network.beta + ss[1,:]
 
         self.W = np.array(np.random.gamma(alpha_post,
                                           1.0/beta_post)).reshape((self.K, self.K))
 
-    def resample(self, N=None, Z=None):
+    def resample(self, N=None, Z=None, F=None, beta=None):
         """
         Resample A and W given the parents
         :param N:   A length-K vector specifying how many events occurred
                     on each of the K processes
         :param Z:   A TxKxKxB array of parent assignment counts
         """
-        self.resample_W_given_A_and_z(N, Z)
+        self.resample_W_given_A_and_z(N, Z, F, beta)
 
         # TODO: Resample A given W

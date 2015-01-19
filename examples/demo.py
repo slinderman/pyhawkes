@@ -9,42 +9,51 @@ def demo():
 
     :return:
     """
-    T = 100
+    K = 1
+    T = 1000
     dt = 1.0
-    model = DiscreteTimeNetworkHawkesModel(K=2, dt=dt)
-    S,R = model.generate(T=T)
 
-    print "Expected number of events: ", np.trapz(R, dt * np.arange(T), axis=0)
-    print "Actual number of events:   ", S.sum(axis=0)
+    # Generate from a true model
+    true_model = DiscreteTimeNetworkHawkesModel(K=K, dt=dt)
+    S,R = true_model.generate(T=T)
 
-    print "Lambda0:  ", model.bias_model.lambda0
-    print "W:        ", model.weight_model.W
-    print ""
+    # Make a new model for inference
+    model = DiscreteTimeNetworkHawkesModel(K=K, dt=dt)
+    model.add_data(S)
 
-    R_test = model.compute_rate()
-    if not np.allclose(R, R_test):
-        print "Generative rate does not match inference rate."
-        plt.figure()
-        plt.plot(R, 'b')
-        plt.plot(R_test, 'r')
-        plt.show()
-        import pdb; pdb.set_trace()
+    # Plot the true and inferred firing rate
+    plt.figure()
+    plt.plot(np.arange(T), R[:,0], '-k', lw=2)
+    plt.ion()
+    ln = plt.plot(np.arange(T), model.compute_rate()[:,0], '-r')[0]
+    plt.show()
 
     # Gibbs sample
-    N_samples = 100
+    N_samples = 1000
     samples = []
+    lps = []
     for itr in xrange(N_samples):
         samples.append(model.resample_and_copy())
+        lps.append(model.log_probability())
+
         # print "Iteration ", itr
         # print "Lambda0:     ", model.bias_model.lambda0
         # print "W:           ", model.weight_model.W
         # print ""
+
+        # Update plot
+        if itr % 5 == 0:
+            ln.set_data(np.arange(T), model.compute_rate()[:,0])
+            plt.pause(0.001)
+
+    plt.ioff()
 
     # Compute sample statistics for second half of samples
     A_samples       = np.array([A for A,_,_,_ in samples])
     W_samples       = np.array([W for _,W,_,_ in samples])
     beta_samples    = np.array([b for _,_,b,_ in samples])
     lambda0_samples = np.array([l for _,_,_,l in samples])
+    lps             = np.array(lps)
 
     offset = N_samples // 2
     A_mean       = A_samples[offset:, ...].mean(axis=0)
@@ -52,11 +61,20 @@ def demo():
     beta_mean    = beta_samples[offset:, ...].mean(axis=0)
     lambda0_mean = lambda0_samples[offset:, ...].mean(axis=0)
 
+    print "A true:        ", true_model.weight_model.A
+    print "W true:        ", true_model.weight_model.W
+    print "beta true:     ", true_model.impulse_model.beta
+    print "Lambda0 true:  ", true_model.bias_model.lambda0
+    print ""
     print "A mean:        ", A_mean
     print "W mean:        ", W_mean
     print "beta mean:     ", beta_mean
     print "lambda0 mean:  ", lambda0_mean
 
-
+    plt.figure()
+    plt.plot(np.arange(N_samples), lps)
+    plt.xlabel("Iteration")
+    plt.ylabel("Log probability")
+    plt.show()
 
 demo()

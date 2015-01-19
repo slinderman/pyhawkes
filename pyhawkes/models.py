@@ -23,7 +23,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha0=1.0, beta0=1.0,
-                 alphaW=1.0, betaW=5.0, rho=1.0,
+                 alphaW=1.0, betaW=5.0, rho=0.9,
                  gamma=1.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -65,8 +65,13 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         # Filter the data into a TxKxB array
         F = self.basis.convolve_with_basis(S)
 
+        # # Check that \sum_t F[t,k,b] ~= Nk / dt
+        # Fsum = F.sum(axis=0)
+        # print "F_err:  ", Fsum - N/self.dt
+
         # Instantiate corresponding parent object
         parents = Parents(T, self.K, self.B, S, F)
+        parents.resample(self.bias_model, self.weight_model, self.impulse_model)
 
         # Add to the data list
         self.data_list.append((S, N, F, parents))
@@ -79,7 +84,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         """
         eigs = np.linalg.eigvals(self.weight_model.A * self.weight_model.W)
         maxeig = np.amax(np.real(eigs))
-        print "Max eigenvalue: ", maxeig
+        # print "Max eigenvalue: ", maxeig
         if maxeig < 1.0:
             return True
         else:
@@ -117,9 +122,6 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Iterate over time bins
         for t in xrange(T):
-            if t % 1000 == 0:
-                print "t=%d" % t
-
             # Sample a Poisson number of events for each process
             S[t,:] = np.random.poisson(R[t,:] * self.dt)
 
@@ -200,14 +202,16 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         self.bias_model.resample(
             data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
 
-        # Update the impulse model given the parents assignments
+        # # Update the impulse model given the parents assignments
         self.impulse_model.resample(
             data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 
         # Update the weight model given the parents assignments
         self.weight_model.resample(
             N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
-            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]),
+            F=np.concatenate([F for (_,_,F,_) in self.data_list]),
+            beta=self.impulse_model.beta)
 
         # Update the parents.
         # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
@@ -252,13 +256,40 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
 
         return R
 
+    def _poisson_log_likelihood(self, S, R):
+        """
+        Compute the log likelihood of a Poisson matrix with rates R
+
+        :param S:   Count matrix
+        :param R:   Rate matrix
+        :return:    log likelihood
+        """
+        return (-gammaln(S+1) + S * np.log(R*self.dt) - R*self.dt).sum()
+
     def heldout_log_likelihood(self, S):
         """
         Compute the held out log likelihood of a data matrix S.
         :param S:   TxK matrix of event counts
         :return:    log likelihood of those counts under the current model
         """
-        dt = self.dt
-        R = self.compute_rate(S)
+        R = self.compute_rate(S=S)
+        return self._poisson_log_likelihood(S, R)
 
-        return (-gammaln(S+1) + S * np.log(R*self.dt) - R*dt).sum()
+    def log_probability(self):
+        """
+        Compute the joint log probability of the data and the parameters
+        :return:
+        """
+        lp = 0
+
+        # Get the likelihood of the datasets
+        for ind,(S,_,_,_)  in enumerate(self.data_list):
+            R = self.compute_rate(index=ind)
+            lp += self._poisson_log_likelihood(S,R)
+
+        # Get the parameter priors
+        lp += self.bias_model.log_probability()
+        lp += self.weight_model.log_probability()
+        lp += self.impulse_model.log_probability()
+
+        return lp
