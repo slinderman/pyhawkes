@@ -1,6 +1,8 @@
 """
 Top level classes for the Hawkes process model.
 """
+import copy
+
 import numpy as np
 from scipy.special import gammaln
 
@@ -18,10 +20,10 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
     stochastic variational inference (TODO).
     """
 
-    def __init__(self, K, dt=1.0, dt_max=100.0,
+    def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha0=1.0, beta0=1.0,
-                 alphaW=1.0, betaW=1.0, rho=1.0,
+                 alphaW=1.0, betaW=5.0, rho=1.0,
                  gamma=1.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -58,7 +60,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
                "Data must be a TxK array of event counts"
 
         T = S.shape[0]
-        N = S.sum(axis=0)
+        N = np.atleast_1d(S.sum(axis=0))
 
         # Filter the data into a TxKxB array
         F = self.basis.convolve_with_basis(S)
@@ -68,6 +70,20 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Add to the data list
         self.data_list.append((S, N, F, parents))
+
+    def check_stability(self):
+        """
+        Check that the weight matrix is stable
+
+        :return:
+        """
+        eigs = np.linalg.eigvals(self.weight_model.A * self.weight_model.W)
+        maxeig = np.amax(np.real(eigs))
+        print "Max eigenvalue: ", maxeig
+        if maxeig < 1.0:
+            return True
+        else:
+            return False
 
     def generate(self, keep=True, T=100):
         """
@@ -79,10 +95,13 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         """
         assert isinstance(T, int), "T must be an integer number of time bins"
 
+        # Test stability
+        self.check_stability()
+
         # Initialize the output
         S = np.zeros((T, self.K))
 
-        # Precompute the impulse responses (KxKxB array)
+        # Precompute the impulse responses (LxKxK array)
         G = np.tensordot(self.basis.basis, self.impulse_model.beta, axes=([1], [2]))
         L = self.basis.L
         assert G.shape == (L,self.K, self.K)
@@ -91,7 +110,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
             G
 
         # Compute the rate matrix R
-        R = np.zeros((T, self.K))
+        R = np.zeros((T+L, self.K))
 
         # Add the background rate
         R += self.bias_model.lambda0[None,:]
@@ -107,20 +126,70 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
             # For each sampled event, add a weighted impulse response to the rate
             for k in xrange(self.K):
                 if S[t,k] > 0:
-                    R[t+1:t+L+1,:] += H[:,k,:]
+                    R[t+1:t+L+1,:] += S[t,k] * H[:,k,:]
 
             # Check Spike limit
             if np.any(S[t,:] >= 1000):
                 print "More than 1000 events in one time bin!"
                 import pdb; pdb.set_trace()
 
+        # Only keep the first T time bins
+        S = S[:T,:].astype(np.int)
+        R = R[:T,:]
+
         if keep:
             # Xs = [X[:T,:] for X in Xs]
             # data = np.hstack(Xs + [S])
             self.add_data(S)
 
+
         return S, R
 
+    def get_parameters(self):
+        """
+        Get a copy of the parameters of the model
+        :return:
+        """
+        return self.weight_model.A, \
+               self.weight_model.W, \
+               self.impulse_model.beta, \
+               self.bias_model.lambda0
+
+    def set_parameters(self, params):
+        """
+        Set the parameters of the model
+        :param params:
+        :return:
+        """
+        A, W, beta, lambda0 = params
+        K, B = self.K, self.basis.B
+
+        assert isinstance(A, np.ndarray) and A.shape == (K,K), \
+            "A must be a KxK adjacency matrix"
+
+        assert isinstance(W, np.ndarray) and W.shape == (K,K) \
+               and np.amin(W) >= 0, \
+            "W must be a KxK weight matrix"
+
+        assert isinstance(beta, np.ndarray) and beta.shape == (K,K,B) and \
+               np.allclose(beta.sum(axis=2), 1.0), \
+            "beta must be a KxKxB impulse response array"
+
+        assert isinstance(lambda0, np.ndarray) and lambda0.shape == (K,) \
+               and np.amin(lambda0) >=0, \
+            "lambda0 must be a K-vector of background rates"
+
+        self.weight_model.A = A
+        self.weight_model.W = W
+        self.impulse_model.beta = beta
+        self.bias_model.lambda0 = lambda0
+
+    def copy_sample(self):
+        """
+        Return a copy of the parameters of the model
+        :return: The parameters of the model (A,W,\lambda_0, \beta)
+        """
+        return copy.deepcopy(self.get_parameters())
 
     def resample_model(self):
         """
@@ -129,31 +198,59 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         """
         # Update the bias model given the parents assigned to the background
         self.bias_model.resample(
-            data=np.concatenate([p.Z0] for (_,_,_,p) in self.data_list))
+            data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
 
         # Update the impulse model given the parents assignments
         self.impulse_model.resample(
-            data=np.concatenate([p.Z] for (_,_,_,p) in self.data_list))
+            data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 
         # Update the weight model given the parents assignments
         self.weight_model.resample(
-            N=np.sum([N for (_,N,_,_) in self.data_list]),
-            Z=np.concatenate([p.Z] for (_,_,_,p) in self.data_list))
+            N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
+            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 
         # Update the parents.
         # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
         for _,_,_,p in self.data_list:
             p.resample(self.bias_model, self.weight_model, self.impulse_model)
 
-
-    def compute_rate(self, S):
+    def compute_rate(self, index=0, S=None):
         """
         Compute the rate function for a given data set
-        :param S:   TxK array of event counts for which we would like to
-                    compute the model's rate
-        :return:    TxK array of rates
+        :param index:   An integer specifying which dataset (if S is None)
+        :param S:       TxK array of event counts for which we would like to
+                        compute the model's rate
+        :return:        TxK array of rates
         """
-        raise NotImplementedError()
+        if S is not None:
+            assert isinstance(S, np.ndarray) and S.ndim == 2, "S must be a TxK array."
+            T,K = S.shape
+
+            # Filter the data into a TxKxB array
+            F = self.basis.convolve_with_basis(S)
+
+        else:
+            assert len(self.data_list) > index, "Dataset %d does not exist!" % index
+            S, _, F, _ = self.data_list[index]
+            T,K = S.shape
+
+        # Compute the rate
+        R = np.zeros((T,K))
+
+        # Background rate
+        R += self.bias_model.lambda0[None,:]
+
+        # Compute the sum of weighted sum of impulse responses
+        H = self.weight_model.A[:,:,None] * \
+            self.weight_model.W[:,:,None] * \
+            self.impulse_model.beta
+
+        H = np.transpose(H, [2,0,1])
+
+        for k2 in xrange(self.K):
+            R[:,k2] += np.tensordot(F, H[:,:,k2], axes=([2,1], [0,1]))
+
+        return R
 
     def heldout_log_likelihood(self, S):
         """

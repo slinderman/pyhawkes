@@ -38,10 +38,16 @@ class Parents(GibbsSampling):
         :return:
         """
         Zsum = self.Z0 + self.Z.sum(axis=(2,3))
-        assert np.allclose(self.S, Zsum), "_check_Z failed. Zsum does not add up to S!"
+        # assert np.allclose(self.S, Zsum), "_check_Z failed. Zsum does not add up to S!"
+        if not np.allclose(self.S, Zsum):
+            print "_check_Z failed. Zsum does not add up to S!"
+            import pdb; pdb.set_trace()
 
     def log_likelihood(self, x):
         pass
+
+    def rvs(self, data=[]):
+        raise NotImplementedError("No prior for parents to sample from.")
 
     def _resample_Z_python(self, bias_model, weight_model, impulse_model):
         """
@@ -55,25 +61,28 @@ class Parents(GibbsSampling):
 
                 # Compute the normalized probability vector for the background rate and
                 # each of the basis functions for every other process
-                p0  = bias_model.lambda0[k2]        # scalar
-                Ak2 = weight_model.A[:,k2]          # (K,)
-                Wk2 = weight_model.W[:,k2]          # (K,)
-                Bk2 = impulse_model.beta[:,k2,:]    # (K,B)
-                Ft  =  self.F[t,:,:]                # (K,B)
+                p0  = np.atleast_1d(bias_model.lambda0[k2])         # (1,)
+                Ak2 = weight_model.A[:,k2]                          # (K,)
+                Wk2 = weight_model.W[:,k2]                          # (K,)
+                Bk2 = impulse_model.beta[:,k2,:]                    # (K,B)
+                Ft  =  self.F[t,:,:]                                # (K,B)
                 pkb = Ft * Ak2[:,None] * Wk2[:,None] * Bk2
 
                 assert pkb.shape == (self.K, self.B)
 
                 # Combine the probabilities into a normalized vector of length KB+1
-                p = np.array([p0, pkb.ravel()])
+                p = np.concatenate([p0, pkb.ravel()])
                 p = p / p.sum()
 
                 # Sample a multinomial distribution to assign events to parents
                 parents = np.random.multinomial(self.S[t, k2], p)
 
                 # Copy the parents back into Z
-                self.Z0 = parents[0]
+                self.Z0[t,k2] = parents[0]
                 self.Z[t,:,k2,:] = parents[1:].reshape((self.K, self.B))
+
+        # DEBUG
+        self._check_Z()
 
     def resample(self, bias_model, weight_model, impulse_model):
         """
@@ -88,5 +97,3 @@ class Parents(GibbsSampling):
         # TODO: Write a Cython function to resample each of the TxKxKxB entries in Z
         self._resample_Z_python(bias_model, weight_model, impulse_model)
 
-        # DEBUG
-        self._check_Z()

@@ -32,15 +32,17 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             # Create a network
             # TODO: Instantiate an ErdosRenyi object instead
             class _default_network:
-                rho = rho
-                alpha = alpha
-                beta = beta
+                def __init__(self, r,a,b):
+                    self.rho = r
+                    self.alpha = a
+                    self.beta = b
 
-            self.network = _default_network()
+            self.network = _default_network(rho, alpha, beta)
 
         # Initialize parameters A and W
         self.A = np.ones((self.K, self.K))
         self.W = np.zeros((self.K, self.K))
+        self.resample()
 
     def log_likelihood(self, x):
         """
@@ -68,6 +70,13 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
 
         return ll
 
+    def rvs(self,size=[]):
+        A = np.random.rand(self.K, self.K) < self.network.rho
+        W = np.random.gamma(self.network.alpha, 1.0/self.network.beta,
+                            size(self.K, self.K))
+
+        return A,W
+
     def _joint_resample_A_W(self):
         """
         Not sure how to do this yet, but it would be nice to resample A
@@ -94,7 +103,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         """
         ss = np.zeros((2, self.K, self.K))
 
-        if N and Z:
+        if N is not None and Z is not None:
             # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
             ss[0,:,:] = Z.sum(axis=(0,3))
             # ss[1,k1,k2] = N[k1] * A[k1,k2]
@@ -107,7 +116,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         Resample the weights given A and z.
         :return:
         """
-        assert (not N and not Z) \
+        assert (N is None and Z is None) \
                or (isinstance(Z, np.ndarray)
                    and Z.ndim == 4
                    and Z.shape[1] == self.K
@@ -120,7 +129,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         alpha_post = self.network.alpha + ss[0,:]
         beta_post  = self.network.beta + ss[1,:]
 
-        self.W = np.random.gamma(alpha_post, 1.0/beta_post)
+        self.W = np.array(np.random.gamma(alpha_post,
+                                          1.0/beta_post)).reshape((self.K, self.K))
 
     def resample(self, N=None, Z=None):
         """

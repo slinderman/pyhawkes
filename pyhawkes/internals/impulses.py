@@ -71,20 +71,20 @@ class DirichletImpulseResponses(GibbsSampling):
         """
         # The only sufficient statistic is the KxKxB array of event counts assigned
         # to each of the basis functions
-        if data:
+        if data is not None:
             ss = data.sum(axis=0)
         else:
             ss = np.zeros((self.K, self.K, self.B))
 
         return ss
 
-    def resample(self, data=[]):
+    def resample(self, data=None):
         """
         Resample the
         :param data: a TxKxKxB array of parents. T time bins, K processes,
                      K parent processes, and B bases for each parent process.
         """
-        assert not data or \
+        assert data is None or \
                (isinstance(data, np.ndarray) and
                 data.ndim == 4 and
                 data.shape[1] == data.shape[2] == self.K

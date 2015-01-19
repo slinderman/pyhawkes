@@ -32,6 +32,9 @@ class GammaBias(GibbsSampling):
         return self.K * (self.alpha * np.log(self.beta) - gammaln(self.alpha)) + \
                ((self.alpha-1) * np.log(x) - self.beta * x).sum()
 
+    def rvs(self,size=[]):
+        return np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K,))
+
     def _get_suff_statistics(self, data):
         """
         Compute the sufficient statistics from the data set.
@@ -40,7 +43,7 @@ class GammaBias(GibbsSampling):
         """
         ss = np.zeros((2, self.K))
 
-        if data:
+        if len(data) > 0:
             # ss[0,k] = sum_t Z0[t,k]
             ss[0,:] = data.sum(axis=0)
             # ss[1,k] = T * dt
@@ -65,4 +68,5 @@ class GammaBias(GibbsSampling):
         alpha_post = self.alpha + ss[0,:]
         beta_post  = self.beta + ss[1,:]
 
-        self.lambda0 = np.random.gamma(alpha_post, 1.0/beta_post)
+        self.lambda0 = np.array(np.random.gamma(alpha_post,
+                                                1.0/beta_post)).reshape((self.K, ))
