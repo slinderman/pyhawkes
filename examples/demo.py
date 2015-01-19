@@ -9,7 +9,7 @@ def demo():
 
     :return:
     """
-    K = 1
+    K = 2
     T = 1000
     dt = 1.0
     B = 3
@@ -45,6 +45,7 @@ def demo():
         # Update plot
         if itr % 5 == 0:
             ln.set_data(np.arange(T), model.compute_rate()[:,0])
+            plt.title("Iteration %d" % itr)
             plt.pause(0.001)
 
     plt.ioff()

@@ -97,6 +97,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         update of z | A, W.
         :return:
         """
+        # TODO: Write a Cython function to sample this more efficiently
         for k1 in xrange(self.K):
             for k2 in xrange(self.K):
                 if model is None:
@@ -114,12 +115,11 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 # Sample A given conditional probability
                 lp0 = ll0 + np.log(1.0 - self.network.rho)
                 lp1 = ll1 + np.log(self.network.rho)
-                Z  = logsumexp([lp0, lp1])
+                Z   = logsumexp([lp0, lp1])
 
                 # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
                 #           = lp1 - ln(exp(lp0) + exp(lp1))
                 #           = lp1 - Z
-
                 self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
 
     def _get_suff_statistics(self, N, Z):

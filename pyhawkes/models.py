@@ -316,7 +316,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Get the likelihood of the datasets
         for ind,(S,_,_,_)  in enumerate(self.data_list):
-            Rk = self.compute_rate(index=ind)
+            Rk = self.compute_rate(index=ind, proc=k)
             ll += self._poisson_log_likelihood(S[:,k], Rk)
 
         return ll
