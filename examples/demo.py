@@ -12,13 +12,14 @@ def demo():
     K = 1
     T = 1000
     dt = 1.0
+    B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModel(K=K, dt=dt)
+    true_model = DiscreteTimeNetworkHawkesModel(K=K, dt=dt, B=B)
     S,R = true_model.generate(T=T)
 
     # Make a new model for inference
-    model = DiscreteTimeNetworkHawkesModel(K=K, dt=dt)
+    model = DiscreteTimeNetworkHawkesModel(K=K, dt=dt, B=B)
     model.add_data(S)
 
     # Plot the true and inferred firing rate
@@ -33,8 +34,8 @@ def demo():
     samples = []
     lps = []
     for itr in xrange(N_samples):
-        samples.append(model.resample_and_copy())
         lps.append(model.log_probability())
+        samples.append(model.resample_and_copy())
 
         # print "Iteration ", itr
         # print "Lambda0:     ", model.bias_model.lambda0

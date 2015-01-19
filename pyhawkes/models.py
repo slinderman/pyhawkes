@@ -202,16 +202,14 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         self.bias_model.resample(
             data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
 
-        # # Update the impulse model given the parents assignments
+        # Update the impulse model given the parents assignments
         self.impulse_model.resample(
             data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 
         # Update the weight model given the parents assignments
         self.weight_model.resample(
             N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
-            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]),
-            F=np.concatenate([F for (_,_,F,_) in self.data_list]),
-            beta=self.impulse_model.beta)
+            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 
         # Update the parents.
         # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!

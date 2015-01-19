@@ -112,15 +112,24 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             # ss[1,k1,k2] = N[k1] * A[k1,k2]
             ss[1,:,:] = N[:,None] * self.A
 
-        # # For comparison, compute the exact sufficient statistics for ss[1,:,:]
-        # if F is not None and beta is not None:
-        #     ss_dbg = np.zeros((self.K, self.K))
-        #     for k1 in range(self.K):
-        #         for k2 in range(self.K):
-        #             ss_dbg[k1,k2] = (F[:,k1,:].dot(beta[k1,k2,:])).sum()
-        #
-        #     err = np.amax(abs(ss_dbg - ss[1,:,:]) / ss[1,:,:])
-        #     print "beta_W err: ", err
+        return ss
+
+    def _get_exact_suff_statistics(self, Z, F, beta):
+        """
+        For comparison, compute the exact sufficient statistics for ss[1,:,:]
+        :param data: a TxK array of event counts assigned to the background process
+        :return:
+        """
+        ss = np.zeros((2, self.K, self.K))
+
+        if F is not None and beta is not None:
+            # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
+            ss[0,:,:] = Z.sum(axis=(0,3))
+
+            # ss[1,k1,k2] = A_k1,k2 * \sum_t \sum_b F[t,k1,b] * beta[k1,k2,b]
+            for k1 in range(self.K):
+                for k2 in range(self.K):
+                    ss[1,k1,k2] = self.A[k1,k2] * (F[:,k1,:].dot(beta[k1,k2,:])).sum()
 
         return ss
 
