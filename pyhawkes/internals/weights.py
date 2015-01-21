@@ -1,8 +1,8 @@
 import numpy as np
-from scipy.special import gammaln
+from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
 
-from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
+from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField
 
 class SpikeAndSlabGammaWeights(GibbsSampling):
     """
@@ -190,3 +190,88 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
 
         # Resample A given W
         self._resample_A_given_W(model)
+
+class GammaMixtureWeights(MeanField):
+    """
+    For variational inference we approximate the spike at zero with a smooth
+    Gamma distribution that has infinite density at zero.
+    """
+    def __init__(self, K, network, kappa_1=1.0, kappa_0=0.01, nu_0=100):
+        """
+        Initialize the spike-and-slab gamma weight model with either a
+        network object containing the prior or rho, alpha, and beta to
+        define an independent model.
+
+        :param K:           Number of processes
+        :param network:     Pointer to a network object exposing rho, alpha, and beta
+        :param kappa_1:     Shape for weight distribution
+        :param kappa_0:     Shape for gamma spike (small)
+        :param nu_0:        Scale for gamma spike (large)
+        """
+        self.K = K
+        assert network is not None, "A network object must be given"
+
+        self.network = network
+
+        # Save gamma parameters
+        self.kappa_1 = kappa_1
+        self.kappa_0 = kappa_0
+        self.nu_0    = nu_0
+
+        # Initialize the variational parameters to the prior mean
+        # Variational probability of edge
+        self.mf_p = network.rho * np.ones((self.K, self.K))
+        # Variational weight distribution given that there is no edge
+        self.mf_kappa_0 = self.kappa_0 * np.ones((self.K, self.K))
+        self.mf_v_0 = self.nu_0 * np.ones((self.K, self.K))
+        # Variational weight distribution given that there is an edge
+        self.mf_kappa_1 = self.kappa_1 * np.ones((self.K, self.K))
+        self.mf_v_1 = network.alpha / network.beta * np.ones((self.K, self.K))
+
+    def expected_A(self):
+        return self.mf_p
+
+    def expected_W(self):
+        """
+        Compute the expected W under the variational approximation
+        """
+        p_A = self.expected_A()
+        return p_A * self.expected_W_given_A(1.0) + (1-p_A) * self.expected_W_given_A(0.0)
+
+    def expected_W_given_A(self, A):
+        """
+        Compute the expected W given A under the variational approximation
+        :param A:   Either zero or 1
+        """
+        return A * (self.mf_kappa_1 / self.mf_v_1) + \
+               (1.0 - A) * (self.mf_kappa_0 / self.mf_v_0)
+
+    def expected_log_W(self):
+        """
+        Compute the expected log W under the variational approximation
+        """
+        p_A = self.expected_A()
+        return p_A * self.expected_log_W_given_A(1.0) + \
+               (1-p_A) * self.expected_log_W_given_A(0.0)
+
+    def expected_log_W_given_A(self, A):
+        """
+        Compute the expected log W given A under the variational approximation
+        """
+        return A * (psi(self.mf_kappa_1) + np.log(self.mf_v_1)) + \
+               (1.0 - A) * (psi(self.mf_kappa_0) + np.log(self.mf_v_0))
+
+    def expected_log_likelihood(self,x):
+        raise NotImplementedError()
+
+    def meanfieldupdate(self,data,weights):
+        raise NotImplementedError()
+
+    def meanfieldupdate_p(self):
+        raise NotImplementedError()
+
+    def meanfieldupdate_kappa_v(self):
+        raise NotImplementedError()
+
+    def get_vlb(self):
+        raise NotImplementedError()
