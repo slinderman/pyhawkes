@@ -3,6 +3,7 @@ from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
 
 from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField
+from pyhawkes.utils.utils import logistic
 
 class SpikeAndSlabGammaWeights(GibbsSampling):
     """
@@ -10,7 +11,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
     KxK gamma weight matrix. Implements Gibbs sampling given
     the parent variables.
     """
-    def __init__(self, K, network, kappa_1=1.0):
+    def __init__(self, K, network):
         """
         Initialize the spike-and-slab gamma weight model with either a
         network object containing the prior or rho, alpha, and beta to
@@ -249,14 +250,41 @@ class GammaMixtureWeights(MeanField):
     def expected_log_likelihood(self,x):
         raise NotImplementedError()
 
-    def meanfieldupdate(self,data,weights):
-        raise NotImplementedError()
+    def meanfieldupdate(self, EZ, N):
+        self.meanfieldupdate_p()
+        self.meanfieldupdate_kappa_v(EZ, N)
 
     def meanfieldupdate_p(self):
-        raise NotImplementedError()
+        """
+        Update p given the network parameters and the current variational
+        parameters of the weight distributions.
+        :return:
+        """
+        logit_p = 0
+        logit_p += self.network.expected_log_p() - self.network.expected_log_notp()
+        logit_p += self.network.kappa * self.network.expected_log_v() - gammaln(self.network.kappa)
+        logit_p += gammaln(self.mf_kappa_1) - self.mf_kappa_1 * np.log(self.mf_v_1)
+        logit_p += gammaln(self.kappa_0) - self.kappa_0 * np.log(self.nu_0)
+        logit_p += self.mf_kappa_0 * np.log(self.mf_v_0) - gammaln(self.mf_kappa_0)
 
-    def meanfieldupdate_kappa_v(self):
-        raise NotImplementedError()
+        self.mf_p = logistic(logit_p)
+
+    def meanfieldupdate_kappa_v(self, EZ, N):
+        """
+        Update the variational weight distributions
+        :return:
+        """
+        # kappa' = kappa + \sum_t \sum_b z[t,k,k',b]
+        dkappa = EZ.sum(axis=(0,3))
+        self.mf_kappa_0 = self.kappa_0 + dkappa
+        self.mf_kappa_1 = self.network.kappa + dkappa
+
+        # v_0'[k,k'] = self.nu_0 + N[k]
+        self.mf_v_0 = self.nu_0 + N[:,None]
+
+        # v_1'[k,k'] = E[v[k,k']] + N[k]
+        self.mf_v_1 = self.network.expected_v() + N[:,None]
+
 
     def get_vlb(self):
         raise NotImplementedError()

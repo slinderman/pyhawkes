@@ -53,7 +53,11 @@ class _StochasticBlockModelBase(BayesianDistribution):
 
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, K, C, pi=1.0, tau0=0.1, tau1=0.1, alpha=1.0, beta=1.0):
+    def __init__(self, K, C,
+                 c=None, pi=1.0,
+                 p=None, tau0=0.1, tau1=0.1,
+                 v=None, alpha=1.0, beta=1.0,
+                 kappa=1.0):
         """
         Initialize SBM with parameters defined above.
         """
@@ -63,16 +67,40 @@ class _StochasticBlockModelBase(BayesianDistribution):
         assert isinstance(C, int) and C >= 1, "C must be a positive integer number of blocks"
         self.C = C
 
+        # If m, p, and v are specified, then the model is fixed and the prior parameters
+        # are ignored
+        if None not in (c, p, v):
+            self.fixed = True
+            assert isinstance(c, np.ndarray) and c.shape == (C,) \
+                   and np.amin(c) >= 0 and np.amax(c) <= self.C-1, \
+                "x must be a length C vector of block assignments"
+            self.c = c
+
+            assert isinstance(p, np.ndarray) and p.shape == (C,C) \
+                   and np.amin(p) >= 0 and np.amax(p) <= 1.0, \
+                "p must be a CxC matrix of probabilities"
+            self.p = p
+
+            assert isinstance(v, np.ndarray) and v.shape == (C,C) \
+                   and np.amin(v) >= 0, \
+                "v must be a CxC matrix of nonnegative gamma scales"
+            self.v = v
+
+        else:
+            self.fixed = False
+
+
         if isinstance(pi, (int, float)):
             self.pi = pi * np.ones(C)
         else:
             assert isinstance(pi, np.ndarray) and pi.shape == (C,), "pi must be a sclar or a C-vector"
             self.pi = pi
 
-        self.tau0 = tau0
-        self.tau1 = tau1
+        self.tau0  = tau0
+        self.tau1  = tau1
+        self.kappa = kappa
         self.alpha = alpha
-        self.beta = beta
+        self.beta  = beta
 
     def log_likelihood(self, x):
         """
@@ -91,14 +119,19 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
     """
     Implement Gibbs sampling for SBM
     """
-    def __init__(self, K, C, pi=1.0, tau0=0.1, tau1=0.1, alpha=1.0, beta=1.0):
-        super(GibbsSBM, self).__init__(K, C, pi, tau0, tau1, alpha, beta)
+    def __init__(self, K, C,
+                 c=None, pi=1.0,
+                 p=None, tau0=0.1, tau1=0.1,
+                 v=None, alpha=1.0, beta=1.0,
+                 kappa=1.0):
+        super(GibbsSBM, self).__init__(K, C, c, pi, p, tau0, tau1, v, alpha, beta, kappa)
 
         # Initialize parameter estimates
-        self.c = np.random.choice(self.C, size=(self.K))
-        self.m = 1.0/C * np.ones(self.C)
-        self.p = self.tau1 / (self.tau0 + self.tau1) * np.ones((self.C, self.C))
-        self.v = self.alpha / self.beta * np.ones((self.C, self.C))
+        if not self.fixed:
+            self.c = np.random.choice(self.C, size=(self.K))
+            self.m = 1.0/C * np.ones(self.C)
+            self.p = self.tau1 / (self.tau0 + self.tau1) * np.ones((self.C, self.C))
+            self.v = self.alpha / self.beta * np.ones((self.C, self.C))
 
     def resample(self,data=[]):
         raise NotImplementedError()
@@ -107,8 +140,12 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
     """
     Implement Gibbs sampling for SBM
     """
-    def __init__(self, K, C, pi=1.0, tau0=0.1, tau1=0.1, alpha=1.0, beta=1.0):
-        super(MeanFieldSBM, self).__init__(K, C, pi, tau0, tau1, alpha, beta)
+    def __init__(self, K, C,
+                 c=None, pi=1.0,
+                 p=None, tau0=0.1, tau1=0.1,
+                 v=None, alpha=1.0, beta=1.0,
+                 kappa=1.0):
+        super(MeanFieldSBM, self).__init__(K, C, c, pi, p, tau0, tau1, v, alpha, beta, kappa)
 
         # Initialize mean field parameters
         self.mf_pi    = 1.0/self.C * np.ones(self.C)
@@ -152,7 +189,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
                 # Get the probability of a connection for this pair of classes
-                E_ln_p += pc1c2 * psi(self.mf_tau1) - psi(self.mf_tau0 + self.mf_tau1)
+                E_ln_p += pc1c2 * (psi(self.mf_tau1) - psi(self.mf_tau0 + self.mf_tau1))
 
         return E_ln_p
 
@@ -168,9 +205,40 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
                 # Get the probability of a connection for this pair of classes
-                E_ln_notp += pc1c2 * psi(self.mf_tau0) - psi(self.mf_tau0 + self.mf_tau1)
+                E_ln_notp += pc1c2 * (psi(self.mf_tau0) - psi(self.mf_tau0 + self.mf_tau1))
 
         return E_ln_notp
+
+    def expected_v(self):
+        """
+        Compute the expected scale of a connection, averaging over c
+        :return:
+        """
+        E_v = np.zeros((self.K, self.K))
+        for c1 in xrange(self.C):
+            for c2 in xrange(self.C):
+                # Get the KxK matrix of joint class assignment probabilities
+                pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
+
+                # Get the probability of a connection for this pair of classes
+                E_v += pc1c2 * self.mf_alpha / self.mf_beta
+        return E_v
+
+    def expected_log_v(self):
+        """
+        Compute the expected log scale of a connection, averaging over c
+        :return:
+        """
+        E_log_v = np.zeros((self.K, self.K))
+        for c1 in xrange(self.C):
+            for c2 in xrange(self.C):
+                # Get the KxK matrix of joint class assignment probabilities
+                pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
+
+                # Get the probability of a connection for this pair of classes
+                E_log_v += pc1c2 * (psi(self.mf_alpha) - np.log(self.mf_beta))
+        return E_log_v
+
 
     def expected_log_likelihood(self,x):
         pass
@@ -188,9 +256,13 @@ class ErdosRenyiModel(StochasticBlockModel):
     """
     The Erdos-Renyi network model is a special case of the SBM with one block.
     """
-    def __init__(self, K, tau0=0.1, tau1=0.1, alpha=1.0, beta=1.0):
+    def __init__(self, K,
+                 p=None, tau0=0.1, tau1=0.1,
+                 v=None, alpha=1.0, beta=1.0,
+                 kappa=1.0):
         C = 1
-        pi = 1.0
-        super(ErdosRenyiModel, self).__init__(K, C, pi,
-                                              tau0=tau0, tau1=tau1,
-                                              alpha=alpha, beta=beta)
+        c = np.zeros(self.K)
+        super(ErdosRenyiModel, self).__init__(K, C, c=c,
+                                              p=p, tau0=tau0, tau1=tau1,
+                                              v=v, alpha=alpha, beta=beta,
+                                              kappa=kappa)

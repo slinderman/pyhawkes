@@ -115,31 +115,60 @@ class MeanFieldParents(_ParentsBase, MeanField):
         super(MeanFieldParents, self).__init__(T, K, B, S, F)
 
         # Initialize arrays for mean field parameters
-        self.u  = np.zeros((T,K,K,B))
-        self.u0 = np.ones_like(self.S)
+        self.EZ  = np.zeros((T,K,K,B))
+        self.EZ0 = np.ones_like(self.S)
 
     def expected_Z(self):
         """
         E[z] = u[t,k,k',b] * s[t,k']
         :return:
         """
-        # TODO: Just store E[Z] directly, we never just need u
-        return self.u * self.S[:,None,:,None]
+        # We store E[Z] directly, we never just need u
+        return self.EZ
 
     def expected_Z0(self):
         """
         E[z0] = u0[t,k'] * s[t,k']
         :return:
         """
-        # TODO: Just store E[Z0] directly, we never just need u
-        return self.u0 * self.S
+        # We store E[Z0] directly, we never just need u
+        return self.EZ0
 
     def expected_log_likelihood(self,x):
         pass
 
-    def meanfieldupdate(self,data,weights):
-        pass
+    def _mf_update_Z_python(self, bias_model, weight_model, impulse_model):
+        """
+        Update the mean field parameters for the latent parents
+        :return:
+        """
+        for t in xrange(self.T):
+            for k2 in xrange(self.K):
+                # If there are no events then there's nothing to do
+                if self.S[t, k2] == 0:
+                    continue
+
+                # Compute the normalized probability vector for the background rate and
+                # each of the basis functions for every other process
+                p0  = np.exp(bias_model.expected_log_lambda0()[k2])     # scalar
+                Wk2 = np.exp(weight_model.expected_log_W()[:,k2])       # (K,)
+                Gk2 = np.exp(impulse_model.expected_log_g()[:,k2,:])    # (K,B)
+                Ft  =  self.F[t,:,:]                                    # (K,B)
+                pkb = Ft * Wk2[:,None] * Gk2
+
+                assert pkb.shape == (self.K, self.B)
+
+                # Combine the probabilities into a normalized vector of length KB+1
+                Z = p0 + pkb.sum()
+                self.EZ0[t,k2] = p0 / Z * self.S[t,k2]
+                self.EZ[t,:,k2,:] = pkb.reshape((self.K*self.B,)) / Z * self.S[t,k2]
+
+    def meanfieldupdate(self, bias_model, weight_model, impulse_model):
+        self._mf_update_Z_python(bias_model, weight_model, impulse_model)
 
     def get_vlb(self):
         raise NotImplementedError
 
+
+class Parents(GibbsParents, MeanFieldParents):
+    pass

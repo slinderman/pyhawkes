@@ -38,7 +38,7 @@ class DirichletImpulseResponses(GibbsSampling):
             self.gamma = np.ones(self.B)
 
         # Initialize with a draw from the prior
-        self.beta = np.empty((self.K, self.K, self.B))
+        self.g = np.empty((self.K, self.K, self.B))
         self.resample()
 
         # Initialize mean field parameters
@@ -67,7 +67,7 @@ class DirichletImpulseResponses(GibbsSampling):
         return self.K**2 * Z + ((gamma-1.0)[None,None,:] * np.log(x)).sum()
 
     def log_probability(self):
-        return self.log_likelihood(self.beta)
+        return self.log_likelihood(self.g)
 
     def _get_suff_statistics(self, data):
         """
@@ -102,7 +102,7 @@ class DirichletImpulseResponses(GibbsSampling):
         for k1 in xrange(self.K):
             for k2 in xrange(self.K):
                 alpha_post = self.gamma + ss[k1, k2, :]
-                self.beta[k1,k2,:] = np.random.dirichlet(alpha_post)
+                self.g[k1,k2,:] = np.random.dirichlet(alpha_post)
 
     def expected_g(self):
         # \sum_{b} \gamma_b
@@ -120,11 +120,18 @@ class DirichletImpulseResponses(GibbsSampling):
 
         return E_lng
 
+    def mf_update_gamma(self, EZ):
+        """
+        Update gamma given E[Z]
+        :return:
+        """
+        self.mf_gamma = self.gamma + EZ.sum(axis=0)
+
     def expected_log_likelihood(self,x):
         pass
 
-    def meanfieldupdate(self,data,weights):
-        pass
+    def meanfieldupdate(self, EZ):
+        self.mf_update_gamma(EZ)
 
     def get_vlb(self):
         raise NotImplementedError

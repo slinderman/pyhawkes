@@ -1,29 +1,35 @@
 """
 Top level classes for the Hawkes process model.
 """
+import abc
 import copy
 
 import numpy as np
 from scipy.special import gammaln
 
-from pyhawkes.deps.pybasicbayes.models import ModelGibbsSampling
+from pyhawkes.deps.pybasicbayes.models import ModelGibbsSampling, ModelMeanField
 from pyhawkes.internals.bias import GammaBias
-from pyhawkes.internals.weights import SpikeAndSlabGammaWeights
+from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
 from pyhawkes.internals.parents import Parents
+from pyhawkes.internals.network import ErdosRenyiModel
 from pyhawkes.utils.basis import CosineBasis
 
-class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
+class _DiscreteTimeNetworkHawkesModelBase(object):
     """
     Discrete time network Hawkes process model with support for
     Gibbs sampling inference, variational inference (TODO), and
     stochastic variational inference (TODO).
     """
 
+    __metaclass__ = abc.ABCMeta
+    _weight_class = None
+    _parent_class = None
+
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha0=1.0, beta0=1.0,
-                 alphaW=1.0, betaW=5.0, rho=0.9,
+                 kappa=1.0, v=5.0, p=0.9,
                  gamma=1.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -40,8 +46,13 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Initialize the model components
         self.bias_model = GammaBias(self.K, self.dt, alpha0, beta0)
-        self.weight_model = SpikeAndSlabGammaWeights(self.K, rho=rho, alpha=alphaW, beta=betaW)
         self.impulse_model = DirichletImpulseResponses(self.K, self.B, gamma=gamma)
+
+        # Initialize the network model
+        self.network = ErdosRenyiModel(self.K, p=p, kappa=kappa, v=v)
+
+        # The weight model is dictated by whether this is for Gibbs or MF
+        self.weight_model = self._weight_class(self.K, self.network)
 
         # Initialize the data list to empty
         self.data_list = []
@@ -70,7 +81,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         # print "F_err:  ", Fsum - N/self.dt
 
         # Instantiate corresponding parent object
-        parents = Parents(T, self.K, self.B, S, F)
+        parents = self._parent_class(T, self.K, self.B, S, F)
         parents.resample(self.bias_model, self.weight_model, self.impulse_model)
 
         # Add to the data list
@@ -107,7 +118,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         S = np.zeros((T, self.K))
 
         # Precompute the impulse responses (LxKxK array)
-        G = np.tensordot(self.basis.basis, self.impulse_model.beta, axes=([1], [2]))
+        G = np.tensordot(self.basis.basis, self.impulse_model.g, axes=([1], [2]))
         L = self.basis.L
         assert G.shape == (L,self.K, self.K)
         H = self.weight_model.A[None,:,:] * \
@@ -154,7 +165,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         """
         return self.weight_model.A, \
                self.weight_model.W, \
-               self.impulse_model.beta, \
+               self.impulse_model.g, \
                self.bias_model.lambda0
 
     def set_parameters(self, params):
@@ -183,39 +194,8 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
 
         self.weight_model.A = A
         self.weight_model.W = W
-        self.impulse_model.beta = beta
+        self.impulse_model.g = beta
         self.bias_model.lambda0 = lambda0
-
-    def copy_sample(self):
-        """
-        Return a copy of the parameters of the model
-        :return: The parameters of the model (A,W,\lambda_0, \beta)
-        """
-        return copy.deepcopy(self.get_parameters())
-
-    def resample_model(self):
-        """
-        Perform one iteration of the Gibbs sampling algorithm.
-        :return:
-        """
-        # Update the bias model given the parents assigned to the background
-        self.bias_model.resample(
-            data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
-
-        # Update the impulse model given the parents assignments
-        self.impulse_model.resample(
-            data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
-
-        # Update the weight model given the parents assignments
-        self.weight_model.resample(
-            model=self,
-            N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
-            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
-
-        # Update the parents.
-        # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
-        for _,_,_,p in self.data_list:
-            p.resample(self.bias_model, self.weight_model, self.impulse_model)
 
     def compute_rate(self, index=0, proc=None, S=None):
         """
@@ -247,7 +227,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
             # Compute the sum of weighted sum of impulse responses
             H = self.weight_model.A[:,:,None] * \
                 self.weight_model.W[:,:,None] * \
-                self.impulse_model.beta
+                self.impulse_model.g
 
             H = np.transpose(H, [2,0,1])
 
@@ -267,7 +247,7 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
             # Compute the sum of weighted sum of impulse responses
             H = self.weight_model.A[:,proc,None] * \
                 self.weight_model.W[:,proc,None] * \
-                self.impulse_model.beta[:,proc,:]
+                self.impulse_model.g[:,proc,:]
 
             R += np.tensordot(F, H, axes=([1,2], [0,1]))
 
@@ -335,3 +315,63 @@ class DiscreteTimeNetworkHawkesModel(ModelGibbsSampling):
         lp += self.impulse_model.log_probability()
 
         return lp
+
+class DiscreteTimeNetworkHawkesModelGibbs(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
+    _weight_class = SpikeAndSlabGammaWeights
+    _parent_class = Parents
+
+    def copy_sample(self):
+        """
+        Return a copy of the parameters of the model
+        :return: The parameters of the model (A,W,\lambda_0, \beta)
+        """
+        return copy.deepcopy(self.get_parameters())
+
+    def resample_model(self):
+        """
+        Perform one iteration of the Gibbs sampling algorithm.
+        :return:
+        """
+        # Update the bias model given the parents assigned to the background
+        self.bias_model.resample(
+            data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
+
+        # Update the impulse model given the parents assignments
+        self.impulse_model.resample(
+            data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+
+        # Update the weight model given the parents assignments
+        self.weight_model.resample(
+            model=self,
+            N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
+            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+
+        # Update the parents.
+        # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
+        for _,_,_,p in self.data_list:
+            p.resample(self.bias_model, self.weight_model, self.impulse_model)
+
+
+class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBase, ModelMeanField):
+    _weight_class = GammaMixtureWeights
+    _parent_class = Parents
+
+    def meanfield_coordinate_descent_step(self):
+        # Update the bias model given the parents assigned to the background
+        self.bias_model.meanfieldupdate(
+            EZ0=np.concatenate([p.EZ0 for (_,_,_,p) in self.data_list]))
+
+        # Update the impulse model given the parents assignments
+        self.impulse_model.meanfieldupdate(
+            EZ=np.concatenate([p.EZ for (_,_,_,p) in self.data_list]))
+
+        # Update the weight model given the parents assignments
+        self.weight_model.meanfieldupdate(
+            model=self,
+            N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
+            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+
+        # Update the parents.
+        # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
+        for _,_,_,p in self.data_list:
+            p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)

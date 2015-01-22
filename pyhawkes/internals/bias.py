@@ -89,8 +89,18 @@ class GammaBias(GibbsSampling):
     def expected_log_likelihood(self,x):
         pass
 
-    def meanfieldupdate(self,data,weights):
-        pass
+    def mf_update_lambda0(self, EZ0):
+        """
+        Update background rates given expected parent assignments.
+        :return:
+        """
+        self.mf_alpha = self.alpha + EZ0.sum(axis=0)
+
+        T = EZ0.shape[0]
+        self.mf_beta  = self.beta + T * self.dt
+
+    def meanfieldupdate(self, EZ0):
+        self.mf_update_lambda0(EZ0)
 
     def get_vlb(self):
         raise NotImplementedError
