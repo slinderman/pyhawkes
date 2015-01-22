@@ -46,16 +46,16 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             "W must be a KxK weight matrix"
 
         # LL of A
-        rho = self.network.p
+        rho = self.network.P
         ll = (A * np.log(rho) + (1-A) * np.log(1-rho)).sum()
 
-        # TODO: For now, assume alpha and beta are fixed for all entries in W
+        # Get the shape and scale parameters from the network model
         kappa = self.network.kappa
-        v = self.network.v
+        v = self.network.V
 
         # Add the LL of the gamma weights
-        ll += self.K**2 * (kappa * np.log(v) - gammaln(kappa)) + \
-              ((kappa-1) * np.log(W) - v * W).sum()
+        ll += (kappa * np.log(v) - gammaln(kappa) + \
+              (kappa-1) * np.log(W) - v * W).sum()
 
         return ll
 
@@ -63,8 +63,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         return self.log_likelihood((self.A, self.W))
 
     def rvs(self,size=[]):
-        A = np.random.rand(self.K, self.K) < self.network.p
-        W = np.random.gamma(self.network.kappa, 1.0/self.network.v,
+        A = np.random.rand(self.K, self.K) < self.network.P
+        W = np.random.gamma(self.network.kappa, 1.0/self.network.V,
                             size(self.K, self.K))
 
         return A,W
@@ -86,6 +86,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         :return:
         """
         # TODO: Write a Cython function to sample this more efficiently
+        p = self.network.P
         for k1 in xrange(self.K):
             for k2 in xrange(self.K):
                 if model is None:
@@ -101,8 +102,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                     ll1 = model._log_likelihood_single_process(k2)
 
                 # Sample A given conditional probability
-                lp0 = ll0 + np.log(1.0 - self.network.p[k1,k2])
-                lp1 = ll1 + np.log(self.network.p[k1,k2])
+                lp0 = ll0 + np.log(1.0 - p[k1,k2])
+                lp1 = ll1 + np.log(p[k1,k2])
                 Z   = logsumexp([lp0, lp1])
 
                 # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
@@ -161,7 +162,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
 
         ss = self._get_suff_statistics(N, Z)
         kappa_post = self.network.kappa + ss[0,:]
-        v_post  = self.network.v + ss[1,:]
+        v_post  = self.network.V + ss[1,:]
 
         self.W = np.array(np.random.gamma(kappa_post, 1.0/v_post)).reshape((self.K, self.K))
 
@@ -183,7 +184,7 @@ class GammaMixtureWeights(MeanField):
     For variational inference we approximate the spike at zero with a smooth
     Gamma distribution that has infinite density at zero.
     """
-    def __init__(self, K, network, kappa_0=0.01, nu_0=100):
+    def __init__(self, K, network, kappa_0=0.1, nu_0=10):
         """
         Initialize the spike-and-slab gamma weight model with either a
         network object containing the prior or rho, alpha, and beta to
@@ -206,13 +207,20 @@ class GammaMixtureWeights(MeanField):
 
         # Initialize the variational parameters to the prior mean
         # Variational probability of edge
-        self.mf_p = network.rho * np.ones((self.K, self.K))
+        self.mf_p = network.P
         # Variational weight distribution given that there is no edge
         self.mf_kappa_0 = self.kappa_0 * np.ones((self.K, self.K))
         self.mf_v_0 = self.nu_0 * np.ones((self.K, self.K))
         # Variational weight distribution given that there is an edge
-        self.mf_kappa_1 = self.network.kappa.copy()
-        self.mf_v_1 = network.alpha / network.beta * np.ones((self.K, self.K))
+        self.mf_kappa_1 = self.network.kappa * np.ones((self.K, self.K))
+        # self.mf_v_1 = network.alpha / network.beta * np.ones((self.K, self.K))
+        self.mf_v_1 = network.V * np.ones((self.K, self.K))
+
+    def log_likelihood(self, x):
+        raise NotImplementedError()
+
+    def rvs(self,size=[]):
+        raise NotImplementedError()
 
     def expected_A(self):
         return self.mf_p
@@ -244,8 +252,8 @@ class GammaMixtureWeights(MeanField):
         """
         Compute the expected log W given A under the variational approximation
         """
-        return A * (psi(self.mf_kappa_1) + np.log(self.mf_v_1)) + \
-               (1.0 - A) * (psi(self.mf_kappa_0) + np.log(self.mf_v_0))
+        return A * (psi(self.mf_kappa_1) - np.log(self.mf_v_1)) + \
+               (1.0 - A) * (psi(self.mf_kappa_0) - np.log(self.mf_v_0))
 
     def expected_log_likelihood(self,x):
         raise NotImplementedError()
@@ -260,8 +268,7 @@ class GammaMixtureWeights(MeanField):
         parameters of the weight distributions.
         :return:
         """
-        logit_p = 0
-        logit_p += self.network.expected_log_p() - self.network.expected_log_notp()
+        logit_p = self.network.expected_log_p() - self.network.expected_log_notp()
         logit_p += self.network.kappa * self.network.expected_log_v() - gammaln(self.network.kappa)
         logit_p += gammaln(self.mf_kappa_1) - self.mf_kappa_1 * np.log(self.mf_v_1)
         logit_p += gammaln(self.kappa_0) - self.kappa_0 * np.log(self.nu_0)
@@ -288,3 +295,12 @@ class GammaMixtureWeights(MeanField):
 
     def get_vlb(self):
         raise NotImplementedError()
+
+    def resample_from_mf(self):
+        """
+        Resample from the mean field distribution
+        :return:
+        """
+        self.A = np.random.rand(self.K, self.K) < self.mf_p
+        self.W = (1-self.A) * np.random.gamma(self.mf_kappa_0, 1.0/self.mf_v_0)
+        self.W += self.A * np.random.gamma(self.mf_kappa_1, 1.0/self.mf_v_1)

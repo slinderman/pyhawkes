@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from pyhawkes.models import DiscreteTimeNetworkHawkesModel
+from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs
 
 def demo():
     """
@@ -15,11 +15,11 @@ def demo():
     B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModel(K=K, dt=dt, B=B)
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B)
     S,R = true_model.generate(T=T)
 
     # Make a new model for inference
-    model = DiscreteTimeNetworkHawkesModel(K=K, dt=dt, B=B)
+    model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B)
     model.add_data(S)
 
     # Plot the true and inferred firing rate
@@ -36,11 +36,6 @@ def demo():
     for itr in xrange(N_samples):
         lps.append(model.log_probability())
         samples.append(model.resample_and_copy())
-
-        # print "Iteration ", itr
-        # print "Lambda0:     ", model.bias_model.lambda0
-        # print "W:           ", model.weight_model.W
-        # print ""
 
         # Update plot
         if itr % 5 == 0:

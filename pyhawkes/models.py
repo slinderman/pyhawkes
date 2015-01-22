@@ -29,7 +29,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha0=1.0, beta0=1.0,
-                 kappa=1.0, v=5.0, p=0.9,
+                 kappa=1.0, v=2.0, p=0.9,
                  gamma=1.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -357,6 +357,10 @@ class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBas
     _parent_class = Parents
 
     def meanfield_coordinate_descent_step(self):
+        # Update the parents.
+        for _,_,_,p in self.data_list:
+            p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
+
         # Update the bias model given the parents assigned to the background
         self.bias_model.meanfieldupdate(
             EZ0=np.concatenate([p.EZ0 for (_,_,_,p) in self.data_list]))
@@ -367,11 +371,10 @@ class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBas
 
         # Update the weight model given the parents assignments
         self.weight_model.meanfieldupdate(
-            model=self,
             N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
-            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+            EZ=np.concatenate([p.EZ for (_,_,_,p) in self.data_list]))
 
-        # Update the parents.
-        # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
-        for _,_,_,p in self.data_list:
-            p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
+    def resample_from_mf(self):
+        self.bias_model.resample_from_mf()
+        self.weight_model.resample_from_mf()
+        self.impulse_model.resample_from_mf()

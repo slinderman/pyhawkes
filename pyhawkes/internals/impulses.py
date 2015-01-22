@@ -42,7 +42,7 @@ class DirichletImpulseResponses(GibbsSampling):
         self.resample()
 
         # Initialize mean field parameters
-        self.mf_gamma = np.zeros((self.K, self.K, self.B))
+        self.mf_gamma = self.gamma[None, None, :] * np.ones((self.K, self.K, self.B))
 
     def rvs(self, size=[]):
         """
@@ -135,3 +135,13 @@ class DirichletImpulseResponses(GibbsSampling):
 
     def get_vlb(self):
         raise NotImplementedError
+
+    def resample_from_mf(self):
+        """
+        Resample from the mean field distribution
+        :return:
+        """
+        self.g = np.zeros((self.K, self.K, self.B))
+        for k1 in xrange(self.K):
+            for k2 in xrange(self.K):
+                self.g[k1,k2,:] = np.random.dirichlet(self.mf_gamma[k1,k2,:])

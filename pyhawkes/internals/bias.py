@@ -84,7 +84,7 @@ class GammaBias(GibbsSampling):
         return self.mf_alpha / self.mf_beta
 
     def expected_log_lambda0(self):
-        return psi(self.mf_alpha) + np.log(self.mf_beta)
+        return psi(self.mf_alpha) - np.log(self.mf_beta)
 
     def expected_log_likelihood(self,x):
         pass
@@ -104,3 +104,10 @@ class GammaBias(GibbsSampling):
 
     def get_vlb(self):
         raise NotImplementedError
+
+    def resample_from_mf(self):
+        """
+        Resample from the mean field distribution
+        :return:
+        """
+        self.lambda0 = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)

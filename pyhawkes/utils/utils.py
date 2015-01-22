@@ -7,9 +7,6 @@ import numpy as np
 import scipy.stats as stats
 import scipy
 
-import pycuda.compiler as nvcc
-import pycuda.driver as cuda
-
 perfTimers = {}
 
 log = logging.getLogger("global_log")
@@ -99,6 +96,7 @@ def printPerfTimers(perfDict):
         print "%s:  %f" % (k,v)
             
 def showDeviceAttributes():
+    import pycuda.driver as cuda
 
     (free,total)=cuda.mem_get_info()
     print("Global memory occupancy:%f%% free"%(free*100/total))
@@ -124,7 +122,8 @@ def compile_kernels(srcFile, kernelNames, srcParams=None):
     """
     Load the GPU kernels from the specified CUDA C file 
     """
-    
+    import pycuda.compiler as nvcc
+
     # Read the src file into a string
     custr = ""
     with io.open(srcFile, 'r') as file:

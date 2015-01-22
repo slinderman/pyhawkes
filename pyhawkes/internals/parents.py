@@ -73,9 +73,9 @@ class GibbsParents(_ParentsBase, GibbsSampling):
                 p0  = np.atleast_1d(bias_model.lambda0[k2])         # (1,)
                 Ak2 = weight_model.A[:,k2]                          # (K,)
                 Wk2 = weight_model.W[:,k2]                          # (K,)
-                Bk2 = impulse_model.beta[:,k2,:]                    # (K,B)
+                Gk2 = impulse_model.g[:,k2,:]                    # (K,B)
                 Ft  =  self.F[t,:,:]                                # (K,B)
-                pkb = Ft * Ak2[:,None] * Wk2[:,None] * Bk2
+                pkb = Ft * Ak2[:,None] * Wk2[:,None] * Gk2
 
                 assert pkb.shape == (self.K, self.B)
 
@@ -116,7 +116,18 @@ class MeanFieldParents(_ParentsBase, MeanField):
 
         # Initialize arrays for mean field parameters
         self.EZ  = np.zeros((T,K,K,B))
-        self.EZ0 = np.ones_like(self.S)
+        self.EZ0 = np.copy(self.S).astype(np.float)
+
+    def _check_EZ(self):
+        """
+        Check that Z adds up to the correct amount
+        :return:
+        """
+        EZsum = self.EZ0 + self.EZ.sum(axis=(1,3))
+        # assert np.allclose(self.S, Zsum), "_check_Z failed. Zsum does not add up to S!"
+        if not np.allclose(self.S, EZsum):
+            print "_check_Z failed. Zsum does not add up to S!"
+            import pdb; pdb.set_trace()
 
     def expected_Z(self):
         """
@@ -160,11 +171,13 @@ class MeanFieldParents(_ParentsBase, MeanField):
 
                 # Combine the probabilities into a normalized vector of length KB+1
                 Z = p0 + pkb.sum()
-                self.EZ0[t,k2] = p0 / Z * self.S[t,k2]
-                self.EZ[t,:,k2,:] = pkb.reshape((self.K*self.B,)) / Z * self.S[t,k2]
+                self.EZ0[t,k2] = p0 / Z * self.S[t,k2].astype(float)
+                self.EZ[t,:,k2,:] = pkb.reshape((self.K,self.B)) / Z * self.S[t,k2].astype(float)
 
     def meanfieldupdate(self, bias_model, weight_model, impulse_model):
         self._mf_update_Z_python(bias_model, weight_model, impulse_model)
+
+        self._check_EZ()
 
     def get_vlb(self):
         raise NotImplementedError

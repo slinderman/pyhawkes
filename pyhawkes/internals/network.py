@@ -71,20 +71,30 @@ class _StochasticBlockModelBase(BayesianDistribution):
         # are ignored
         if None not in (c, p, v):
             self.fixed = True
-            assert isinstance(c, np.ndarray) and c.shape == (C,) \
+            assert isinstance(c, np.ndarray) and c.shape == (K,) and c.dtype == np.int \
                    and np.amin(c) >= 0 and np.amax(c) <= self.C-1, \
-                "x must be a length C vector of block assignments"
+                "c must be a length K-vector of block assignments"
             self.c = c
 
-            assert isinstance(p, np.ndarray) and p.shape == (C,C) \
-                   and np.amin(p) >= 0 and np.amax(p) <= 1.0, \
-                "p must be a CxC matrix of probabilities"
-            self.p = p
+            if np.isscalar(p):
+                assert p >= 0 and p <= 1, "p must be a probability"
+                self.p = p * np.ones((C,C))
 
-            assert isinstance(v, np.ndarray) and v.shape == (C,C) \
-                   and np.amin(v) >= 0, \
-                "v must be a CxC matrix of nonnegative gamma scales"
-            self.v = v
+            else:
+                assert isinstance(p, np.ndarray) and p.shape == (C,C) \
+                       and np.amin(p) >= 0 and np.amax(p) <= 1.0, \
+                    "p must be a CxC matrix of probabilities"
+                self.p = p
+
+            if np.isscalar(v):
+                assert v >= 0, "v must be a probability"
+                self.v = v * np.ones((C,C))
+
+            else:
+                assert isinstance(v, np.ndarray) and v.shape == (C,C) \
+                       and np.amin(v) >= 0, \
+                    "v must be a CxC matrix of nonnegative gamma scales"
+                self.v = v
 
         else:
             self.fixed = False
@@ -101,6 +111,26 @@ class _StochasticBlockModelBase(BayesianDistribution):
         self.kappa = kappa
         self.alpha = alpha
         self.beta  = beta
+
+    @property
+    def P(self):
+        """
+        Get the KxK matrix of probabilities
+        :return:
+        """
+        return self.p[np.ix_(self.c, self.c)]
+
+    @property
+    def V(self):
+        """
+        Get the KxK matrix of scales
+        :return:
+        """
+        return self.v[np.ix_(self.c, self.c)]
+
+    @property
+    def Kappa(self):
+        return self.kappa * np.ones((self.K, self.K))
 
     def log_likelihood(self, x):
         """
@@ -160,6 +190,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
         Compute the expected probability of a connection, averaging over c
         :return:
         """
+        if self.fixed:
+            return self.P
+
         E_p = np.zeros((self.K, self.K))
         for c1 in xrange(self.C):
             for c2 in xrange(self.C):
@@ -182,6 +215,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
         Compute the expected log probability of a connection, averaging over c
         :return:
         """
+        if self.fixed:
+            return np.log(self.P)
+
         E_ln_p = np.zeros((self.K, self.K))
         for c1 in xrange(self.C):
             for c2 in xrange(self.C):
@@ -198,6 +234,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
         Compute the expected log probability of NO connection, averaging over c
         :return:
         """
+        if self.fixed:
+            return np.log(1.0 - self.P)
+
         E_ln_notp = np.zeros((self.K, self.K))
         for c1 in xrange(self.C):
             for c2 in xrange(self.C):
@@ -249,6 +288,13 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
     def get_vlb(self):
         raise NotImplementedError
 
+    def resample_from_mf(self):
+        """
+        Resample from the mean field distribution
+        :return:
+        """
+        raise NotImplementedError()
+
 class StochasticBlockModel(GibbsSBM, MeanFieldSBM):
     pass
 
@@ -261,7 +307,7 @@ class ErdosRenyiModel(StochasticBlockModel):
                  v=None, alpha=1.0, beta=1.0,
                  kappa=1.0):
         C = 1
-        c = np.zeros(self.K)
+        c = np.zeros(K, dtype=np.int)
         super(ErdosRenyiModel, self).__init__(K, C, c=c,
                                               p=p, tau0=tau0, tau1=tau1,
                                               v=v, alpha=alpha, beta=beta,
