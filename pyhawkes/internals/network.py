@@ -253,6 +253,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
         Compute the expected scale of a connection, averaging over c
         :return:
         """
+        if self.fixed:
+            return self.V
+
         E_v = np.zeros((self.K, self.K))
         for c1 in xrange(self.C):
             for c2 in xrange(self.C):
@@ -268,6 +271,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
         Compute the expected log scale of a connection, averaging over c
         :return:
         """
+        if self.fixed:
+            return np.log(self.V)
+
         E_log_v = np.zeros((self.K, self.K))
         for c1 in xrange(self.C):
             for c2 in xrange(self.C):

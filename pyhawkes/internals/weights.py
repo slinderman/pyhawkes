@@ -207,7 +207,8 @@ class GammaMixtureWeights(MeanField):
 
         # Initialize the variational parameters to the prior mean
         # Variational probability of edge
-        self.mf_p = network.P
+        # self.mf_p = network.P * np.ones((self.K, self.K))
+        self.mf_p = np.ones((self.K, self.K))
         # Variational weight distribution given that there is no edge
         self.mf_kappa_0 = self.kappa_0 * np.ones((self.K, self.K))
         self.mf_v_0 = self.nu_0 * np.ones((self.K, self.K))
@@ -287,7 +288,7 @@ class GammaMixtureWeights(MeanField):
         self.mf_kappa_1 = self.network.kappa + dkappa
 
         # v_0'[k,k'] = self.nu_0 + N[k]
-        self.mf_v_0 = self.nu_0 + N[:,None]
+        self.mf_v_0 = self.nu_0 * np.ones((self.K, self.K)) + N[:,None]
 
         # v_1'[k,k'] = E[v[k,k']] + N[k]
         self.mf_v_1 = self.network.expected_v() + N[:,None]

@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from pyhawkes.models import DiscreteTimeNetworkHawkesModelMeanField
+from pyhawkes.models import DiscreteTimeNetworkHawkesModelMeanField, DiscreteTimeNetworkHawkesModelGibbs
 
 def demo():
     """
@@ -15,12 +15,12 @@ def demo():
     B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelMeanField(K=K, dt=dt, B=B, p=0.9)
-    true_model.resample_from_mf()
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B, p=0.5)
+    # true_model.resample_from_mf()
     S,R = true_model.generate(T=T)
 
     # Make a new model for inference
-    model = DiscreteTimeNetworkHawkesModelMeanField(K=K, dt=dt, B=B, p=0.9)
+    model = DiscreteTimeNetworkHawkesModelMeanField(K=K, dt=dt, B=B, p=0.5)
     model.resample_from_mf()
     model.add_data(S)
 
