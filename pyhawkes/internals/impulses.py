@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.special import gammaln
+from scipy.special import gammaln, psi
 
 from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
 
@@ -40,6 +40,9 @@ class DirichletImpulseResponses(GibbsSampling):
         # Initialize with a draw from the prior
         self.beta = np.empty((self.K, self.K, self.B))
         self.resample()
+
+        # Initialize mean field parameters
+        self.mf_gamma = np.zeros((self.K, self.K, self.B))
 
     def rvs(self, size=[]):
         """
@@ -100,3 +103,28 @@ class DirichletImpulseResponses(GibbsSampling):
             for k2 in xrange(self.K):
                 alpha_post = self.gamma + ss[k1, k2, :]
                 self.beta[k1,k2,:] = np.random.dirichlet(alpha_post)
+
+    def expected_g(self):
+        # \sum_{b} \gamma_b
+        trm2 = self.mf_gamma.sum(axis=2)
+        E_g = self.mf_gamma / trm2[:,:,None]
+        return E_g
+
+    def expected_log_g(self):
+        E_lng = np.zeros_like(self.mf_gamma)
+
+        # \psi(\sum_{b} \gamma_b)
+        trm2 = psi(self.mf_gamma.sum(axis=2))
+        for b in xrange(self.B):
+            E_lng[:,:,b] = psi(self.mf_gamma[:,:,b]) - trm2
+
+        return E_lng
+
+    def expected_log_likelihood(self,x):
+        pass
+
+    def meanfieldupdate(self,data,weights):
+        pass
+
+    def get_vlb(self):
+        raise NotImplementedError

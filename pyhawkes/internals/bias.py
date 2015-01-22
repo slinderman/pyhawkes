@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.special import gammaln
+from scipy.special import gammaln, psi
 
 from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
 
@@ -25,6 +25,10 @@ class GammaBias(GibbsSampling):
         self.lambda0 = np.empty(self.K)
         self.resample()
 
+        # Initialize mean field parameters
+        self.mf_alpha = self.alpha * np.ones(self.K)
+        self.mf_beta  = self.beta  * np.ones(self.K)
+
     def log_likelihood(self, x):
         assert isinstance(x, np.ndarray) and x.shape == (self.K,), \
             "x must be a K-vector of background rates"
@@ -38,6 +42,7 @@ class GammaBias(GibbsSampling):
     def rvs(self,size=[]):
         return np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K,))
 
+    ### Gibbs Sampling
     def _get_suff_statistics(self, Z0):
         """
         Compute the sufficient statistics from the data set.
@@ -73,3 +78,19 @@ class GammaBias(GibbsSampling):
 
         self.lambda0 = np.array(np.random.gamma(alpha_post,
                                                 1.0/beta_post)).reshape((self.K, ))
+
+    ### Mean Field
+    def expected_lambda0(self):
+        return self.mf_alpha / self.mf_beta
+
+    def expected_log_lambda0(self):
+        return psi(self.mf_alpha) + np.log(self.mf_beta)
+
+    def expected_log_likelihood(self,x):
+        pass
+
+    def meanfieldupdate(self,data,weights):
+        pass
+
+    def get_vlb(self):
+        raise NotImplementedError

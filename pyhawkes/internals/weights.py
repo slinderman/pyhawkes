@@ -10,7 +10,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
     KxK gamma weight matrix. Implements Gibbs sampling given
     the parent variables.
     """
-    def __init__(self, K, network=None, rho=None, alpha=None, beta=None):
+    def __init__(self, K, network, kappa_1=1.0):
         """
         Initialize the spike-and-slab gamma weight model with either a
         network object containing the prior or rho, alpha, and beta to
@@ -23,22 +23,9 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         :param beta:    Gamma scale parameter
         """
         self.K = K
-        assert network is not None or None not in (rho, alpha, beta), \
-            "Either the network or (rho, alpha, beta) must be specified."
+        # assert isinstance(network, GibbsNetwork), "network must be a GibbsNetwork object"
+        self.network = network
 
-        if network is not None:
-            self.network = network
-
-        else:
-            # Create a network
-            # TODO: Instantiate an ErdosRenyi object instead
-            class _default_network:
-                def __init__(self, r,a,b):
-                    self.rho = r
-                    self.alpha = a
-                    self.beta = b
-
-            self.network = _default_network(rho, alpha, beta)
 
         # Initialize parameters A and W
         self.A = np.ones((self.K, self.K))
@@ -58,16 +45,16 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             "W must be a KxK weight matrix"
 
         # LL of A
-        rho = self.network.rho
+        rho = self.network.p
         ll = (A * np.log(rho) + (1-A) * np.log(1-rho)).sum()
 
         # TODO: For now, assume alpha and beta are fixed for all entries in W
-        alpha = self.network.alpha
-        beta = self.network.beta
+        kappa = self.network.kappa
+        v = self.network.v
 
         # Add the LL of the gamma weights
-        ll += self.K**2 * (alpha * np.log(beta) - gammaln(alpha)) + \
-              ((alpha-1) * np.log(W) - beta * W).sum()
+        ll += self.K**2 * (kappa * np.log(v) - gammaln(kappa)) + \
+              ((kappa-1) * np.log(W) - v * W).sum()
 
         return ll
 
@@ -75,8 +62,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         return self.log_likelihood((self.A, self.W))
 
     def rvs(self,size=[]):
-        A = np.random.rand(self.K, self.K) < self.network.rho
-        W = np.random.gamma(self.network.alpha, 1.0/self.network.beta,
+        A = np.random.rand(self.K, self.K) < self.network.p
+        W = np.random.gamma(self.network.kappa, 1.0/self.network.v,
                             size(self.K, self.K))
 
         return A,W
@@ -113,8 +100,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                     ll1 = model._log_likelihood_single_process(k2)
 
                 # Sample A given conditional probability
-                lp0 = ll0 + np.log(1.0 - self.network.rho)
-                lp1 = ll1 + np.log(self.network.rho)
+                lp0 = ll0 + np.log(1.0 - self.network.p[k1,k2])
+                lp1 = ll1 + np.log(self.network.p[k1,k2])
                 Z   = logsumexp([lp0, lp1])
 
                 # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
@@ -172,11 +159,10 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             "N must be a K-vector and Z must be a TxKxKxB array of parent counts"
 
         ss = self._get_suff_statistics(N, Z)
-        alpha_post = self.network.alpha + ss[0,:]
-        beta_post  = self.network.beta + ss[1,:]
+        kappa_post = self.network.kappa + ss[0,:]
+        v_post  = self.network.v + ss[1,:]
 
-        self.W = np.array(np.random.gamma(alpha_post,
-                                          1.0/beta_post)).reshape((self.K, self.K))
+        self.W = np.array(np.random.gamma(kappa_post, 1.0/v_post)).reshape((self.K, self.K))
 
     def resample(self, model=None, N=None, Z=None, F=None, beta=None):
         """
@@ -196,7 +182,7 @@ class GammaMixtureWeights(MeanField):
     For variational inference we approximate the spike at zero with a smooth
     Gamma distribution that has infinite density at zero.
     """
-    def __init__(self, K, network, kappa_1=1.0, kappa_0=0.01, nu_0=100):
+    def __init__(self, K, network, kappa_0=0.01, nu_0=100):
         """
         Initialize the spike-and-slab gamma weight model with either a
         network object containing the prior or rho, alpha, and beta to
@@ -214,7 +200,6 @@ class GammaMixtureWeights(MeanField):
         self.network = network
 
         # Save gamma parameters
-        self.kappa_1 = kappa_1
         self.kappa_0 = kappa_0
         self.nu_0    = nu_0
 
@@ -225,7 +210,7 @@ class GammaMixtureWeights(MeanField):
         self.mf_kappa_0 = self.kappa_0 * np.ones((self.K, self.K))
         self.mf_v_0 = self.nu_0 * np.ones((self.K, self.K))
         # Variational weight distribution given that there is an edge
-        self.mf_kappa_1 = self.kappa_1 * np.ones((self.K, self.K))
+        self.mf_kappa_1 = self.network.kappa.copy()
         self.mf_v_1 = network.alpha / network.beta * np.ones((self.K, self.K))
 
     def expected_A(self):

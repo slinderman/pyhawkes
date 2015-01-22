@@ -1,8 +1,8 @@
 import numpy as np
 
-from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
+from pyhawkes.deps.pybasicbayes.distributions import BayesianDistribution, GibbsSampling, MeanField
 
-class Parents(GibbsSampling):
+class _ParentsBase(BayesianDistribution):
     """
     Encapsulates the TxKxKxB array of parent multinomial distributed
     parent variables.
@@ -28,7 +28,22 @@ class Parents(GibbsSampling):
         self.S = S
         self.F = F
 
-        # Initialize parent arrays with all events attributed to the background.
+    def log_likelihood(self, x):
+        pass
+
+    def rvs(self, data=[]):
+        raise NotImplementedError("No prior for parents to sample from.")
+
+
+class GibbsParents(_ParentsBase, GibbsSampling):
+    """
+    Parent distribution with Gibbs sampling
+    """
+    def __init__(self, T, K, B, S, F):
+        super(GibbsParents, self).__init__(T, K, B, S, F)
+
+        # Initialize parent arrays for Gibbs sampling
+        # Attribute all events to the background.
         self.Z  = np.zeros((T,K,K,B), dtype=np.int32)
         self.Z0 = np.copy(self.S).astype(np.int32)
 
@@ -42,12 +57,6 @@ class Parents(GibbsSampling):
         if not np.allclose(self.S, Zsum):
             print "_check_Z failed. Zsum does not add up to S!"
             import pdb; pdb.set_trace()
-
-    def log_likelihood(self, x):
-        pass
-
-    def rvs(self, data=[]):
-        raise NotImplementedError("No prior for parents to sample from.")
 
     def _resample_Z_python(self, bias_model, weight_model, impulse_model):
         """
@@ -96,4 +105,41 @@ class Parents(GibbsSampling):
 
         # TODO: Write a Cython function to resample each of the TxKxKxB entries in Z
         self._resample_Z_python(bias_model, weight_model, impulse_model)
+
+
+class MeanFieldParents(_ParentsBase, MeanField):
+    """
+    Parent distribution with Gibbs sampling
+    """
+    def __init__(self, T, K, B, S, F):
+        super(MeanFieldParents, self).__init__(T, K, B, S, F)
+
+        # Initialize arrays for mean field parameters
+        self.u  = np.zeros((T,K,K,B))
+        self.u0 = np.ones_like(self.S)
+
+    def expected_Z(self):
+        """
+        E[z] = u[t,k,k',b] * s[t,k']
+        :return:
+        """
+        # TODO: Just store E[Z] directly, we never just need u
+        return self.u * self.S[:,None,:,None]
+
+    def expected_Z0(self):
+        """
+        E[z0] = u0[t,k'] * s[t,k']
+        :return:
+        """
+        # TODO: Just store E[Z0] directly, we never just need u
+        return self.u0 * self.S
+
+    def expected_log_likelihood(self,x):
+        pass
+
+    def meanfieldupdate(self,data,weights):
+        pass
+
+    def get_vlb(self):
+        raise NotImplementedError
 

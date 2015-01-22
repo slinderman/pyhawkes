@@ -67,7 +67,7 @@ def geweke_test():
 
     # Plot the histogram of weight samples
     plt.figure()
-    p_W = gamma(model.weight_model.network.alpha, scale=1./model.weight_model.network.beta)
+    p_W = gamma(model.weight_model.network.kappa, scale=1./model.weight_model.network.v)
     _, bins, _ = plt.hist(W_samples[:,0,0], bins=20, alpha=0.5, normed=True)
     bincenters = 0.5*(bins[1:]+bins[:-1])
     plt.plot(bincenters, p_W.pdf(bincenters), 'r--', linewidth=1)
