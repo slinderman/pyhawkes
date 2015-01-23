@@ -35,8 +35,8 @@ def demo():
     N_iters = 100
     vlbs = []
     for itr in xrange(N_iters):
-        # vlbs.append(model.vlb())
-        model.meanfield_coordinate_descent_step()
+        vlbs.append(model.meanfield_coordinate_descent_step())
+        print "VLB: ", vlbs[-1]
 
         # Resample from variational distribution and plot
         model.resample_from_mf()

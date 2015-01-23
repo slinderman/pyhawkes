@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import gammaln, psi
 
 from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
+from pyhawkes.internals.distributions import Dirichlet
 
 class DirichletImpulseResponses(GibbsSampling):
     """
@@ -134,7 +135,24 @@ class DirichletImpulseResponses(GibbsSampling):
         self.mf_update_gamma(EZ)
 
     def get_vlb(self):
-        raise NotImplementedError
+        """
+        Variational lower bound for \lambda_k^0
+        E[LN p(g | \gamma)] -
+        E[LN q(g | \tilde{\gamma})]
+        :return:
+        """
+        vlb = 0
+
+        # First term
+        # E[LN p(g | \gamma)]
+        E_ln_g = self.expected_log_g()
+        vlb += Dirichlet(self.gamma[None, None, :]).entropy(E_ln_g=E_ln_g).sum()
+
+        # Second term
+        # E[LN q(g | \tilde{gamma})]
+        vlb += Dirichlet(self.mf_gamma).entropy().sum()
+
+        return vlb
 
     def resample_from_mf(self):
         """

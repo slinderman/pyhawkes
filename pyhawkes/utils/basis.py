@@ -43,6 +43,11 @@ class Basis(object):
                                        np.reshape(basis[:,b],(R+1,1)),
                                        'full')[:T,:]
 
+        # Check for positivity
+        if np.amin(self.basis) >= 0 and np.amin(S) >= 0:
+            np.clip(F, 0, np.inf, out=F)
+            assert np.amin(F) >= 0, "convolution should be >= 0"
+
         return F
 
     def interpolate_basis(self, basis, dt, dt_max, norm=True):

@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import gammaln, psi
 
 from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
+from pyhawkes.internals.distributions import Gamma
 
 class GammaBias(GibbsSampling):
     """
@@ -103,7 +104,28 @@ class GammaBias(GibbsSampling):
         self.mf_update_lambda0(EZ0)
 
     def get_vlb(self):
-        raise NotImplementedError
+        """
+        Variational lower bound for \lambda_k^0
+        E[LN p(\lambda_k^0 | \alpha, \beta)] -
+        E[LN q(\lambda_k^0 | \tilde{\alpha}, \tilde{\beta})]
+        :return:
+        """
+        vlb = 0
+
+        # First term
+        # E[LN p(\lambda_k^0 | \alpha, \beta)]
+        E_ln_lambda = self.expected_log_lambda0()
+        E_lambda = self.expected_lambda0()
+
+        vlb += Gamma(self.alpha, self.beta).entropy(E_lambda=E_lambda,
+                                                    E_ln_lambda=E_ln_lambda).sum()
+
+        # Second term
+        # E[LN q(\lambda_k^0 | \alpha, \beta)]
+        vlb += Gamma(self.mf_alpha, self.mf_beta).entropy().sum()
+
+        return vlb
+
 
     def resample_from_mf(self):
         """

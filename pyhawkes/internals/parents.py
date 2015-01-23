@@ -179,8 +179,50 @@ class MeanFieldParents(_ParentsBase, MeanField):
 
         self._check_EZ()
 
-    def get_vlb(self):
-        raise NotImplementedError
+    def get_vlb(self, bias_model, weight_model, impulse_model):
+        """
+        E_q[\ln p(z | \lambda)] - E_q[\ln q(z)]
+        :return:
+        """
+        import pdb; pdb.set_trace()
+        vlb = 0
+        # First term
+        # E[LN p(z_tk^0 | \lambda_0)] = - LN z_tk^0! + z_tk^0 * LN \lambda_0 - \lambda_0
+        # The factorial cancels with the second term
+        E_ln_lam = bias_model.expected_log_lambda0()
+        E_lam = bias_model.expected_lambda0()
+        vlb += (self.EZ0 * E_ln_lam[None, :]).sum()
+        vlb += (-self.T * E_lam).sum()
+
+        # Second term
+        # -E[LN q(z_tk^0)] = -LN s_tk! + LN z_tk^0! - z_tk^0 LN u_tk^0
+        # The factorial of z cancels with the first term
+        # The factorial of s is const wrt z
+        ln_u0 = np.log(self.EZ0 / self.S.astype(np.float))
+        ln_u0 = np.nan_to_num(ln_u0)
+        vlb += (-self.EZ0 * ln_u0).sum()
+
+        # Now do the same for the weighted impulse responses
+        # First term
+        E_ln_Wg = np.log(self.F[:,:,None,:]) + \
+                  weight_model.expected_log_W()[None,:,:,None] + \
+                  impulse_model.expected_log_g()[None,:,:,:]
+        E_Wg    = self.F[:,:,None,:] * \
+                  weight_model.expected_W()[None,:,:,None] * \
+                  impulse_model.expected_g()[None,:,:,:]
+
+        assert E_ln_Wg.shape == (self.T, self.K, self.K, self.B)
+        assert E_Wg.shape == (self.T, self.K, self.K, self.B)
+        vlb += (self.EZ * E_ln_Wg[None,:,:,:]).sum()
+        vlb += -E_Wg.sum()
+
+        # Second term
+        ln_u = np.log(self.EZ / self.S[:,None,:,None].astype(np.float))
+        ln_u = np.nan_to_num(ln_u)
+        vlb += (-self.EZ * ln_u).sum()
+
+        return vlb
+
 
 
 class Parents(GibbsParents, MeanFieldParents):

@@ -3,6 +3,7 @@ from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
 
 from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField
+from pyhawkes.internals.distributions import Bernoulli, Gamma
 from pyhawkes.utils.utils import logistic
 
 class SpikeAndSlabGammaWeights(GibbsSampling):
@@ -295,7 +296,48 @@ class GammaMixtureWeights(MeanField):
 
 
     def get_vlb(self):
-        raise NotImplementedError()
+        """
+        Variational lower bound for A_kk' and W_kk'
+        E[LN p(A_kk', W_kk' | p, kappa, v)] -
+        E[LN q(A_kk', W_kk' | mf_p, mf_kappa, mf_v)]
+        :return:
+        """
+        vlb = 0
+
+        # First term:
+        # E[LN p(A | p)]
+        E_A       = self.expected_A()
+        E_notA    = 1.0 - E_A
+        E_ln_p    = self.network.expected_log_p()
+        E_ln_notp = self.network.expected_log_notp()
+        vlb += Bernoulli(0.0).entropy(E_x=E_A, E_notx=E_notA,
+                                      E_ln_p=E_ln_p, E_ln_notp=E_ln_notp).sum()
+
+        # E[LN p(W | A=1, kappa, v)]
+        kappa     = self.network.kappa
+        E_ln_v    = self.network.expected_v()
+        E_v       = self.network.expected_log_v()
+        E_W1      = self.expected_W_given_A(A=1)
+        E_ln_W1   = self.expected_log_W_given_A(A=1)
+        vlb += (E_A * Gamma(kappa).entropy(E_beta=E_v, E_ln_beta=E_ln_v,
+                                           E_lambda=E_W1, E_ln_lambda=E_ln_W1)).sum()
+
+        # E[LN p(W | A=0, kappa0, v0)]
+        kappa0    = self.kappa_0
+        v0        = self.nu_0
+        E_W0      = self.expected_W_given_A(A=0)
+        E_ln_W0   = self.expected_log_W_given_A(A=0)
+        vlb += (E_notA * Gamma(kappa0, v0).entropy(E_lambda=E_W0, E_ln_lambda=E_ln_W0)).sum()
+
+        # Second term
+        # E[LN q(A)]
+        vlb += Bernoulli(self.mf_p).entropy().sum()
+
+        # E[LN q(W | A=1)]
+        vlb += (E_A    * Gamma(self.mf_kappa_1, self.mf_v_1).entropy()).sum()
+        vlb += (E_notA * Gamma(self.mf_kappa_0, self.mf_v_0).entropy()).sum()
+
+        return vlb
 
     def resample_from_mf(self):
         """
