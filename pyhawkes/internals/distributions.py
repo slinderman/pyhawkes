@@ -95,7 +95,7 @@ class Dirichlet(object):
         return self.gamma / self.gamma.sum(axis=-1, keepdims=True)
 
     def expected_log_g(self):
-        psi(self.gamma) - psi(self.gamma.sum(axis=-1, keepdims=True))
+        return psi(self.gamma) - psi(self.gamma.sum(axis=-1, keepdims=True))
 
     def entropy(self, E_ln_g=None):
         """

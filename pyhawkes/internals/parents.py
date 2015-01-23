@@ -184,7 +184,6 @@ class MeanFieldParents(_ParentsBase, MeanField):
         E_q[\ln p(z | \lambda)] - E_q[\ln q(z)]
         :return:
         """
-        import pdb; pdb.set_trace()
         vlb = 0
         # First term
         # E[LN p(z_tk^0 | \lambda_0)] = - LN z_tk^0! + z_tk^0 * LN \lambda_0 - \lambda_0
@@ -207,6 +206,8 @@ class MeanFieldParents(_ParentsBase, MeanField):
         E_ln_Wg = np.log(self.F[:,:,None,:]) + \
                   weight_model.expected_log_W()[None,:,:,None] + \
                   impulse_model.expected_log_g()[None,:,:,:]
+        E_ln_Wg = np.nan_to_num(E_ln_Wg)
+
         E_Wg    = self.F[:,:,None,:] * \
                   weight_model.expected_W()[None,:,:,None] * \
                   impulse_model.expected_g()[None,:,:,:]

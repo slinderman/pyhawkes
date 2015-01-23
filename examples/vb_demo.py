@@ -59,10 +59,10 @@ def demo():
     print "g mean:        ", model.impulse_model.expected_g()
     print "lambda0 mean:  ", model.bias_model.expected_lambda0()
 
-    # plt.figure()
-    # plt.plot(np.arange(N_samples), lps)
-    # plt.xlabel("Iteration")
-    # plt.ylabel("Log probability")
-    # plt.show()
+    plt.figure()
+    plt.plot(np.arange(N_iters), vlbs)
+    plt.xlabel("Iteration")
+    plt.ylabel("VLB")
+    plt.show()
 
 demo()
