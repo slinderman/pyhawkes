@@ -26,9 +26,9 @@ def demo():
 
     # Plot the true and inferred firing rate
     plt.figure()
-    plt.plot(np.arange(T), R[:,0], '-k', lw=2)
+    plt.plot(np.arange(T), R[:,1], '-k', lw=2)
     plt.ion()
-    ln = plt.plot(np.arange(T), model.compute_rate()[:,0], '-r')[0]
+    ln = plt.plot(np.arange(T), model.compute_rate()[:,1], '-r')[0]
     plt.show()
 
     # Gibbs sample
@@ -36,14 +36,14 @@ def demo():
     vlbs = []
     for itr in xrange(N_iters):
         vlbs.append(model.meanfield_coordinate_descent_step())
-        print "VLB: ", vlbs[-1]
+        # print "VLB: ", vlbs[-1]
 
         # Resample from variational distribution and plot
         model.resample_from_mf()
 
         # Update plot
         if itr % 5 == 0:
-            ln.set_data(np.arange(T), model.compute_rate()[:,0])
+            ln.set_data(np.arange(T), model.compute_rate()[:,1])
             plt.title("Iteration %d" % itr)
             plt.pause(0.001)
 

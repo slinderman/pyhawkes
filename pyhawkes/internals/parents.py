@@ -1,7 +1,7 @@
 import numpy as np
 
 from pyhawkes.deps.pybasicbayes.distributions import BayesianDistribution, GibbsSampling, MeanField
-
+from pyhawkes.internals.parent_updates import mf_update_Z
 class _ParentsBase(BayesianDistribution):
     """
     Encapsulates the TxKxKxB array of parent multinomial distributed
@@ -175,9 +175,29 @@ class MeanFieldParents(_ParentsBase, MeanField):
                 self.EZ[t,:,k2,:] = pkb.reshape((self.K,self.B)) / Z * self.S[t,k2].astype(float)
 
     def meanfieldupdate(self, bias_model, weight_model, impulse_model):
-        self._mf_update_Z_python(bias_model, weight_model, impulse_model)
+        """
+        Perform the mean field update.
 
-        self._check_EZ()
+        :param bias_model:
+        :param weight_model:
+        :param impulse_model:
+        :return:
+        """
+
+        # Uncomment this line to use python
+        # self._mf_update_Z_python(bias_model, weight_model, impulse_model)
+
+        # Use Cython
+        exp_E_log_lambda0 = np.exp(bias_model.expected_log_lambda0())
+        exp_E_log_W       = np.exp(weight_model.expected_log_W())
+        exp_E_log_g       = np.exp(impulse_model.expected_log_g())
+        mf_update_Z(self.EZ0, self.EZ, self.S,
+                    exp_E_log_lambda0,
+                    exp_E_log_W,
+                    exp_E_log_g,
+                    self.F)
+
+        # self._check_EZ()
 
     def get_vlb(self, bias_model, weight_model, impulse_model):
         """
