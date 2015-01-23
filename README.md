@@ -8,7 +8,7 @@ To check out, run
 `git clone --recursive git@github.com:slinderman/pyhawkes.git`
 
 To compile the cython code, run
-`python setup.py build_ext --inplace'
+`python setup.py build_ext --inplace`
   
 The original codebase was written with PyCUDA and is not particularly clean. I am rewriting it in Python with Cython 
   offloads. Please check back for updates! 
