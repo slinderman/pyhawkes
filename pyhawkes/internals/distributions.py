@@ -56,7 +56,7 @@ class Gamma:
     def expected_log_lambda(self):
         return psi(self.alpha) - np.log(self.beta)
 
-    def entropy(self, E_ln_lambda=None, E_lambda=None, E_beta=None, E_ln_beta=None):
+    def negentropy(self, E_ln_lambda=None, E_lambda=None, E_beta=None, E_ln_beta=None):
         """
         Compute the entropy of the gamma distribution.
 
@@ -97,7 +97,7 @@ class Dirichlet(object):
     def expected_log_g(self):
         return psi(self.gamma) - psi(self.gamma.sum(axis=-1, keepdims=True))
 
-    def entropy(self, E_ln_g=None):
+    def negentropy(self, E_ln_g=None):
         """
         Compute the entropy of the gamma distribution.
 
@@ -132,10 +132,10 @@ class Beta(Dirichlet):
         E_logg = self.expected_log_g()
         return E_logg[...,1]
 
-    def entropy(self, E_ln_p=None, E_ln_notp=None):
+    def negentropy(self, E_ln_p=None, E_ln_notp=None):
         if E_ln_p is not None and E_ln_notp is not None:
             E_ln_g = np.concatenate((E_ln_p[...,None], E_ln_notp[...,None]), axis=-1)
         else:
             E_ln_g = None
 
-        return super(Beta, self).entropy(E_ln_g=E_ln_g)
+        return super(Beta, self).negentropy(E_ln_g=E_ln_g)

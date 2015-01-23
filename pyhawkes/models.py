@@ -379,8 +379,8 @@ class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBas
         for _,_,_,p in self.data_list:
             vlb += p.get_vlb(self.bias_model, self.weight_model, self.impulse_model)
         vlb += self.bias_model.get_vlb()
-        vlb += self.weight_model.get_vlb()
         vlb += self.impulse_model.get_vlb()
+        vlb += self.weight_model.get_vlb()
         return vlb
 
     def resample_from_mf(self):

@@ -117,12 +117,12 @@ class GammaBias(GibbsSampling):
         E_ln_lambda = self.expected_log_lambda0()
         E_lambda = self.expected_lambda0()
 
-        vlb += Gamma(self.alpha, self.beta).entropy(E_lambda=E_lambda,
+        vlb += Gamma(self.alpha, self.beta).negentropy(E_lambda=E_lambda,
                                                     E_ln_lambda=E_ln_lambda).sum()
 
         # Second term
         # E[LN q(\lambda_k^0 | \alpha, \beta)]
-        vlb += Gamma(self.mf_alpha, self.mf_beta).entropy().sum()
+        vlb -= Gamma(self.mf_alpha, self.mf_beta).negentropy().sum()
 
         return vlb
 

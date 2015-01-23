@@ -3,24 +3,31 @@ import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelMeanField, DiscreteTimeNetworkHawkesModelGibbs
 
-def demo():
+def demo(seed=None):
     """
     Create a discrete time Hawkes model and generate from it.
 
     :return:
     """
-    K = 2
+    if seed is None:
+        seed = np.random.randint(2**32)
+
+    print "Setting seed to ", seed
+    np.random.seed(seed)
+
+
+    K = 20
     T = 1000
     dt = 1.0
     B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B, p=0.5)
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B, p=0.5, v=K)
     # true_model.resample_from_mf()
     S,R = true_model.generate(T=T)
 
     # Make a new model for inference
-    model = DiscreteTimeNetworkHawkesModelMeanField(K=K, dt=dt, B=B, p=0.5)
+    model = DiscreteTimeNetworkHawkesModelMeanField(K=K, dt=dt, B=B, p=0.5, v=K)
     model.resample_from_mf()
     model.add_data(S)
 
@@ -32,11 +39,15 @@ def demo():
     plt.show()
 
     # Gibbs sample
-    N_iters = 100
+    N_iters = 1000
     vlbs = []
     for itr in xrange(N_iters):
         vlbs.append(model.meanfield_coordinate_descent_step())
-        # print "VLB: ", vlbs[-1]
+
+        if itr > 0:
+            if (vlbs[-2] - vlbs[-1]) > 1e-1:
+                import pdb; pdb.set_trace()
+                raise Exception("VLB is not increasing!")
 
         # Resample from variational distribution and plot
         model.resample_from_mf()
@@ -65,4 +76,4 @@ def demo():
     plt.ylabel("VLB")
     plt.show()
 
-demo()
+demo(1689018265)

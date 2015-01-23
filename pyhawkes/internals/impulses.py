@@ -146,11 +146,11 @@ class DirichletImpulseResponses(GibbsSampling):
         # First term
         # E[LN p(g | \gamma)]
         E_ln_g = self.expected_log_g()
-        vlb += Dirichlet(self.gamma[None, None, :]).entropy(E_ln_g=E_ln_g).sum()
+        vlb += Dirichlet(self.gamma[None, None, :]).negentropy(E_ln_g=E_ln_g).sum()
 
         # Second term
         # E[LN q(g | \tilde{gamma})]
-        vlb += Dirichlet(self.mf_gamma).entropy().sum()
+        vlb -= Dirichlet(self.mf_gamma).negentropy().sum()
 
         return vlb
 

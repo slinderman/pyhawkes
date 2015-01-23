@@ -30,6 +30,10 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
         for t in prange(T):
             for k2 in prange(K):
 
+                # TODO: If S[t,k2] is zero then we should be able to skip this
+                if S[t,k2] == 0:
+                    continue
+
                 # First compute the normalizer of the multinomial probability vector
                 # TODO: Check that we are not reusing p
                 # Compute the background rate

@@ -209,7 +209,7 @@ class GammaMixtureWeights(MeanField):
         # Initialize the variational parameters to the prior mean
         # Variational probability of edge
         # self.mf_p = network.P * np.ones((self.K, self.K))
-        self.mf_p = np.ones((self.K, self.K))
+        self.mf_p = np.ones((self.K, self.K)) - 1e-3
         # Variational weight distribution given that there is no edge
         self.mf_kappa_0 = self.kappa_0 * np.ones((self.K, self.K))
         self.mf_v_0 = self.nu_0 * np.ones((self.K, self.K))
@@ -261,8 +261,8 @@ class GammaMixtureWeights(MeanField):
         raise NotImplementedError()
 
     def meanfieldupdate(self, EZ, N):
-        self.meanfieldupdate_p()
         self.meanfieldupdate_kappa_v(EZ, N)
+        self.meanfieldupdate_p()
 
     def meanfieldupdate_p(self):
         """
@@ -310,32 +310,32 @@ class GammaMixtureWeights(MeanField):
         E_notA    = 1.0 - E_A
         E_ln_p    = self.network.expected_log_p()
         E_ln_notp = self.network.expected_log_notp()
-        vlb += Bernoulli(0.0).entropy(E_x=E_A, E_notx=E_notA,
-                                      E_ln_p=E_ln_p, E_ln_notp=E_ln_notp).sum()
+        vlb += Bernoulli().entropy(E_x=E_A, E_notx=E_notA,
+                                   E_ln_p=E_ln_p, E_ln_notp=E_ln_notp).sum()
 
         # E[LN p(W | A=1, kappa, v)]
         kappa     = self.network.kappa
-        E_ln_v    = self.network.expected_v()
-        E_v       = self.network.expected_log_v()
+        E_v       = self.network.expected_v()
+        E_ln_v    = self.network.expected_log_v()
         E_W1      = self.expected_W_given_A(A=1)
         E_ln_W1   = self.expected_log_W_given_A(A=1)
-        vlb += (E_A * Gamma(kappa).entropy(E_beta=E_v, E_ln_beta=E_ln_v,
-                                           E_lambda=E_W1, E_ln_lambda=E_ln_W1)).sum()
+        vlb += (E_A * Gamma(kappa).negentropy(E_beta=E_v, E_ln_beta=E_ln_v,
+                                              E_lambda=E_W1, E_ln_lambda=E_ln_W1)).sum()
 
         # E[LN p(W | A=0, kappa0, v0)]
         kappa0    = self.kappa_0
         v0        = self.nu_0
         E_W0      = self.expected_W_given_A(A=0)
         E_ln_W0   = self.expected_log_W_given_A(A=0)
-        vlb += (E_notA * Gamma(kappa0, v0).entropy(E_lambda=E_W0, E_ln_lambda=E_ln_W0)).sum()
+        vlb += (E_notA * Gamma(kappa0, v0).negentropy(E_lambda=E_W0, E_ln_lambda=E_ln_W0)).sum()
 
         # Second term
         # E[LN q(A)]
-        vlb += Bernoulli(self.mf_p).entropy().sum()
+        vlb -= Bernoulli(self.mf_p).entropy().sum()
 
         # E[LN q(W | A=1)]
-        vlb += (E_A    * Gamma(self.mf_kappa_1, self.mf_v_1).entropy()).sum()
-        vlb += (E_notA * Gamma(self.mf_kappa_0, self.mf_v_0).entropy()).sum()
+        vlb -= (E_A    * Gamma(self.mf_kappa_1, self.mf_v_1).negentropy()).sum()
+        vlb -= (E_notA * Gamma(self.mf_kappa_0, self.mf_v_0).negentropy()).sum()
 
         return vlb
 
