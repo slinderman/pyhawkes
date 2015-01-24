@@ -9,6 +9,8 @@ from scipy.special import gammaln, psi
 from pyhawkes.deps.pybasicbayes.abstractions import \
     BayesianDistribution, GibbsSampling, MeanField
 
+from pyhawkes.internals.distributions import Bernoulli, Gamma
+
 # TODO: Make a base class for networks
 # class Network(BayesianDistribution):
 #
@@ -160,11 +162,74 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         if not self.fixed:
             self.c = np.random.choice(self.C, size=(self.K))
             self.m = 1.0/C * np.ones(self.C)
-            self.p = self.tau1 / (self.tau0 + self.tau1) * np.ones((self.C, self.C))
-            self.v = self.alpha / self.beta * np.ones((self.C, self.C))
+            # self.p = self.tau1 / (self.tau0 + self.tau1) * np.ones((self.C, self.C))
+            self.p = np.random.beta(self.tau1, self.tau0, size=(self.C, self.C))
+            # self.v = self.alpha / self.beta * np.ones((self.C, self.C))
+            self.v = np.random.gamma(self.alpha, 1.0/self.beta, size=(self.C, self.C))
 
-    def resample(self,data=[]):
-        raise NotImplementedError()
+    def resample_p(self, A):
+        """
+        Resample p given observations of the weights
+        """
+        for c1 in xrange(self.C):
+            for c2 in xrange(self.C):
+                Ac1c2 = A[self.c==c1, self.c==c2]
+                tau1 = self.tau1 + Ac1c2.sum()
+                tau0 = self.tau0 + (1-Ac1c2).sum()
+                self.p[c1,c2] = np.random.beta(tau1, tau0)
+
+    def resample_v(self, A, W):
+        """
+        Resample v given observations of the weights
+        """
+        for c1 in xrange(self.C):
+            for c2 in xrange(self.C):
+                Ac1c2 = A[self.c==c1, self.c==c2]
+                Wc1c2 = W[self.c==c1, self.c==c2]
+                alpha = self.alpha + Ac1c2.sum() * self.kappa
+                beta  = self.beta + Wc1c2[Ac1c2 > 0].sum()
+                self.v[c1,c2] = np.random.gamma(alpha, 1.0/beta)
+
+    def resample_c(self, A, W):
+        """
+        Resample block assignments given the weighted adjacency matrix
+        and the impulse response fits (if used)
+        """
+        # Sample each assignment in order
+        for k in xrange(self.K):
+            # Compute unnormalized log probs of each connection
+            lp = np.zeros(self.C)
+
+            # Prior from m
+            lp += np.log(self.m)
+
+            # Likelihood from network
+            for ck in xrange(self.C):
+                c_temp = self.c.copy().astype(np.int)
+                c_temp[k] = ck
+
+                # p(A[k,k'] | c)
+                lp[ck] += Bernoulli(self.p[np.ix_([ck], c_temp)])\
+                                .log_probability(A[k,:]).sum()
+                # p(W[k,k'] | c)
+                lp[ck] += A[k,k] * Gamma(self.kappa, self.v[np.ix_([ck], c_temp)])\
+                                .log_probability(W[k,:]).sum()
+
+                # TODO: Get probability of impulse responses g
+
+    def resample_m(self):
+        """
+        Resample m given c and pi
+        """
+        pi = self.pi + np.bincount(self.c, minlength=self.C)
+        self.m = np.random.dirichlet(pi)
+
+    def resample(self, data=[]):
+        A,W = data
+        self.resample_p(A)
+        self.resample_v(A, W)
+        self.resample_c(A, W)
+        self.resample_m()
 
 class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
     """

@@ -9,13 +9,24 @@ class Bernoulli:
         assert np.all(p >= 0) and np.all(p <= 1.0)
         self.p = p
 
+    def log_probability(self, x):
+        """
+        Log probability of x given p
+
+        :param x:
+        :return:
+        """
+        lp = x * np.log(self.p) + (1-x) * np.log(1.0-self.p)
+        lp = np.nan_to_num(lp)
+        return lp
+
     def expected_x(self):
         return self.p
 
     def expected_notx(self):
         return 1 - self.p
 
-    def entropy(self, E_x=None, E_notx=None, E_ln_p=None, E_ln_notp=None):
+    def negentropy(self, E_x=None, E_notx=None, E_ln_p=None, E_ln_notp=None):
         """
         Compute the entropy of the gamma distribution.
 
@@ -49,6 +60,18 @@ class Gamma:
         assert np.all(beta) >= 0
         self.alpha = alpha
         self.beta = beta
+
+    def log_probability(self, lmbda):
+        """
+        Log probability of x given p
+
+        :param x:
+        :return:
+        """
+        lp = self.alpha * np.log(self.beta) - gammaln(self.alpha) \
+             + (self.alpha-1) * np.log(lmbda) - self.beta * lmbda
+        lp = np.nan_to_num(lp)
+        return lp
 
     def expected_lambda(self):
         return self.alpha / self.beta

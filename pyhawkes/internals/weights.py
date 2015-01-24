@@ -310,7 +310,7 @@ class GammaMixtureWeights(MeanField):
         E_notA    = 1.0 - E_A
         E_ln_p    = self.network.expected_log_p()
         E_ln_notp = self.network.expected_log_notp()
-        vlb += Bernoulli().entropy(E_x=E_A, E_notx=E_notA,
+        vlb += Bernoulli().negentropy(E_x=E_A, E_notx=E_notA,
                                    E_ln_p=E_ln_p, E_ln_notp=E_ln_notp).sum()
 
         # E[LN p(W | A=1, kappa, v)]
@@ -331,7 +331,7 @@ class GammaMixtureWeights(MeanField):
 
         # Second term
         # E[LN q(A)]
-        vlb -= Bernoulli(self.mf_p).entropy().sum()
+        vlb -= Bernoulli(self.mf_p).negentropy().sum()
 
         # E[LN q(W | A=1)]
         vlb -= (E_A    * Gamma(self.mf_kappa_1, self.mf_v_1).negentropy()).sum()

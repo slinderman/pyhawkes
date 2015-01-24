@@ -12,7 +12,7 @@ from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
 from pyhawkes.internals.parents import Parents
-from pyhawkes.internals.network import ErdosRenyiModel
+from pyhawkes.internals.network import ErdosRenyiModel, StochasticBlockModel
 from pyhawkes.utils.basis import CosineBasis
 
 class _DiscreteTimeNetworkHawkesModelBase(object):
@@ -29,7 +29,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha0=1.0, beta0=1.0,
-                 kappa=1.0, v=2.0, p=0.9,
+                 C=1, kappa=1.0,
+                 v=2.0, alpha=1, beta=1,
+                 p=0.5, tau1=0.1, tau0=0.1,
                  gamma=1.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -49,7 +51,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.impulse_model = DirichletImpulseResponses(self.K, self.B, gamma=gamma)
 
         # Initialize the network model
-        self.network = ErdosRenyiModel(self.K, p=p, kappa=kappa, v=v)
+        # self.network = ErdosRenyiModel(self.K, p=p, kappa=kappa, v=v)
+        self.C = C
+        self.network = StochasticBlockModel(C=self.C, K=self.K, p=p, kappa=kappa, v=v)
 
         # The weight model is dictated by whether this is for Gibbs or MF
         self.weight_model = self._weight_class(self.K, self.network)
@@ -350,6 +354,9 @@ class DiscreteTimeNetworkHawkesModelGibbs(_DiscreteTimeNetworkHawkesModelBase, M
         # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
         for _,_,_,p in self.data_list:
             p.resample(self.bias_model, self.weight_model, self.impulse_model)
+
+        # Update the network model
+            self.network.resample(data=(self.weight_model.A, self.weight_model.W))
 
 
 class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBase, ModelMeanField):
