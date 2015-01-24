@@ -9,7 +9,7 @@ from scipy.special import gammaln, psi
 from pyhawkes.deps.pybasicbayes.abstractions import \
     BayesianDistribution, GibbsSampling, MeanField
 
-from pyhawkes.internals.distributions import Bernoulli, Gamma
+from pyhawkes.internals.distributions import Bernoulli, Gamma, Dirichlet, Beta
 
 # TODO: Make a base class for networks
 # class Network(BayesianDistribution):
@@ -56,7 +56,7 @@ class _StochasticBlockModelBase(BayesianDistribution):
     __metaclass__ = abc.ABCMeta
 
     def __init__(self, K, C,
-                 c=None, pi=1.0,
+                 c=None, m=None, pi=1.0,
                  p=None, tau0=0.1, tau1=0.1,
                  v=None, alpha=1.0, beta=1.0,
                  kappa=1.0):
@@ -69,39 +69,6 @@ class _StochasticBlockModelBase(BayesianDistribution):
         assert isinstance(C, int) and C >= 1, "C must be a positive integer number of blocks"
         self.C = C
 
-        # If m, p, and v are specified, then the model is fixed and the prior parameters
-        # are ignored
-        if None not in (c, p, v):
-            self.fixed = True
-            assert isinstance(c, np.ndarray) and c.shape == (K,) and c.dtype == np.int \
-                   and np.amin(c) >= 0 and np.amax(c) <= self.C-1, \
-                "c must be a length K-vector of block assignments"
-            self.c = c
-
-            if np.isscalar(p):
-                assert p >= 0 and p <= 1, "p must be a probability"
-                self.p = p * np.ones((C,C))
-
-            else:
-                assert isinstance(p, np.ndarray) and p.shape == (C,C) \
-                       and np.amin(p) >= 0 and np.amax(p) <= 1.0, \
-                    "p must be a CxC matrix of probabilities"
-                self.p = p
-
-            if np.isscalar(v):
-                assert v >= 0, "v must be a probability"
-                self.v = v * np.ones((C,C))
-
-            else:
-                assert isinstance(v, np.ndarray) and v.shape == (C,C) \
-                       and np.amin(v) >= 0, \
-                    "v must be a CxC matrix of nonnegative gamma scales"
-                self.v = v
-
-        else:
-            self.fixed = False
-
-
         if isinstance(pi, (int, float)):
             self.pi = pi * np.ones(C)
         else:
@@ -113,6 +80,56 @@ class _StochasticBlockModelBase(BayesianDistribution):
         self.kappa = kappa
         self.alpha = alpha
         self.beta  = beta
+
+        if m is not None:
+            assert isinstance(m, np.ndarray) and m.shape == (C,) \
+                   and np.allclose(m.sum(), 1.0) and np.amin(m) >= 0.0, \
+                "m must be a length C probability vector"
+            self.m = m
+        else:
+            self.m = np.random.dirichlet(self.pi)
+
+
+        if c is not None:
+            assert isinstance(c, np.ndarray) and c.shape == (K,) and c.dtype == np.int \
+                   and np.amin(c) >= 0 and np.amax(c) <= self.C-1, \
+                "c must be a length K-vector of block assignments"
+            self.c = c
+        else:
+            self.c = np.random.choice(self.C, p=self.m, size=(self.K))
+
+        if p is not None:
+            if np.isscalar(p):
+                assert p >= 0 and p <= 1, "p must be a probability"
+                self.p = p * np.ones((C,C))
+
+            else:
+                assert isinstance(p, np.ndarray) and p.shape == (C,C) \
+                       and np.amin(p) >= 0 and np.amax(p) <= 1.0, \
+                    "p must be a CxC matrix of probabilities"
+                self.p = p
+        else:
+            self.p = np.random.beta(self.tau1, self.tau0, size=(self.C, self.C))
+
+        if v is not None:
+            if np.isscalar(v):
+                assert v >= 0, "v must be a probability"
+                self.v = v * np.ones((C,C))
+
+            else:
+                assert isinstance(v, np.ndarray) and v.shape == (C,C) \
+                       and np.amin(v) >= 0, \
+                    "v must be a CxC matrix of nonnegative gamma scales"
+                self.v = v
+        else:
+            self.p = np.random.gamma(self.alpha, 1.0/self.beta, size=(self.C, self.C))
+
+        # If m, p, and v are specified, then the model is fixed and the prior parameters
+        # are ignored
+        if None not in (c, p, v):
+            self.fixed = True
+        else:
+            self.fixed = False
 
     @property
     def P(self):
@@ -136,12 +153,22 @@ class _StochasticBlockModelBase(BayesianDistribution):
 
     def log_likelihood(self, x):
         """
-        Compute the log likelihood of a weighted adjacency matrix
+        Compute the log likelihood of a set of SBM parameters
 
         :param x:    (m,p,v) tuple
         :return:
         """
-        raise NotImplementedError()
+        m,p,v = x
+
+        lp = 0
+        lp += Dirichlet(self.pi).log_probability(m)
+        lp += Beta(self.tau1 * np.ones((self.C, self.C)),
+                   self.tau0 * np.ones((self.C, self.C))).log_probability(p).sum()
+        lp += Gamma(self.alpha, self.beta).log_probability(v).sum()
+        return lp
+
+    def log_probability(self):
+        return self.log_likelihood((self.m, self.p, self.v))
 
     def rvs(self,size=[]):
         raise NotImplementedError()
@@ -152,11 +179,15 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
     Implement Gibbs sampling for SBM
     """
     def __init__(self, K, C,
-                 c=None, pi=1.0,
+                 c=None, pi=1.0, m=None,
                  p=None, tau0=0.1, tau1=0.1,
                  v=None, alpha=1.0, beta=1.0,
                  kappa=1.0):
-        super(GibbsSBM, self).__init__(K, C, c, pi, p, tau0, tau1, v, alpha, beta, kappa)
+        super(GibbsSBM, self).__init__(K=K, C=C,
+                                       c=c, pi=pi, m=m,
+                                       p=p, tau0=tau0, tau1=tau1,
+                                       v=v, alpha=alpha, beta=beta,
+                                       kappa=kappa)
 
         # Initialize parameter estimates
         if not self.fixed:
@@ -173,7 +204,7 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         """
         for c1 in xrange(self.C):
             for c2 in xrange(self.C):
-                Ac1c2 = A[self.c==c1, self.c==c2]
+                Ac1c2 = A[np.ix_(self.c==c1, self.c==c2)]
                 tau1 = self.tau1 + Ac1c2.sum()
                 tau0 = self.tau0 + (1-Ac1c2).sum()
                 self.p[c1,c2] = np.random.beta(tau1, tau0)
@@ -182,10 +213,11 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         """
         Resample v given observations of the weights
         """
+        # import pdb; pdb.set_trace()
         for c1 in xrange(self.C):
             for c2 in xrange(self.C):
-                Ac1c2 = A[self.c==c1, self.c==c2]
-                Wc1c2 = W[self.c==c1, self.c==c2]
+                Ac1c2 = A[np.ix_(self.c==c1, self.c==c2)]
+                Wc1c2 = W[np.ix_(self.c==c1, self.c==c2)]
                 alpha = self.alpha + Ac1c2.sum() * self.kappa
                 beta  = self.beta + Wc1c2[Ac1c2 > 0].sum()
                 self.v[c1,c2] = np.random.gamma(alpha, 1.0/beta)
@@ -236,11 +268,15 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
     Implement Gibbs sampling for SBM
     """
     def __init__(self, K, C,
-                 c=None, pi=1.0,
+                 c=None, pi=1.0, m=None,
                  p=None, tau0=0.1, tau1=0.1,
                  v=None, alpha=1.0, beta=1.0,
                  kappa=1.0):
-        super(MeanFieldSBM, self).__init__(K, C, c, pi, p, tau0, tau1, v, alpha, beta, kappa)
+        super(MeanFieldSBM, self).__init__(K=K, C=C,
+                                           c=c, pi=pi, m=m,
+                                           p=p, tau0=tau0, tau1=tau1,
+                                           v=v, alpha=alpha, beta=beta,
+                                           kappa=kappa)
 
         # Initialize mean field parameters
         self.mf_pi    = 1.0/self.C * np.ones(self.C)

@@ -111,8 +111,13 @@ class Gamma:
 
 class Dirichlet(object):
     def __init__(self, gamma):
-        assert np.all(gamma) >= 0 and gamma.shape[-1] >= 2
+        assert np.all(gamma) >= 0 and gamma.shape[-1] >= 1
         self.gamma = gamma
+
+    def log_probability(self, x):
+        assert np.allclose(x.sum(axis=-1), 1.0) and np.amin(x) >= 0.0
+        return gammaln(self.gamma.sum()) - gammaln(self.gamma).sum() \
+               + ((self.gamma-1) * np.log(x)).sum(axis=-1)
 
     def expected_g(self):
         return self.gamma / self.gamma.sum(axis=-1, keepdims=True)
@@ -142,6 +147,10 @@ class Beta(Dirichlet):
         tau0 = np.atleast_1d(tau0)
         gamma = np.concatenate((tau1[...,None], tau0[...,None]), axis=-1)
         super(Beta, self).__init__(gamma)
+
+    def log_probability(self, p):
+        x = np.concatenate((p[...,None], 1-p[...,None]), axis=-1)
+        return super(Beta, self).log_probability(x)
 
     def expected_p(self):
         E_g = self.expected_g()

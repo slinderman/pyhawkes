@@ -30,8 +30,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                  B=5, basis=None,
                  alpha0=1.0, beta0=1.0,
                  C=1, kappa=1.0,
-                 v=2.0, alpha=1, beta=1,
-                 p=0.5, tau1=0.1, tau0=0.1,
+                 v=None, alpha=1, beta=1,
+                 p=None, tau1=0.5, tau0=0.5,
                  gamma=1.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -53,7 +53,12 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         # Initialize the network model
         # self.network = ErdosRenyiModel(self.K, p=p, kappa=kappa, v=v)
         self.C = C
-        self.network = StochasticBlockModel(C=self.C, K=self.K, p=p, kappa=kappa, v=v)
+        # self.network = StochasticBlockModel(C=self.C, K=self.K, p=p, kappa=kappa, v=v)
+        self.network = StochasticBlockModel(C=self.C, K=self.K,
+                                            p=p, tau1=tau1, tau0=tau0,
+                                            kappa=kappa,
+                                            v=v, alpha=alpha, beta=beta,
+                                            pi=1.0)
 
         # The weight model is dictated by whether this is for Gibbs or MF
         self.weight_model = self._weight_class(self.K, self.network)
@@ -317,6 +322,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         lp += self.bias_model.log_probability()
         lp += self.weight_model.log_probability()
         lp += self.impulse_model.log_probability()
+        lp += self.network.log_probability()
 
         return lp
 
@@ -356,7 +362,7 @@ class DiscreteTimeNetworkHawkesModelGibbs(_DiscreteTimeNetworkHawkesModelBase, M
             p.resample(self.bias_model, self.weight_model, self.impulse_model)
 
         # Update the network model
-            self.network.resample(data=(self.weight_model.A, self.weight_model.W))
+        self.network.resample(data=(self.weight_model.A, self.weight_model.W))
 
 
 class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBase, ModelMeanField):

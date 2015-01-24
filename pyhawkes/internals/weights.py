@@ -55,8 +55,9 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         v = self.network.V
 
         # Add the LL of the gamma weights
-        ll += (kappa * np.log(v) - gammaln(kappa) + \
-              (kappa-1) * np.log(W) - v * W).sum()
+        lp_W = kappa * np.log(v) - gammaln(kappa) + \
+               (kappa-1) * np.log(W) - v * W
+        ll += (A*lp_W).sum()
 
         return ll
 

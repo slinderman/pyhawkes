@@ -3,23 +3,30 @@ import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs
 
-def demo():
+def demo(seed=None):
     """
     Create a discrete time Hawkes model and generate from it.
 
     :return:
     """
-    K = 2
+    if seed is None:
+        seed = np.random.randint(2**32)
+
+    print "Setting seed to ", seed
+    np.random.seed(seed)
+
+    C = 2
+    K = 10
     T = 1000
     dt = 1.0
     B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B)
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
     S,R = true_model.generate(T=T)
 
     # Make a new model for inference
-    model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B)
+    model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
     model.add_data(S)
 
     # Plot the true and inferred firing rate
@@ -30,7 +37,7 @@ def demo():
     plt.show()
 
     # Gibbs sample
-    N_samples = 1000
+    N_samples = 200
     samples = []
     lps = []
     for itr in xrange(N_samples):
@@ -74,4 +81,6 @@ def demo():
     plt.ylabel("Log probability")
     plt.show()
 
-demo()
+
+demo(2203329564)
+

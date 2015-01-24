@@ -1,7 +1,8 @@
 import numpy as np
 
 from pyhawkes.deps.pybasicbayes.distributions import BayesianDistribution, GibbsSampling, MeanField
-from pyhawkes.internals.parent_updates import mf_update_Z
+from pyhawkes.internals.parent_updates import mf_update_Z, resample_Z
+
 class _ParentsBase(BayesianDistribution):
     """
     Encapsulates the TxKxKxB array of parent multinomial distributed
@@ -103,9 +104,17 @@ class GibbsParents(_ParentsBase, GibbsSampling):
         :return:
         """
 
-        # TODO: Write a Cython function to resample each of the TxKxKxB entries in Z
-        self._resample_Z_python(bias_model, weight_model, impulse_model)
+        # Resample the parents in python
+        # self._resample_Z_python(bias_model, weight_model, impulse_model)
 
+        # Call cython function to resample parents
+        lambda0 = bias_model.lambda0
+        W = weight_model.A * weight_model.W
+        g = impulse_model.g
+        F = self.F
+        resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
+
+        self._check_Z()
 
 class MeanFieldParents(_ParentsBase, MeanField):
     """
