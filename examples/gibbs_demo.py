@@ -1,7 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, auc_score
+
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs
+from pyhawkes.plotting.plotting import plot_network
 
 def demo(seed=None):
     """
@@ -16,7 +19,7 @@ def demo(seed=None):
     np.random.seed(seed)
 
     C = 2
-    K = 10
+    K = 100
     T = 1000
     dt = 1.0
     B = 3
@@ -24,6 +27,14 @@ def demo(seed=None):
     # Generate from a true model
     true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
     S,R = true_model.generate(T=T)
+    c = true_model.network.c
+    perm = np.argsort(c)
+    import pdb; pdb.set_trace()
+
+    # Plot the true network
+    plot_network(true_model.weight_model.A[np.ix_(perm, perm)],
+                 true_model.weight_model.W[np.ix_(perm, perm)])
+
 
     # Make a new model for inference
     model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
@@ -53,10 +64,11 @@ def demo(seed=None):
     plt.ioff()
 
     # Compute sample statistics for second half of samples
-    A_samples       = np.array([A for A,_,_,_ in samples])
-    W_samples       = np.array([W for _,W,_,_ in samples])
-    beta_samples    = np.array([b for _,_,b,_ in samples])
-    lambda0_samples = np.array([l for _,_,_,l in samples])
+    A_samples       = np.array([A for A,_,_,_,_,_,_,_ in samples])
+    W_samples       = np.array([W for _,W,_,_,_,_,_,_ in samples])
+    beta_samples    = np.array([b for _,_,b,_,_,_,_,_ in samples])
+    lambda0_samples = np.array([l for _,_,_,l,_,_,_,_ in samples])
+    c_samples       = np.array([c for _,_,_,_,c,_,_,_ in samples])
     lps             = np.array(lps)
 
     offset = N_samples // 2
@@ -81,6 +93,31 @@ def demo(seed=None):
     plt.ylabel("Log probability")
     plt.show()
 
+    # Compute the link prediction accuracy curves
+    aucs = []
+    for A in A_samples:
+        aucs.append(auc_score(true_model.weight_model.A.ravel(), A.ravel()))
 
-demo(2203329564)
+    plt.figure()
+    plt.plot(aucs, '-r')
+    plt.xlabel("Iteration")
+    plt.ylabel("Link prediction AUC")
+    plt.show()
+
+    # Compute the adjusted mutual info score of the clusterings
+    amis = []
+    arss = []
+    for c in c_samples:
+        amis.append(adjusted_mutual_info_score(true_model.network.c, c))
+        arss.append(adjusted_rand_score(true_model.network.c, c))
+
+    plt.figure()
+    plt.plot(np.arange(N_samples), amis, '-r')
+    plt.plot(np.arange(N_samples), arss, '-b')
+    plt.xlabel("Iteration")
+    plt.ylabel("Clustering score")
+    plt.show()
+
+# demo(2203329564)
+demo()
 

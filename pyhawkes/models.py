@@ -175,7 +175,11 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         return self.weight_model.A, \
                self.weight_model.W, \
                self.impulse_model.g, \
-               self.bias_model.lambda0
+               self.bias_model.lambda0, \
+               self.network.c, \
+               self.network.p, \
+               self.network.v, \
+               self.network.m \
 
     def set_parameters(self, params):
         """
@@ -183,8 +187,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         :param params:
         :return:
         """
-        A, W, beta, lambda0 = params
-        K, B = self.K, self.basis.B
+        A, W, beta, lambda0, c, p, v, m = params
+        K, B, C = self.K, self.basis.B, self.C
 
         assert isinstance(A, np.ndarray) and A.shape == (K,K), \
             "A must be a KxK adjacency matrix"
@@ -201,10 +205,30 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                and np.amin(lambda0) >=0, \
             "lambda0 must be a K-vector of background rates"
 
+        assert isinstance(c, np.ndarray) and c.shape == (K,) \
+                and np.amin(c) >= 0 and np.amax(c) < self.C, \
+            "c must be a K-vector of block assignments"
+
+        assert isinstance(p, np.ndarray) and p.shape == (C,C) \
+                and np.amin(p) >= 0 and np.amax(p) <= 1.0, \
+            "p must be a CxC matrix block connection probabilities"
+
+        assert isinstance(v, np.ndarray) and v.shape == (C,C) \
+                and np.amin(v) >= 0, \
+            "v must be a CxC matrix block weight scales"
+
+        assert isinstance(m, np.ndarray) and m.shape == (C,) \
+                and np.amin(m) >= 0 and np.allclose(m.sum(), 1.0), \
+            "m must be a C vector of block probabilities"
+
         self.weight_model.A = A
         self.weight_model.W = W
         self.impulse_model.g = beta
         self.bias_model.lambda0 = lambda0
+        self.network.c = c
+        self.network.p = p
+        self.network.v = v
+        self.network.m = m
 
     def compute_rate(self, index=0, proc=None, S=None):
         """

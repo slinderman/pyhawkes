@@ -8,6 +8,7 @@ from scipy.special import gammaln, psi
 
 from pyhawkes.deps.pybasicbayes.abstractions import \
     BayesianDistribution, GibbsSampling, MeanField
+from pyhawkes.deps.pybasicbayes.util.stats import sample_discrete_from_log
 
 from pyhawkes.internals.distributions import Bernoulli, Gamma, Dirichlet, Beta
 
@@ -248,6 +249,9 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
                                 .log_probability(W[k,:]).sum()
 
                 # TODO: Get probability of impulse responses g
+
+            # Resample from lp
+            self.c[k] = sample_discrete_from_log(lp)
 
     def resample_m(self):
         """
