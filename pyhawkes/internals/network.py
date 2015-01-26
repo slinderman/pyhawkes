@@ -431,6 +431,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
             # Likelihood from network
             for ck in xrange(self.C):
 
+                # Compute expectations with respect to other block assignments, c_{\neg k}
                 # Initialize vectors for expected parameters
                 E_ln_p_ck_to_cnotk    = np.zeros(self.K-1)
                 E_ln_notp_ck_to_cnotk = np.zeros(self.K-1)
@@ -442,7 +443,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 E_ln_v_cnotk_to_ck    = np.zeros(self.K-1)
 
                 for cnotk in xrange(self.C):
-                    # Get the KxK matrix of joint class assignment probabilities
+                    # Get the (K-1)-vector of other class assignment probabilities
                     p_cnotk = self.mf_m[notk,cnotk]
 
                     # Expected log probability of a connection from ck to cnotk
@@ -474,9 +475,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                                                  E_ln_notp=E_ln_notp_ck_to_cnotk)
 
                 lp[ck] += Bernoulli().negentropy(E_x=E_A[notk, k],
-                                 E_notx=E_notA[notk, k],
-                                 E_ln_p=E_ln_p_cnotk_to_ck,
-                                 E_ln_notp=E_ln_notp_cnotk_to_ck)
+                                                 E_notx=E_notA[notk, k],
+                                                 E_ln_p=E_ln_p_cnotk_to_ck,
+                                                 E_ln_notp=E_ln_notp_cnotk_to_ck)
 
                 # Compute E[ln p(W | A=1, c, v)]
                 lp[ck] += (E_A[k, notk] *
