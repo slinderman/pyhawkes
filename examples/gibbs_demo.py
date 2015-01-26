@@ -19,7 +19,7 @@ def demo(seed=None):
     np.random.seed(seed)
 
     C = 2
-    K = 100
+    K = 50
     T = 1000
     dt = 1.0
     B = 3
@@ -29,11 +29,12 @@ def demo(seed=None):
     S,R = true_model.generate(T=T)
     c = true_model.network.c
     perm = np.argsort(c)
-    import pdb; pdb.set_trace()
 
     # Plot the true network
+    plt.ion()
     plot_network(true_model.weight_model.A[np.ix_(perm, perm)],
                  true_model.weight_model.W[np.ix_(perm, perm)])
+    plt.pause(0.001)
 
 
     # Make a new model for inference

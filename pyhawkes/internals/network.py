@@ -5,6 +5,7 @@ import abc
 
 import numpy as np
 from scipy.special import gammaln, psi
+from scipy.misc import logsumexp
 
 from pyhawkes.deps.pybasicbayes.abstractions import \
     BayesianDistribution, GibbsSampling, MeanField
@@ -242,11 +243,22 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
                 c_temp[k] = ck
 
                 # p(A[k,k'] | c)
-                lp[ck] += Bernoulli(self.p[np.ix_([ck], c_temp)])\
+                lp[ck] += Bernoulli(self.p[ck, c_temp])\
                                 .log_probability(A[k,:]).sum()
+
+                # p(A[k',k] | c)
+                lp[ck] += Bernoulli(self.p[c_temp, ck])\
+                                .log_probability(A[:,k]).sum()
+
                 # p(W[k,k'] | c)
-                lp[ck] += A[k,k] * Gamma(self.kappa, self.v[np.ix_([ck], c_temp)])\
-                                .log_probability(W[k,:]).sum()
+                lp[ck] += (A[k,:] * Gamma(self.kappa, self.v[ck, c_temp])\
+                                .log_probability(W[k,:])).sum()
+
+                # p(W[k,k'] | c)
+                lp[ck] += (A[:,k] * Gamma(self.kappa, self.v[c_temp, ck])\
+                                .log_probability(W[:,k])).sum()
+
+                # TODO: Subtract of self connection since we double counted
 
                 # TODO: Get probability of impulse responses g
 
@@ -389,15 +401,162 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 E_log_v += pc1c2 * (psi(self.mf_alpha) - np.log(self.mf_beta))
         return E_log_v
 
+    def expected_log_m(self):
+        """
+        Compute the expected log probability of each block
+        :return:
+        """
+        E_log_m = psi(self.mf_pi) - psi(self.mf_pi.sum())
+        return E_log_m
 
     def expected_log_likelihood(self,x):
         pass
 
-    def meanfieldupdate(self,data,weights):
-        pass
+    def mf_update_c(self, E_A, E_notA, E_W_given_A, E_ln_W_given_A):
+        """
+        Update the block assignment probabilities one at a time.
+        This one involves a number of not-so-friendly expectations.
+        :return:
+        """
+        # Sample each assignment in order
+        for k in xrange(self.K):
+            notk = np.concatenate((np.arange(k), np.arange(k+1,self.K)))
+
+            # Compute unnormalized log probs of each connection
+            lp = np.zeros(self.C)
+
+            # Prior from m
+            lp += self.expected_log_m()
+
+            # Likelihood from network
+            for ck in xrange(self.C):
+
+                # Initialize vectors for expected parameters
+                E_ln_p_ck_to_cnotk    = np.zeros(self.K-1)
+                E_ln_notp_ck_to_cnotk = np.zeros(self.K-1)
+                E_ln_p_cnotk_to_ck    = np.zeros(self.K-1)
+                E_ln_notp_cnotk_to_ck = np.zeros(self.K-1)
+                E_v_ck_to_cnotk       = np.zeros(self.K-1)
+                E_ln_v_ck_to_cnotk    = np.zeros(self.K-1)
+                E_v_cnotk_to_ck       = np.zeros(self.K-1)
+                E_ln_v_cnotk_to_ck    = np.zeros(self.K-1)
+
+                for cnotk in xrange(self.C):
+                    # Get the KxK matrix of joint class assignment probabilities
+                    p_cnotk = self.mf_m[notk,cnotk]
+
+                    # Expected log probability of a connection from ck to cnotk
+                    E_ln_p_ck_to_cnotk    += p_cnotk * (psi(self.mf_tau1[ck, cnotk])
+                                                        - psi(self.mf_tau0[ck, cnotk] + self.mf_tau1[ck, cnotk]))
+                    E_ln_notp_ck_to_cnotk += p_cnotk * (psi(self.mf_tau0[ck, cnotk])
+                                                        - psi(self.mf_tau0[ck, cnotk] + self.mf_tau1[ck, cnotk]))
+
+                    # Expected log probability of a connection from cnotk to ck
+                    E_ln_p_cnotk_to_ck    += p_cnotk * (psi(self.mf_tau1[cnotk, ck])
+                                                        - psi(self.mf_tau0[cnotk, ck] + self.mf_tau1[cnotk, ck]))
+                    E_ln_notp_cnotk_to_ck += p_cnotk * (psi(self.mf_tau0[cnotk, ck])
+                                                        - psi(self.mf_tau0[cnotk, ck] + self.mf_tau1[cnotk, ck]))
+
+                    # Expected log scale of connections from ck to cnotk
+                    E_v_ck_to_cnotk       += p_cnotk * (self.mf_alpha[ck, cnotk] / self.mf_beta[ck, cnotk])
+                    E_ln_v_ck_to_cnotk    += p_cnotk * (psi(self.mf_alpha[ck, cnotk])
+                                                        - np.log(self.mf_beta[ck, cnotk]))
+
+                    # Expected log scale of connections from cnotk to ck
+                    E_v_cnotk_to_ck       += p_cnotk * (self.mf_alpha[cnotk, ck] / self.mf_beta[cnotk, ck])
+                    E_ln_v_cnotk_to_ck    += p_cnotk * (psi(self.mf_alpha[cnotk, ck])
+                                                        - np.log(self.mf_beta[cnotk, ck]))
+
+                # Compute E[ln p(A | c, p)]
+                lp[ck] += Bernoulli().negentropy(E_x=E_A[k, notk],
+                                                 E_notx=E_notA[k, notk],
+                                                 E_ln_p=E_ln_p_ck_to_cnotk,
+                                                 E_ln_notp=E_ln_notp_ck_to_cnotk)
+
+                lp[ck] += Bernoulli().negentropy(E_x=E_A[notk, k],
+                                 E_notx=E_notA[notk, k],
+                                 E_ln_p=E_ln_p_cnotk_to_ck,
+                                 E_ln_notp=E_ln_notp_cnotk_to_ck)
+
+                # Compute E[ln p(W | A=1, c, v)]
+                lp[ck] += (E_A[k, notk] *
+                           Gamma(self.kappa).negentropy(E_ln_lambda=E_ln_W_given_A[k, notk],
+                                                        E_lambda=E_W_given_A[k,notk],
+                                                        E_beta=E_v_ck_to_cnotk,
+                                                        E_ln_beta=E_ln_v_ck_to_cnotk)).sum()
+
+                lp[ck] += (E_A[k, notk] *
+                           Gamma(self.kappa).negentropy(E_ln_lambda=E_ln_W_given_A[notk, k],
+                                                        E_lambda=E_W_given_A[notk,k],
+                                                        E_beta=E_v_cnotk_to_ck,
+                                                        E_ln_beta=E_ln_v_cnotk_to_ck)).sum()
+
+                # TODO: Compute expected log prob of self connection
+
+                # TODO: Get probability of impulse responses g
+
+
+            # Normalize the log probabilities to update mf_m
+            Z = logsumexp(lp)
+            self.mf_m[k,:] = np.exp(lp - Z)
+
+
+    def mf_update_p(self, E_A, E_notA):
+        """
+        Mean field update for the CxC matrix of block connection probabilities
+        :param E_A:
+        :return:
+        """
+        for c1 in xrange(self.C):
+            for c2 in xrange(self.C):
+                # Get the KxK matrix of joint class assignment probabilities
+                pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
+
+                self.mf_tau1[c1,c2] = self.tau1 + (pc1c2 * E_A).sum()
+                self.mf_tau0[c1,c2] = self.tau0 + (pc1c2 * E_notA).sum()
+
+    def mf_update_v(self, E_A, E_W_given_A):
+        """
+        Mean field update for the CxC matrix of block connection scales
+        :param E_A:
+        :param E_W_given_A: Expected W given A
+        :return:
+        """
+        for c1 in xrange(self.C):
+            for c2 in xrange(self.C):
+                # Get the KxK matrix of joint class assignment probabilities
+                pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
+
+                self.mf_alpha[c1,c2] = self.alpha + (pc1c2 * E_A * self.kappa).sum()
+                self.mf_beta[c1,c2]  = self.beta + (pc1c2 * E_A * E_W_given_A).sum()
+
+    def mf_update_m(self):
+        """
+        Mean field update of the block probabilities
+        :return:
+        """
+        self.mf_pi = self.pi + self.mf_m.sum(axis=0)
+
+    def meanfieldupdate(self, weight_model):
+        # Get expectations from the weight model
+        E_A = weight_model.expected_A()
+        E_notA = 1.0 - E_A
+        E_W_given_A = weight_model.expected_W_given_A(1.0)
+        E_ln_W_given_A = weight_model.expected_log_W_given_A(1.0)
+
+        # Update the block assignments
+        self.mf_update_c(E_A=E_A,
+                         E_notA=E_notA,
+                         E_W_given_A=E_W_given_A,
+                         E_ln_W_given_A=E_ln_W_given_A)
+
+        # Update the remaining SBM parameters
+        self.mf_update_p(E_A=E_A, E_notA=E_notA)
+        self.mf_update_v(E_A=E_A, E_W_given_A=E_W_given_A)
+        self.mf_update_m()
 
     def get_vlb(self):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def resample_from_mf(self):
         """

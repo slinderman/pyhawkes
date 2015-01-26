@@ -12,5 +12,6 @@ def plot_network(A, W):
     plt.ylabel('k')
     plt.xlabel('k\'')
     plt.title('W_{k \\to k\'}')
+    plt.colorbar()
     plt.show()
 
