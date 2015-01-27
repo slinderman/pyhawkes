@@ -3,8 +3,54 @@ from scipy.special import gammaln, psi
 
 # TODO: define distribution base class
 
+class Discrete(object):
+    def __init__(self, p=0.5*np.ones(2)):
+        assert np.all(p >= 0) and p.ndim == 1 and np.allclose(p.sum(), 1.0), \
+            "p must be a probability vector that sums to 1.0"
+        self.p = p
+        self.D = p.size
+
+    def _is_one_hot(self, x):
+        return x.shape == (self.D,) and x.dtype == np.int and x.sum() == 1
+
+    def _isindex(self, x):
+        return isinstance(x, int) and x >= 0 and x < self.D
+
+    def log_probability(self, x):
+        # TODO: Handle broadcasting
+        assert self._is_one_hot(x) or self._isindex(x)
+
+        if self._is_one_hot(x):
+            lp = x.dot(np.log(self.p))
+        elif self._isindex(x):
+            lp = np.log(self.p[x])
+        else:
+            raise Exception("x must be a one-hot vector or an index")
+
+        return lp
+
+    def expected_x(self):
+        return self.p
+
+    def negentropy(self, E_x=None, E_ln_p=None):
+        """
+        Compute the negative entropy of the discrete distribution.
+
+        :param E_x:     Expected observation
+        :param E_ln_p:  Expected log probability
+        :return:
+        """
+        if E_x is None:
+            E_x = self.expected_x()
+
+        if E_ln_p is None:
+            E_ln_p = np.log(self.p)
+
+        H = E_x.dot(E_ln_p)
+        return np.nan_to_num(H)
 
 class Bernoulli:
+    #TODO: Subclass Discrete distribution
     def __init__(self, p=0.5):
         assert np.all(p >= 0) and np.all(p <= 1.0)
         self.p = p
@@ -28,7 +74,7 @@ class Bernoulli:
 
     def negentropy(self, E_x=None, E_notx=None, E_ln_p=None, E_ln_notp=None):
         """
-        Compute the entropy of the gamma distribution.
+        Compute the entropy of the Bernoulli distribution.
 
         :param E_x:         If given, use this in place of expectation wrt p
         :param E_notx:      If given, use this in place of expectation wrt p

@@ -20,7 +20,7 @@ def test_gibbs_sbm(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
-    C = 2
+    C = 10
     K = 100
     T = 1000
     dt = 1.0
@@ -50,13 +50,13 @@ def test_gibbs_sbm(seed=None):
     for itr in xrange(N_samples):
         if itr % 5 == 0:
             print "Iteration: ", itr
+        samples.append(copy.deepcopy(test_model.get_parameters()))
 
         lps.append(test_model.log_probability())
 
         # Resample the network only
         test_model.network.resample((true_model.weight_model.A,
                                      true_model.weight_model.W))
-        samples.append(copy.deepcopy(test_model.get_parameters()))
 
     plt.ioff()
 

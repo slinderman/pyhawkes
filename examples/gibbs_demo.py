@@ -38,27 +38,35 @@ def demo(seed=None):
 
 
     # Make a new model for inference
-    model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
-    model.add_data(S)
+    test_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
+    test_model.add_data(S)
 
     # Plot the true and inferred firing rate
     plt.figure()
     plt.plot(np.arange(T), R[:,0], '-k', lw=2)
     plt.ion()
-    ln = plt.plot(np.arange(T), model.compute_rate()[:,0], '-r')[0]
+    ln = plt.plot(np.arange(T), test_model.compute_rate()[:,0], '-r')[0]
     plt.show()
+
+    # Plot the block affiliations
+    plt.figure()
+    im = plt.imshow(test_model.network.c[perm,:],
+                    interpolation="none", cmap="gray",
+                    aspect=float(C)/K)
+    plt.show()
+    plt.pause(0.001)
 
     # Gibbs sample
     N_samples = 200
     samples = []
     lps = []
     for itr in xrange(N_samples):
-        lps.append(model.log_probability())
-        samples.append(model.resample_and_copy())
+        lps.append(test_model.log_probability())
+        samples.append(test_model.resample_and_copy())
 
         # Update plot
         if itr % 5 == 0:
-            ln.set_data(np.arange(T), model.compute_rate()[:,0])
+            ln.set_data(np.arange(T), test_model.compute_rate()[:,0])
             plt.title("Iteration %d" % itr)
             plt.pause(0.001)
 

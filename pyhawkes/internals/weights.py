@@ -348,3 +348,22 @@ class GammaMixtureWeights(MeanField):
         self.A = np.random.rand(self.K, self.K) < self.mf_p
         self.W = (1-self.A) * np.random.gamma(self.mf_kappa_0, 1.0/self.mf_v_0)
         self.W += self.A * np.random.gamma(self.mf_kappa_1, 1.0/self.mf_v_1)
+
+    def initialize_from_gibbs(self, A, W, scale=100):
+        """
+        Initialize from a Gibbs sample
+        :param A: Given adjacency matrix
+        :param W: Given weight matrix
+        :return:
+        """
+        # Set mean field probability of connection to conf if A==1
+        # and (1-conf) if A == 0
+        conf = 0.95
+        self.mf_p = conf * A + (1-conf) * (1-A)
+
+        # Set variational weight distribution
+        self.mf_kappa_0 = self.kappa_0
+        self.mf_v_0     = self.nu_0
+
+        self.mf_kappa_1 = scale * W
+        self.mf_v_1     = scale

@@ -411,6 +411,9 @@ class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBas
             N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
             EZ=np.concatenate([p.EZ for (_,_,_,p) in self.data_list]))
 
+        # Update the network model
+        self.network.meanfieldupdate(self.weight_model)
+
         # Compute the variational lower bound
         vlb = 0
         for _,_,_,p in self.data_list:
@@ -418,9 +421,11 @@ class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBas
         vlb += self.bias_model.get_vlb()
         vlb += self.impulse_model.get_vlb()
         vlb += self.weight_model.get_vlb()
+        vlb += self.network.get_vlb()
         return vlb
 
     def resample_from_mf(self):
         self.bias_model.resample_from_mf()
         self.weight_model.resample_from_mf()
         self.impulse_model.resample_from_mf()
+        self.network.resample_from_mf()

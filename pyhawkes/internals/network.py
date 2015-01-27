@@ -11,7 +11,8 @@ from pyhawkes.deps.pybasicbayes.abstractions import \
     BayesianDistribution, GibbsSampling, MeanField
 from pyhawkes.deps.pybasicbayes.util.stats import sample_discrete_from_log
 
-from pyhawkes.internals.distributions import Bernoulli, Gamma, Dirichlet, Beta
+from pyhawkes.internals.distributions import Discrete, Bernoulli, \
+                                             Gamma, Dirichlet, Beta
 
 # TODO: Make a base class for networks
 # class Network(BayesianDistribution):
@@ -295,8 +296,12 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                                            kappa=kappa)
 
         # Initialize mean field parameters
-        self.mf_pi    = 1.0/self.C * np.ones(self.C)
-        self.mf_m     = 1.0/self.C * np.ones((self.K, self.C))
+        self.mf_pi    = np.ones(self.C)
+        # self.mf_m     = 1.0/self.C * np.ones((self.K, self.C))
+
+        # To break symmetry, start with a sample of mf_m
+        self.mf_m     = np.random.dirichlet(10 * np.ones(self.C),
+                                            size=(self.K,))
         self.mf_tau0  = self.tau0  * np.ones((self.C, self.C))
         self.mf_tau1  = self.tau1  * np.ones((self.C, self.C))
         self.mf_alpha = self.alpha * np.ones((self.C, self.C))
@@ -342,7 +347,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
                 # Get the probability of a connection for this pair of classes
-                E_ln_p += pc1c2 * (psi(self.mf_tau1) - psi(self.mf_tau0 + self.mf_tau1))
+                E_ln_p += pc1c2 * (psi(self.mf_tau1[c1,c2])
+                                   - psi(self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2]))
 
         return E_ln_p
 
@@ -361,7 +367,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
                 # Get the probability of a connection for this pair of classes
-                E_ln_notp += pc1c2 * (psi(self.mf_tau0) - psi(self.mf_tau0 + self.mf_tau1))
+                E_ln_notp += pc1c2 * (psi(self.mf_tau0[c1,c2])
+                                      - psi(self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2]))
 
         return E_ln_notp
 
@@ -380,7 +387,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
                 # Get the probability of a connection for this pair of classes
-                E_v += pc1c2 * self.mf_alpha / self.mf_beta
+                E_v += pc1c2 * self.mf_alpha[c1,c2] / self.mf_beta[c1,c2]
         return E_v
 
     def expected_log_v(self):
@@ -398,8 +405,12 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
                 # Get the probability of a connection for this pair of classes
-                E_log_v += pc1c2 * (psi(self.mf_alpha) - np.log(self.mf_beta))
+                E_log_v += pc1c2 * (psi(self.mf_alpha[c1,c2])
+                                    - np.log(self.mf_beta[c1,c2]))
         return E_log_v
+
+    def expected_m(self):
+        return self.mf_pi / self.mf_pi.sum()
 
     def expected_log_m(self):
         """
@@ -414,7 +425,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
 
     def mf_update_c(self, E_A, E_notA, E_W_given_A, E_ln_W_given_A):
         """
-        Update the block assignment probabilities one at a time.
+        Update the block assignment probabilitlies one at a time.
         This one involves a number of not-so-friendly expectations.
         :return:
         """
@@ -472,12 +483,12 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 lp[ck] += Bernoulli().negentropy(E_x=E_A[k, notk],
                                                  E_notx=E_notA[k, notk],
                                                  E_ln_p=E_ln_p_ck_to_cnotk,
-                                                 E_ln_notp=E_ln_notp_ck_to_cnotk)
+                                                 E_ln_notp=E_ln_notp_ck_to_cnotk).sum()
 
                 lp[ck] += Bernoulli().negentropy(E_x=E_A[notk, k],
                                                  E_notx=E_notA[notk, k],
                                                  E_ln_p=E_ln_p_cnotk_to_ck,
-                                                 E_ln_notp=E_ln_notp_cnotk_to_ck)
+                                                 E_ln_notp=E_ln_notp_cnotk_to_ck).sum()
 
                 # Compute E[ln p(W | A=1, c, v)]
                 lp[ck] += (E_A[k, notk] *
@@ -545,26 +556,69 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
         E_W_given_A = weight_model.expected_W_given_A(1.0)
         E_ln_W_given_A = weight_model.expected_log_W_given_A(1.0)
 
+        # Update the remaining SBM parameters
+        self.mf_update_p(E_A=E_A, E_notA=E_notA)
+        self.mf_update_v(E_A=E_A, E_W_given_A=E_W_given_A)
+        self.mf_update_m()
+
         # Update the block assignments
         self.mf_update_c(E_A=E_A,
                          E_notA=E_notA,
                          E_W_given_A=E_W_given_A,
                          E_ln_W_given_A=E_ln_W_given_A)
 
-        # Update the remaining SBM parameters
-        self.mf_update_p(E_A=E_A, E_notA=E_notA)
-        self.mf_update_v(E_A=E_A, E_W_given_A=E_W_given_A)
-        self.mf_update_m()
-
     def get_vlb(self):
-        raise NotImplementedError()
+        vlb = 0
+
+        # Get the VLB of the expected class assignments
+        E_ln_m = self.expected_log_m()
+        for k in xrange(self.K):
+            # Add the cross entropy of p(c | m)
+            vlb += Discrete().negentropy(E_x=self.mf_m[k,:], E_ln_p=E_ln_m)
+
+            # Subtract the negative entropy of q(c)
+            vlb -= Discrete(self.mf_m[k,:]).negentropy()
+
+        # Get the VLB of the connection probability matrix
+        # Add the cross entropy of p(p | tau1, tau0)
+        vlb += Beta(self.tau1, self.tau0).\
+            negentropy(E_ln_p=(psi(self.mf_tau1) - psi(self.mf_tau0 + self.mf_tau1)),
+                       E_ln_notp=(psi(self.mf_tau0) - psi(self.mf_tau0 + self.mf_tau1))).sum()
+
+        # Subtract the negative entropy of q(p)
+        vlb -= Beta(self.mf_tau1, self.mf_tau0).negentropy().sum()
+
+        # Get the VLB of the weight scale matrix, v
+        # Add the cross entropy of
+        # p(v | alpha, beta)
+        vlb += Gamma(self.alpha, self.beta).\
+            negentropy(E_lambda=self.mf_alpha/self.mf_beta,
+                       E_ln_lambda=psi(self.mf_alpha) - np.log(self.mf_beta)).sum()
+
+        # Subtract the negative entropy of q(v)
+        vlb -= Gamma(self.mf_alpha, self.mf_beta).negentropy().sum()
+
+        # Get the VLB of the block probability vector, m
+        # Add the cross entropy of p(m | pi)
+        vlb += Dirichlet(self.pi).negentropy(E_ln_g=self.expected_log_m())
+
+        # Subtract the negative entropy of q(m)
+        vlb -= Dirichlet(self.mf_pi).negentropy()
+
+        return vlb
 
     def resample_from_mf(self):
         """
         Resample from the mean field distribution
         :return:
         """
-        raise NotImplementedError()
+        self.m = np.random.dirichlet(self.mf_pi)
+        self.p = np.random.beta(self.mf_tau1, self.mf_tau0)
+        self.v = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)
+
+        self.c = np.zeros(self.K)
+        for k in xrange(self.K):
+            self.c[k] = np.random.choice(self.C, p=self.mf_m[k,:])
 
 class StochasticBlockModel(GibbsSBM, MeanFieldSBM):
     pass
