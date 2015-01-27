@@ -44,6 +44,47 @@ class DiscreteTimeStandardHawkesModel(object):
         # Initialize the data list to empty
         self.data_list = []
 
+    def add_data(self, S):
+        """
+        Add a data set to the list of observations.
+        First, filter the data with the impulse response basis,
+        then instantiate a set of parents for this data set.
+
+        :param S: a TxK matrix of of event counts for each time bin
+                  and each process.
+        """
+        assert isinstance(S, np.ndarray) and S.ndim == 2 and S.shape[1] == self.K \
+               and np.amin(S) >= 0 and S.dtype == np.int, \
+               "Data must be a TxK array of event counts"
+
+        T = S.shape[0]
+        N = np.atleast_1d(S.sum(axis=0))
+
+        # Filter the data into a TxKxB array
+        F = self.basis.convolve_with_basis(S)
+
+        # # Check that \sum_t F[t,k,b] ~= Nk / dt
+        # Fsum = F.sum(axis=0)
+        # print "F_err:  ", Fsum - N/self.dt
+
+        # Add to the data list
+        self.data_list.append((S, N, F))
+
+    def check_stability(self):
+        """
+        Check that the weight matrix is stable
+
+        :return:
+        """
+        eigs = np.linalg.eigvals(self.weight_model.A * self.weight_model.W)
+        maxeig = np.amax(np.real(eigs))
+        # print "Max eigenvalue: ", maxeig
+        if maxeig < 1.0:
+            return True
+        else:
+            return False
+
+
 class _DiscreteTimeNetworkHawkesModelBase(object):
     """
     Discrete time network Hawkes process model with support for
