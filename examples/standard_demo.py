@@ -22,7 +22,7 @@ def demo(seed=None):
     B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B, c=np.zeros(K, dtype=np.int), p=0.0, v=K)
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B, c=np.zeros(K, dtype=np.int), p=0.2, v=K)
     S,R = true_model.generate(T=T)
 
     # Plot the true network
@@ -33,7 +33,7 @@ def demo(seed=None):
 
 
     # Make a new model for inference
-    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, l2_penalty=10, l1_penalty=10)
+    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, l2_penalty=0, l1_penalty=0)
     test_model.add_data(S)
 
     # Plot the true and inferred firing rate
@@ -52,7 +52,7 @@ def demo(seed=None):
         lls.append(ll)
 
         # Update plot
-        if itr % 1 == 0:
+        if itr % 5 == 0:
             ln.set_data(np.arange(T), test_model.compute_rate(ks=kplt))
             plt.title("Iteration %d" % itr)
             plt.pause(0.001)
@@ -76,4 +76,5 @@ def demo(seed=None):
 
 # demo(2203329564)
 # demo(1940839255)
-demo(288408413)
+# demo(288408413)
+demo(2074381354)

@@ -39,8 +39,12 @@ class DiscreteTimeStandardHawkesModel(object):
         self.B = B
         self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True)
 
-        # Initialize parameters (bias and weights)
-        self.weights = abs((1.0/(1+self.K*self.B)) * np.random.randn(self.K, 1 + self.K * self.B))
+        # Randomly initialize parameters (bias and weights)
+        # self.weights = abs((1.0/(1+self.K*self.B)) * np.random.randn(self.K, 1 + self.K * self.B))
+
+        # Initialize bias to mean rate and weights to zero
+        self.weights = 1e-1*np.ones((self.K, 1 + self.K*self.B))
+        self.weights[:,0] = 1.0
 
         # Save the regularization penalties
         self.l2_penalty = l2_penalty
@@ -52,11 +56,17 @@ class DiscreteTimeStandardHawkesModel(object):
     @property
     def W(self):
         WB = self.weights[:,1:].reshape((self.K,self.K, self.B))
+
+        # DEBUG
         assert WB[0,0,self.B-1] == self.weights[0,1+self.B-1]
+        assert WB[0,self.K-1,0] == self.weights[0,1+(self.K-1)*self.B]
         assert WB[self.K-1,self.K-1,self.B-2] == self.weights[self.K-1,-2]
 
         # Weight matrix is summed over impulse response functions
-        return WB.sum(axis=2)
+        WT = WB.sum(axis=2)
+        # Then we transpose so that the weight matrix is (outgoing x incoming)
+        W = WT.T
+        return W
 
     @property
     def bias(self):
@@ -82,6 +92,7 @@ class DiscreteTimeStandardHawkesModel(object):
         Ftens = self.basis.convolve_with_basis(S)
 
         # Flatten this into a T x (KxB) matrix
+        # [F00, F01, F02, F10, F11, ... F(K-1)0, F(K-1)(B-1)]
         F = Ftens.reshape((T, self.K * self.B))
 
         # Prepend a column of ones
