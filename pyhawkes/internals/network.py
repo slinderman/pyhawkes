@@ -125,7 +125,7 @@ class _StochasticBlockModelBase(BayesianDistribution):
                     "v must be a CxC matrix of nonnegative gamma scales"
                 self.v = v
         else:
-            self.p = np.random.gamma(self.alpha, 1.0/self.beta, size=(self.C, self.C))
+            self.v = np.random.gamma(self.alpha, 1.0/self.beta, size=(self.C, self.C))
 
         # If m, p, and v are specified, then the model is fixed and the prior parameters
         # are ignored

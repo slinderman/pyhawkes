@@ -23,7 +23,7 @@ class DiscreteTimeStandardHawkesModel(object):
     """
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
-                 lmbda=0.0):
+                 l2_penalty=10.0, l1_penalty=0.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
 
@@ -39,10 +39,28 @@ class DiscreteTimeStandardHawkesModel(object):
         self.B = B
         self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True)
 
-        # TODO: Initialize parameters (bias and weights)
+        # Initialize parameters (bias and weights)
+        self.weights = abs((1.0/(1+self.K*self.B)) * np.random.randn(self.K, 1 + self.K * self.B))
+
+        # Save the regularization penalties
+        self.l2_penalty = l2_penalty
+        self.l1_penalty = l1_penalty
 
         # Initialize the data list to empty
         self.data_list = []
+
+    @property
+    def W(self):
+        WB = self.weights[:,1:].reshape((self.K,self.K, self.B))
+        assert WB[0,0,self.B-1] == self.weights[0,1+self.B-1]
+        assert WB[self.K-1,self.K-1,self.B-2] == self.weights[self.K-1,-2]
+
+        # Weight matrix is summed over impulse response functions
+        return WB.sum(axis=2)
+
+    @property
+    def bias(self):
+        return self.weights[:,0]
 
     def add_data(self, S):
         """
@@ -61,7 +79,13 @@ class DiscreteTimeStandardHawkesModel(object):
         N = np.atleast_1d(S.sum(axis=0))
 
         # Filter the data into a TxKxB array
-        F = self.basis.convolve_with_basis(S)
+        Ftens = self.basis.convolve_with_basis(S)
+
+        # Flatten this into a T x (KxB) matrix
+        F = Ftens.reshape((T, self.K * self.B))
+
+        # Prepend a column of ones
+        F = np.concatenate((np.ones((T,1)), F), axis=1)
 
         # # Check that \sum_t F[t,k,b] ~= Nk / dt
         # Fsum = F.sum(axis=0)
@@ -76,13 +100,144 @@ class DiscreteTimeStandardHawkesModel(object):
 
         :return:
         """
-        eigs = np.linalg.eigvals(self.weight_model.A * self.weight_model.W)
+        # Compute the effective weight matrix
+        W_eff = self.weights.sum(axis=2)
+        eigs = np.linalg.eigvals(W_eff)
         maxeig = np.amax(np.real(eigs))
         # print "Max eigenvalue: ", maxeig
         if maxeig < 1.0:
             return True
         else:
             return False
+
+    def compute_rate(self, index=None, ks=None):
+        """
+        Compute the rate of the k-th process.
+
+        :param index:   Which dataset to comput the rate of
+        :param k:       Which process to compute the rate of
+        :return:
+        """
+        if index is None:
+            index = 0
+        _,_,F = self.data_list[index]
+
+        if ks is None:
+            ks = np.arange(self.K)
+
+        if isinstance(ks, int):
+            R = F.dot(self.weights[ks,:])
+            return R
+
+        elif isinstance(ks, np.ndarray):
+            Rs = []
+            for k in ks:
+                Rs.append(F.dot(self.weights[k,:])[:,None])
+            return np.concatenate(Rs, axis=1)
+
+        else:
+            raise Exception("ks must be int or array of indices in 0..K-1")
+
+    def log_likelihood(self):
+        """
+        Compute the log likelihood
+        :return:
+        """
+        ll = 0
+        for index,data in enumerate(self.data_list):
+            S,N,F = data
+            R = self.compute_rate(index)
+            ll += (-gammaln(S+1) + S * np.log(R) -R*self.dt).sum()
+
+        return ll
+
+    def compute_gradient(self, k, indices=None):
+        """
+        Compute the gradient of the log likelihood with respect
+        to the log biases and log weights
+
+        :param k:   Which process to compute gradients for.
+                    If none, return a list of gradients for each process.
+        """
+        grad = np.zeros(1 + self.K * self.B)
+
+        if indices is None:
+            indices = np.arange(len(self.data_list))
+
+        for index in indices:
+            d_W_d_log_W = self._d_W_d_logW(k)
+            d_rate_d_W = self._d_rate_d_W(index, k)
+            d_rate_d_log_W = d_rate_d_W.dot(d_W_d_log_W)
+            d_ll_d_rate = self._d_ll_d_rate(index, k)
+            d_ll_d_log_W = d_ll_d_rate.dot(d_rate_d_log_W)
+
+            grad += d_ll_d_log_W
+
+        # Subtract the regularization penalty
+        # import pdb; pdb.set_trace()
+        d_reg_d_W = self._d_reg_d_W(k)
+        grad += d_reg_d_W.dot(d_W_d_log_W)
+
+        # TODO: Implement group lasso
+
+        return grad
+
+    def _d_ll_d_rate(self, index, k):
+        S,_,_ = self.data_list[index]
+        T = S.shape[0]
+
+        rate = self.compute_rate(index, k)
+        # d/dR  S*ln(R) -R*dt
+        grad = S[:,k] / rate  - self.dt * np.ones(T)
+        return grad
+
+    def _d_rate_d_W(self, index, k):
+        _,_,F = self.data_list[index]
+        grad = F
+        return grad
+
+    def _d_W_d_logW(self, k):
+        """
+        Let u = logW
+        d{e^u}/du = e^u
+                  = W
+        """
+        return np.diag(self.weights[k,:])
+
+    def _d_reg_d_W(self, k):
+        """
+        Compute gradient of regularization
+        d/dW  -L2 * W^2 -L1 * |W|
+            = -2*L2*W -L1
+
+        since W >= 0
+        """
+        d_reg_d_W = -2*self.l2_penalty*self.weights[k,:] -self.l1_penalty
+
+        # Don't penalize the bias
+        d_reg_d_W[0] = 0
+
+        return d_reg_d_W
+
+
+    def gradient_descent_step(self, stepsz=0.01):
+        grad = np.zeros((self.K, 1+self.K*self.B))
+
+        # Compute gradient and take a step for each process
+        for k in xrange(self.K):
+            grad[k,:] = self.compute_gradient(k)
+            self.weights[k,:] = np.exp(np.log(self.weights[k,:]) + stepsz * grad[k,:])
+
+        # Compute the current objective
+        ll = self.log_likelihood()
+
+        return self.weights, ll, grad
+
+    def sgd_step(self, prev_grad, stepsz):
+        """
+        Take a step of the stochastic gradient descent algorithm
+        """
+        raise NotImplementedError()
 
 
 class _DiscreteTimeNetworkHawkesModelBase(object):
@@ -99,7 +254,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha0=1.0, beta0=1.0,
-                 C=1, kappa=1.0,
+                 C=1, c=None,
+                 kappa=1.0,
                  v=None, alpha=1, beta=1,
                  p=None, tau1=0.5, tau0=0.5,
                  gamma=1.0):
@@ -125,6 +281,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.C = C
         # self.network = StochasticBlockModel(C=self.C, K=self.K, p=p, kappa=kappa, v=v)
         self.network = StochasticBlockModel(C=self.C, K=self.K,
+                                            c=c,
                                             p=p, tau1=tau1, tau0=tau0,
                                             kappa=kappa,
                                             v=v, alpha=alpha, beta=beta,
