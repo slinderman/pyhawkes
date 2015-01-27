@@ -1,10 +1,13 @@
 import os
+import abc
 
 import numpy as np
 import scipy.linalg
 import scipy.signal as sig
 
 class Basis(object):
+
+    __metaclass__ = abc.ABCMeta
 
     def __init__(self, B, dt, dt_max,
                  orth=False,
@@ -17,6 +20,10 @@ class Basis(object):
 
         self.basis = self.interpolate_basis(self.create_basis(), self.dt, self.dt_max, self.norm)
         self.L = self.basis.shape[0]
+
+    @abc.abstractmethod
+    def create_basis(self):
+        raise NotImplementedError()
 
     def convolve_with_basis(self, S):
         """

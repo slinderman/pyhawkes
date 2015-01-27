@@ -15,6 +15,35 @@ from pyhawkes.internals.parents import Parents
 from pyhawkes.internals.network import ErdosRenyiModel, StochasticBlockModel
 from pyhawkes.utils.basis import CosineBasis
 
+
+class DiscreteTimeStandardHawkesModel(object):
+    """
+    Discrete time standard Hawkes process model with support for
+    regularized (stochastic) gradient descent.
+    """
+    def __init__(self, K, dt=1.0, dt_max=10.0,
+                 B=5, basis=None,
+                 lmbda=0.0):
+        """
+        Initialize a discrete time network Hawkes model with K processes.
+
+        :param K:       Number of processes
+        :param dt:      Time bin size
+        :param dt_max:
+        """
+        self.K = K
+        self.dt = dt
+        self.dt_max = dt_max
+
+        # Initialize the basis
+        self.B = B
+        self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True)
+
+        # TODO: Initialize parameters (bias and weights)
+
+        # Initialize the data list to empty
+        self.data_list = []
+
 class _DiscreteTimeNetworkHawkesModelBase(object):
     """
     Discrete time network Hawkes process model with support for
