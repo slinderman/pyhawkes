@@ -1,10 +1,10 @@
 import numpy as np
 from scipy.special import gammaln, psi
 
-from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
+from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Dirichlet
 
-class DirichletImpulseResponses(GibbsSampling):
+class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
     """
     Encapsulates the impulse response vector distribution. In the
     discrete time Hawkes model this is a set of Dirichlet-distributed
@@ -121,18 +121,22 @@ class DirichletImpulseResponses(GibbsSampling):
 
         return E_lng
 
-    def mf_update_gamma(self, EZ):
+    def mf_update_gamma(self, EZ, minibatchfrac=1.0, stepsize=1.0):
         """
         Update gamma given E[Z]
         :return:
         """
-        self.mf_gamma = self.gamma + EZ.sum(axis=0)
+        gamma_hat = self.gamma + EZ.sum(axis=0) / minibatchfrac
+        self.mf_gamma = (1.0 - stepsize) * self.mf_gamma + stepsize * gamma_hat
 
     def expected_log_likelihood(self,x):
         pass
 
     def meanfieldupdate(self, EZ):
         self.mf_update_gamma(EZ)
+
+    def meanfield_sgdstep(self, EZ, minibatchfrac, stepsize):
+        self.mf_update_gamma(EZ, minibatchfrac=minibatchfrac, stepsize=stepsize)
 
     def get_vlb(self):
         """

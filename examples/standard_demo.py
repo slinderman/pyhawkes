@@ -16,20 +16,29 @@ def demo(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
+    C = 2
     K = 20
     T = 1000
     dt = 1.0
     B = 1
 
-    # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B, c=np.zeros(K, dtype=np.int), p=0.2, v=K)
-    S,R = true_model.generate(T=T)
+    # Create a true model
+    p = 0.8 * np.eye(C)
+    v = 10.0 * np.eye(C) + 20.0 * (1-np.eye(C))
+    # m = 0.5 * np.ones(C)
+    c = (0.0 * (np.arange(K) < 10) + 1.0 * (np.arange(K)  >= 10)).astype(np.int)
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, c=c, p=p, v=v)
+    c = true_model.network.c
+    perm = np.argsort(c)
 
     # Plot the true network
     plt.ion()
-    plot_network(true_model.weight_model.A,
-                 true_model.weight_model.W)
+    plot_network(true_model.weight_model.A[np.ix_(perm, perm)],
+                 true_model.weight_model.W[np.ix_(perm, perm)])
     plt.pause(0.001)
+
+    # Sample from the true model
+    S,R = true_model.generate(T=T)
 
 
     # Make a new model for inference

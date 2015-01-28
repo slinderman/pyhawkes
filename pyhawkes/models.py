@@ -629,7 +629,8 @@ class DiscreteTimeNetworkHawkesModelGibbs(_DiscreteTimeNetworkHawkesModelBase, M
         self.network.resample(data=(self.weight_model.A, self.weight_model.W))
 
 
-class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBase, ModelMeanField):
+class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBase,
+                                              ModelMeanField):
     _weight_class = GammaMixtureWeights
     _parent_class = Parents
 
@@ -654,6 +655,9 @@ class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBas
         # Update the network model
         self.network.meanfieldupdate(self.weight_model)
 
+        return self.get_vlb()
+
+    def get_vlb(self):
         # Compute the variational lower bound
         vlb = 0
         for _,_,_,p in self.data_list:
@@ -663,6 +667,55 @@ class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBas
         vlb += self.weight_model.get_vlb()
         vlb += self.network.get_vlb()
         return vlb
+
+    def sgd_step(self, minibatchsize, stepsize):
+        # Sample a minibatch of data
+        assert len(self.data_list) == 1, "We only sample from the first data set"
+        S,_,F,_ = self.data_list[0]
+        T = S.shape[0]
+
+        if not hasattr(self, 'sgd_offset'):
+            self.sgd_offset = 0
+        else:
+            self.sgd_offset += minibatchsize
+            if self.sgd_offset >= T:
+                self.sgd_offset = 0
+
+        # Grab a slice of S
+        sgd_end = min(self.sgd_offset+minibatchsize, T)
+        S_minibatch = S[self.sgd_offset:sgd_end, :]
+        F_minibatch = F[self.sgd_offset:sgd_end, :, :]
+        N_minibatch = S_minibatch.sum(axis=0)
+        T_minibatch = S_minibatch.shape[0]
+        minibatchfrac = float(T_minibatch) / T
+
+        # Create a parent object for this minibatch
+        p = Parents(T_minibatch, self.K, self.B, S_minibatch, F_minibatch)
+
+        # TODO: Resample parents of this minibatch
+        p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
+
+        # Update the bias model given the parents assigned to the background
+        self.bias_model.meanfield_sgdstep(p.EZ0,
+                                          minibatchfrac=minibatchfrac,
+                                          stepsize=stepsize)
+
+        # Update the impulse model given the parents assignments
+        self.impulse_model.meanfield_sgdstep(p.EZ,
+                                             minibatchfrac=minibatchfrac,
+                                             stepsize=stepsize)
+
+        # Update the weight model given the parents assignments
+        # Compute the number of events in the minibatch
+        self.weight_model.meanfield_sgdstep(N=N_minibatch, EZ=p.EZ,
+                                            minibatchfrac=minibatchfrac,
+                                            stepsize=stepsize)
+
+        # Update the network model. This only depends on the global weight model,
+        # so we can just do a standard mean field update
+        self.network.meanfield_sgdstep(self.weight_model,
+                                       minibatchfrac=minibatchfrac,
+                                       stepsize=stepsize)
 
     def resample_from_mf(self):
         self.bias_model.resample_from_mf()

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
 
-from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField
+from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Bernoulli, Gamma
 from pyhawkes.utils.utils import logistic
 
@@ -181,7 +181,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         # Resample A given W
         self._resample_A_given_W(model)
 
-class GammaMixtureWeights(MeanField):
+class GammaMixtureWeights(MeanField, MeanFieldSVI):
     """
     For variational inference we approximate the spike at zero with a smooth
     Gamma distribution that has infinite density at zero.
@@ -261,11 +261,7 @@ class GammaMixtureWeights(MeanField):
     def expected_log_likelihood(self,x):
         raise NotImplementedError()
 
-    def meanfieldupdate(self, EZ, N):
-        self.meanfieldupdate_kappa_v(EZ, N)
-        self.meanfieldupdate_p()
-
-    def meanfieldupdate_p(self):
+    def meanfieldupdate_p(self, stepsize=1.0):
         """
         Update p given the network parameters and the current variational
         parameters of the weight distributions.
@@ -277,24 +273,35 @@ class GammaMixtureWeights(MeanField):
         logit_p += gammaln(self.kappa_0) - self.kappa_0 * np.log(self.nu_0)
         logit_p += self.mf_kappa_0 * np.log(self.mf_v_0) - gammaln(self.mf_kappa_0)
 
-        self.mf_p = logistic(logit_p)
+        p_hat = logistic(logit_p)
+        self.mf_p = (1.0 - stepsize) * self.mf_p + stepsize * p_hat
 
-    def meanfieldupdate_kappa_v(self, EZ, N):
+    def meanfieldupdate_kappa_v(self, EZ, N, minibatchfrac=1.0, stepsize=1.0):
         """
         Update the variational weight distributions
         :return:
         """
         # kappa' = kappa + \sum_t \sum_b z[t,k,k',b]
-        dkappa = EZ.sum(axis=(0,3))
-        self.mf_kappa_0 = self.kappa_0 + dkappa
-        self.mf_kappa_1 = self.network.kappa + dkappa
+        kappa0_hat = self.kappa_0 + EZ.sum(axis=(0,3)) / minibatchfrac
+        kappa1_hat = self.network.kappa + EZ.sum(axis=(0,3)) / minibatchfrac
+        self.mf_kappa_0 = (1.0 - stepsize) * self.mf_kappa_0 + stepsize * kappa0_hat
+        self.mf_kappa_1 = (1.0 - stepsize) * self.mf_kappa_1 + stepsize * kappa1_hat
 
         # v_0'[k,k'] = self.nu_0 + N[k]
-        self.mf_v_0 = self.nu_0 * np.ones((self.K, self.K)) + N[:,None]
+        v0_hat = self.nu_0 * np.ones((self.K, self.K)) + N[:,None] / minibatchfrac
+        self.mf_v_0 = (1.0 - stepsize) * self.mf_v_0 + stepsize * v0_hat
 
         # v_1'[k,k'] = E[v[k,k']] + N[k]
-        self.mf_v_1 = self.network.expected_v() + N[:,None]
+        v1_hat = self.network.expected_v() + N[:,None] / minibatchfrac
+        self.mf_v_1 = (1.0 - stepsize) * self.mf_v_1 + stepsize * v1_hat
 
+    def meanfieldupdate(self, EZ, N):
+        self.meanfieldupdate_kappa_v(EZ, N)
+        self.meanfieldupdate_p()
+
+    def meanfield_sgdstep(self, EZ, N, minibatchfrac,stepsize):
+        self.meanfieldupdate_kappa_v(EZ, N, minibatchfrac=minibatchfrac, stepsize=stepsize)
+        self.meanfieldupdate_p(stepsize=stepsize)
 
     def get_vlb(self):
         """

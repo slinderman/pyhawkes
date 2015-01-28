@@ -1,10 +1,10 @@
 import numpy as np
 from scipy.special import gammaln, psi
 
-from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling
+from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Gamma
 
-class GammaBias(GibbsSampling):
+class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
     """
     Encapsulates the vector of K gamma-distributed bias variables.
     """
@@ -90,18 +90,23 @@ class GammaBias(GibbsSampling):
     def expected_log_likelihood(self,x):
         pass
 
-    def mf_update_lambda0(self, EZ0):
+    def mf_update_lambda0(self, EZ0, minibatchfrac=1.0, stepsize=1.0):
         """
         Update background rates given expected parent assignments.
         :return:
         """
-        self.mf_alpha = self.alpha + EZ0.sum(axis=0)
+        alpha_hat = self.alpha + EZ0.sum(axis=0) / minibatchfrac
+        self.mf_alpha = (1-stepsize) * self.mf_alpha + stepsize * alpha_hat
 
         T = EZ0.shape[0]
-        self.mf_beta  = self.beta + T * self.dt
+        beta_hat = self.beta + T * self.dt / minibatchfrac
+        self.mf_beta  = (1-stepsize) * self.mf_beta + stepsize * beta_hat
 
     def meanfieldupdate(self, EZ0):
         self.mf_update_lambda0(EZ0)
+
+    def meanfield_sgdstep(self, EZ0, minibatchfrac, stepsize):
+        self.mf_update_lambda0(EZ0, minibatchfrac=minibatchfrac, stepsize=stepsize)
 
     def get_vlb(self):
         """

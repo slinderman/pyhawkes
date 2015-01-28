@@ -8,7 +8,7 @@ from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
 
 from pyhawkes.deps.pybasicbayes.abstractions import \
-    BayesianDistribution, GibbsSampling, MeanField
+    BayesianDistribution, GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.deps.pybasicbayes.util.stats import sample_discrete_from_log
 
 from pyhawkes.internals.distributions import Discrete, Bernoulli, \
@@ -280,7 +280,7 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         self.resample_c(A, W)
         self.resample_m()
 
-class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
+class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
     """
     Implement Gibbs sampling for SBM
     """
@@ -423,7 +423,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
     def expected_log_likelihood(self,x):
         pass
 
-    def mf_update_c(self, E_A, E_notA, E_W_given_A, E_ln_W_given_A):
+    def mf_update_c(self, E_A, E_notA, E_W_given_A, E_ln_W_given_A, stepsize=1.0):
         """
         Update the block assignment probabilitlies one at a time.
         This one involves a number of not-so-friendly expectations.
@@ -525,10 +525,12 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
 
             # Normalize the log probabilities to update mf_m
             Z = logsumexp(lp)
-            self.mf_m[k,:] = np.exp(lp - Z)
+            mk_hat = np.exp(lp - Z)
+
+            self.mf_m[k,:] = (1.0 - stepsize) * self.mf_m[k,:] + stepsize * mk_hat
 
 
-    def mf_update_p(self, E_A, E_notA):
+    def mf_update_p(self, E_A, E_notA, stepsize=1.0):
         """
         Mean field update for the CxC matrix of block connection probabilities
         :param E_A:
@@ -539,10 +541,13 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 # Get the KxK matrix of joint class assignment probabilities
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
-                self.mf_tau1[c1,c2] = self.tau1 + (pc1c2 * E_A).sum()
-                self.mf_tau0[c1,c2] = self.tau0 + (pc1c2 * E_notA).sum()
 
-    def mf_update_v(self, E_A, E_W_given_A):
+                tau1_hat = self.tau1 + (pc1c2 * E_A).sum()
+                tau0_hat = self.tau0 + (pc1c2 * E_notA).sum()
+                self.mf_tau1[c1,c2] = (1.0 - stepsize) * self.mf_tau1[c1,c2] + stepsize * tau1_hat
+                self.mf_tau0[c1,c2] = (1.0 - stepsize) * self.mf_tau0[c1,c2] + stepsize * tau0_hat
+
+    def mf_update_v(self, E_A, E_W_given_A, stepsize=1.0):
         """
         Mean field update for the CxC matrix of block connection scales
         :param E_A:
@@ -554,15 +559,18 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                 # Get the KxK matrix of joint class assignment probabilities
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
-                self.mf_alpha[c1,c2] = self.alpha + (pc1c2 * E_A * self.kappa).sum()
-                self.mf_beta[c1,c2]  = self.beta + (pc1c2 * E_A * E_W_given_A).sum()
+                alpha_hat = self.alpha + (pc1c2 * E_A * self.kappa).sum()
+                beta_hat  = self.beta + (pc1c2 * E_A * E_W_given_A).sum()
+                self.mf_alpha[c1,c2] = (1.0 - stepsize) * self.mf_alpha[c1,c2] + stepsize * alpha_hat
+                self.mf_beta[c1,c2]  = (1.0 - stepsize) * self.mf_beta[c1,c2] + stepsize * beta_hat
 
-    def mf_update_m(self):
+    def mf_update_m(self, stepsize=1.0):
         """
         Mean field update of the block probabilities
         :return:
         """
-        self.mf_pi = self.pi + self.mf_m.sum(axis=0)
+        pi_hat = self.pi + self.mf_m.sum(axis=0)
+        self.mf_pi = (1.0 - stepsize) * self.mf_pi + stepsize * pi_hat
 
     def meanfieldupdate(self, weight_model):
         # Get expectations from the weight model
@@ -581,6 +589,25 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                          E_notA=E_notA,
                          E_W_given_A=E_W_given_A,
                          E_ln_W_given_A=E_ln_W_given_A)
+
+    def meanfield_sgdstep(self,weight_model,minibatchfrac,stepsize):
+        # Get expectations from the weight model
+        E_A = weight_model.expected_A()
+        E_notA = 1.0 - E_A
+        E_W_given_A = weight_model.expected_W_given_A(1.0)
+        E_ln_W_given_A = weight_model.expected_log_W_given_A(1.0)
+
+        # Update the remaining SBM parameters
+        self.mf_update_p(E_A=E_A, E_notA=E_notA, stepsize=stepsize)
+        self.mf_update_v(E_A=E_A, E_W_given_A=E_W_given_A, stepsize=stepsize)
+        self.mf_update_m(stepsize=stepsize)
+
+        # Update the block assignments
+        self.mf_update_c(E_A=E_A,
+                         E_notA=E_notA,
+                         E_W_given_A=E_W_given_A,
+                         E_ln_W_given_A=E_ln_W_given_A,
+                         stepsize=stepsize)
 
     def get_vlb(self):
         # import pdb; pdb.set_trace()
