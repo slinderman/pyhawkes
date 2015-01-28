@@ -503,7 +503,22 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                                                         E_beta=E_v_cnotk_to_ck,
                                                         E_ln_beta=E_ln_v_cnotk_to_ck)).sum()
 
-                # TODO: Compute expected log prob of self connection
+                # Compute expected log prob of self connection
+                E_ln_p_ck_to_ck    = psi(self.mf_tau1[ck, ck]) - psi(self.mf_tau0[ck, ck] + self.mf_tau1[ck, ck])
+                E_ln_notp_ck_to_ck = psi(self.mf_tau0[ck, ck]) - psi(self.mf_tau0[ck, ck] + self.mf_tau1[ck, ck])
+                lp[ck] += Bernoulli().negentropy(E_x=E_A[k, k],
+                                                 E_notx=E_notA[k, k],
+                                                 E_ln_p=E_ln_p_ck_to_ck,
+                                                 E_ln_notp=E_ln_notp_ck_to_ck
+                                                )
+                E_v_ck_to_ck    = self.mf_alpha[ck, ck] / self.mf_beta[ck, ck]
+                E_ln_v_ck_to_ck = psi(self.mf_alpha[ck, ck]) - np.log(self.mf_beta[ck, ck])
+                lp[ck] += (E_A[k, k] *
+                           Gamma(self.kappa).negentropy(E_ln_lambda=E_ln_W_given_A[k, k],
+                                                        E_lambda=E_W_given_A[k,k],
+                                                        E_beta=E_v_ck_to_ck,
+                                                        E_ln_beta=E_ln_v_ck_to_ck))
+
 
                 # TODO: Get probability of impulse responses g
 
@@ -568,6 +583,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
                          E_ln_W_given_A=E_ln_W_given_A)
 
     def get_vlb(self):
+        # import pdb; pdb.set_trace()
         vlb = 0
 
         # Get the VLB of the expected class assignments
@@ -589,8 +605,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField):
         vlb -= Beta(self.mf_tau1, self.mf_tau0).negentropy().sum()
 
         # Get the VLB of the weight scale matrix, v
-        # Add the cross entropy of
-        # p(v | alpha, beta)
+        # Add the cross entropy of p(v | alpha, beta)
         vlb += Gamma(self.alpha, self.beta).\
             negentropy(E_lambda=self.mf_alpha/self.mf_beta,
                        E_ln_lambda=psi(self.mf_alpha) - np.log(self.mf_beta)).sum()

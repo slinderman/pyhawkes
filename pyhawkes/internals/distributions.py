@@ -142,14 +142,18 @@ class Gamma:
             E_lambda = self.expected_lambda()
 
         if E_ln_beta is None:
-            E_ln_beta = np.log(self.beta)
+            E_ln_beta = np.log(self.beta) * np.ones_like(E_ln_lambda)
 
         if E_beta is None:
-            E_beta = self.beta
+            E_beta = self.beta * np.ones_like(E_lambda)
 
-        H =  self.alpha * E_ln_beta
-        H += -gammaln(self.alpha)
-        H += (self.alpha - 1) * E_ln_lambda
+        # Make sure everything is the same shape
+        alpha = self.alpha * np.ones_like(E_ln_lambda)
+
+
+        H =  alpha * E_ln_beta
+        H += -gammaln(alpha)
+        H += (alpha - 1.0) * E_ln_lambda
         H += -E_beta * E_lambda
 
         return H

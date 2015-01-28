@@ -16,10 +16,10 @@ def demo(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
-    K = 5
+    K = 20
     T = 1000
     dt = 1.0
-    B = 3
+    B = 1
 
     # Generate from a true model
     true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt, B=B, c=np.zeros(K, dtype=np.int), p=0.2, v=K)

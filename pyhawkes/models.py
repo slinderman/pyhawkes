@@ -60,7 +60,9 @@ class DiscreteTimeStandardHawkesModel(object):
         # DEBUG
         assert WB[0,0,self.B-1] == self.weights[0,1+self.B-1]
         assert WB[0,self.K-1,0] == self.weights[0,1+(self.K-1)*self.B]
-        assert WB[self.K-1,self.K-1,self.B-2] == self.weights[self.K-1,-2]
+
+        if self.B > 2:
+            assert WB[self.K-1,self.K-1,self.B-2] == self.weights[self.K-1,-2]
 
         # Weight matrix is summed over impulse response functions
         WT = WB.sum(axis=2)

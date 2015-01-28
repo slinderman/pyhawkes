@@ -17,13 +17,17 @@ def demo(seed=None):
     np.random.seed(seed)
 
     C = 2
-    K = 50
-    T = 1000
+    K = 20
+    T = 10000
     dt = 1.0
     B = 3
 
     # Create a true model
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, tau1=1, tau0=10, beta=1.0/10.0)
+    p = 0.8 * np.eye(C)
+    v = 10.0 * np.eye(C) + 20.0 * (1-np.eye(C))
+    # m = 0.5 * np.ones(C)
+    c = (0.0 * (np.arange(K) < 10) + 1.0 * (np.arange(K)  >= 10)).astype(np.int)
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, c=c, p=p, v=v)
     c = true_model.network.c
     perm = np.argsort(c)
 
@@ -42,21 +46,26 @@ def demo(seed=None):
     test_model.resample_from_mf()
     test_model.add_data(S)
 
-    # Plot the true and inferred firing rate
     plt.figure(2)
+    im1 = plt.imshow(test_model.weight_model.A * test_model.weight_model.W,
+                     vmin=0.0, vmax=0.6,
+                     interpolation="none", cmap="gray")
+
+    # Plot the true and inferred firing rate
+    plt.figure(3)
     plt.plot(np.arange(T), R[:,1], '-k', lw=2)
     ln = plt.plot(np.arange(T), test_model.compute_rate()[:,1], '-r')[0]
 
     # Plot the block probabilities
-    plt.figure(3)
-    im = plt.imshow(test_model.network.mf_m[perm,:],
+    plt.figure(4)
+    im2 = plt.imshow(test_model.network.mf_m[perm,:],
                     interpolation="none", cmap="gray",
                     aspect=float(C)/K)
     plt.show()
     plt.pause(0.001)
 
     # Gibbs sample
-    N_iters = 100
+    N_iters = 1000
     vlbs = []
     for itr in xrange(N_iters):
         vlbs.append(test_model.meanfield_coordinate_descent_step())
@@ -72,12 +81,17 @@ def demo(seed=None):
         # Update plot
         if itr % 5 == 0:
             plt.figure(2)
-            ln.set_data(np.arange(T), test_model.compute_rate()[:,1])
+            im1.set_data(test_model.weight_model.A * test_model.weight_model.W)
             plt.title("Iteration %d" % itr)
             plt.pause(0.001)
 
             plt.figure(3)
-            im.set_data(test_model.network.mf_m[perm,:])
+            ln.set_data(np.arange(T), test_model.compute_rate()[:,1])
+            plt.title("Iteration %d" % itr)
+            plt.pause(0.001)
+
+            plt.figure(4)
+            im2.set_data(test_model.network.mf_m[perm,:])
             plt.title("Iteration %d" % itr)
             plt.pause(0.001)
 
