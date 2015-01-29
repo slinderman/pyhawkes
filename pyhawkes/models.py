@@ -74,7 +74,7 @@ class DiscreteTimeStandardHawkesModel(object):
     def bias(self):
         return self.weights[:,0]
 
-    def add_data(self, S):
+    def add_data(self, S, F=None, minibatchsize=None):
         """
         Add a data set to the list of observations.
         First, filter the data with the impulse response basis,
@@ -88,24 +88,34 @@ class DiscreteTimeStandardHawkesModel(object):
                "Data must be a TxK array of event counts"
 
         T = S.shape[0]
-        N = np.atleast_1d(S.sum(axis=0))
 
-        # Filter the data into a TxKxB array
-        Ftens = self.basis.convolve_with_basis(S)
+        if F is None:
+            # Filter the data into a TxKxB array
+            Ftens = self.basis.convolve_with_basis(S)
 
-        # Flatten this into a T x (KxB) matrix
-        # [F00, F01, F02, F10, F11, ... F(K-1)0, F(K-1)(B-1)]
-        F = Ftens.reshape((T, self.K * self.B))
+            # Flatten this into a T x (KxB) matrix
+            # [F00, F01, F02, F10, F11, ... F(K-1)0, F(K-1)(B-1)]
+            F = Ftens.reshape((T, self.K * self.B))
 
-        # Prepend a column of ones
-        F = np.concatenate((np.ones((T,1)), F), axis=1)
+            # Prepend a column of ones
+            F = np.concatenate((np.ones((T,1)), F), axis=1)
 
-        # # Check that \sum_t F[t,k,b] ~= Nk / dt
-        # Fsum = F.sum(axis=0)
-        # print "F_err:  ", Fsum - N/self.dt
+            # # Check that \sum_t F[t,k,b] ~= Nk / dt
+            # Fsum = F.sum(axis=0)
+            # print "F_err:  ", Fsum - N/self.dt
 
-        # Add to the data list
-        self.data_list.append((S, N, F))
+        # If minibatchsize is not None, add minibatches of data
+        if minibatchsize is not None:
+            for offset in np.arange(T, step=minibatchsize):
+                end = min(offset+minibatchsize, T)
+                S_mb = S[offset:end,:]
+                F_mb = F[offset:end,:]
+
+                # Add minibatch to the data list
+                self.data_list.append((S_mb, F_mb))
+
+        else:
+            self.data_list.append((S,F))
 
     def check_stability(self):
         """
@@ -133,7 +143,7 @@ class DiscreteTimeStandardHawkesModel(object):
         """
         if index is None:
             index = 0
-        _,_,F = self.data_list[index]
+        _,F = self.data_list[index]
 
         if ks is None:
             ks = np.arange(self.K)
@@ -158,7 +168,7 @@ class DiscreteTimeStandardHawkesModel(object):
         """
         ll = 0
         for index,data in enumerate(self.data_list):
-            S,N,F = data
+            S,F = data
             R = self.compute_rate(index)
             ll += (-gammaln(S+1) + S * np.log(R) -R*self.dt).sum()
 
@@ -196,7 +206,7 @@ class DiscreteTimeStandardHawkesModel(object):
         return grad
 
     def _d_ll_d_rate(self, index, k):
-        S,_,_ = self.data_list[index]
+        S,_ = self.data_list[index]
         T = S.shape[0]
 
         rate = self.compute_rate(index, k)
@@ -205,7 +215,7 @@ class DiscreteTimeStandardHawkesModel(object):
         return grad
 
     def _d_rate_d_W(self, index, k):
-        _,_,F = self.data_list[index]
+        _,F = self.data_list[index]
         grad = F
         return grad
 
@@ -246,11 +256,35 @@ class DiscreteTimeStandardHawkesModel(object):
 
         return self.weights, ll, grad
 
-    def sgd_step(self, prev_grad, stepsz):
+    def sgd_step(self, prev_grad, learning_rate, decay):
         """
         Take a step of the stochastic gradient descent algorithm
         """
-        raise NotImplementedError()
+        if prev_grad is None:
+            prev_grad = np.zeros((self.K, 1+self.K*self.B))
+
+        # Compute this gradient row by row
+        grad = np.zeros((self.K, 1+self.K*self.B))
+
+        # Get a minibatch
+        mb = np.random.choice(len(self.data_list))
+        T = self.data_list[mb][0].shape[0]
+
+        # Compute gradient and take a step for each process
+        for k in xrange(self.K):
+            grad[k,:] = self.compute_gradient(k, indices=[mb]) / T
+            velocity = decay * prev_grad[k,:] + (1.0-decay) * grad[k,:]
+
+            # Gradient steps are taken in log weight space
+            log_weightsk = np.log(self.weights[k,:]) + learning_rate * velocity
+
+            # The true weights are stored
+            self.weights[k,:] = np.exp(log_weightsk)
+
+        # Compute the current objective
+        ll = self.log_likelihood()
+
+        return self.weights, ll, grad
 
 
 class _DiscreteTimeNetworkHawkesModelBase(object):
@@ -344,7 +378,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         """
         eigs = np.linalg.eigvals(self.weight_model.A * self.weight_model.W)
         maxeig = np.amax(np.real(eigs))
-        # print "Max eigenvalue: ", maxeig
+        print "Max eigenvalue: ", maxeig
         if maxeig < 1.0:
             return True
         else:
