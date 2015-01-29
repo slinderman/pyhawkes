@@ -14,10 +14,12 @@ def plot_network(A, W, vmax=None):
     if vmax is None:
         vmax = np.amax(A*W)
 
-    plt.imshow(A*W, interpolation="none", cmap='gray', vmin=0, vmax=vmax)
+    im = plt.imshow(A*W, interpolation="none", cmap='gray', vmin=0, vmax=vmax)
     plt.ylabel('k')
     plt.xlabel('k\'')
     plt.title('W_{k \\to k\'}')
     plt.colorbar()
     plt.show()
+
+    return im
 

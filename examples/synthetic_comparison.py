@@ -30,19 +30,19 @@ def run_comparison(data_path, output_path, seed=None):
     dt_max = true_model.dt_max
 
     # Fit a standard Hawkes model with SGD
-    # standard_model = fit_standard_hawkes_model(S, K, B, dt, dt_max)
-    # # Pop the data list and save the output
-    # standard_model.data_list.pop()
-    # with open(output_path + ".sgd.pkl", 'w') as f:
-    #     cPickle.dump(standard_model, f, protocol=-1)
+    standard_model = fit_standard_hawkes_model(S, K, B, dt, dt_max)
+    # Pop the data list and save the output
+    standard_model.data_list.pop()
+    with open(output_path + ".sgd.pkl", 'w') as f:
+        cPickle.dump(standard_model, f, protocol=-1)
 
     # Fit a network Hawkes model with Gibbs
-    gibbs_model = fit_network_hawkes_gibbs(S, K, B, dt, dt_max)
-
-    # Pop the data list and save the output
-    gibbs_model.data_list.pop()
-    with open(output_path + ".gibbs.pkl", 'w') as f:
-        cPickle.dump(gibbs_model, f, protocol=-1)
+    # gibbs_model = fit_network_hawkes_gibbs(S, K, B, dt, dt_max)
+    #
+    # # Pop the data list and save the output
+    # gibbs_model.data_list.pop()
+    # with open(output_path + ".gibbs.pkl", 'w') as f:
+    #     cPickle.dump(gibbs_model, f, protocol=-1)
 
 
 def fit_standard_hawkes_model(S, K, B, dt, dt_max):
@@ -54,8 +54,14 @@ def fit_standard_hawkes_model(S, K, B, dt, dt_max):
     print "Fitting the data with a standard Hawkes model"
 
     # Make a new model for inference
-    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B, l2_penalty=0, l1_penalty=0)
+    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                 l2_penalty=0, l1_penalty=0)
     test_model.add_data(S, minibatchsize=256)
+
+    plt.ion()
+    im = plot_network(np.ones((K,K)), test_model.W, vmax=0.5)
+    plt.pause(0.001)
+
 
     # Gradient descent
     N_steps = 1000
@@ -71,6 +77,8 @@ def fit_standard_hawkes_model(S, K, B, dt, dt_max):
 
         if itr % 1 == 0:
             print "Iteration ", itr, "\t LL: ", ll
+            im.set_data(np.ones((K,K)) * test_model.W)
+            plt.pause(0.001)
 
     plt.figure()
     plt.plot(np.arange(N_steps), lls)
@@ -86,8 +94,14 @@ def fit_network_hawkes_gibbs(S, K, B, dt, dt_max):
     print "Fitting the data with a network Hawkes model using Gibbs sampling"
 
     # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelGibbs(C=5, K=K, dt=dt, dt_max=dt_max, B=B)
+    test_model = DiscreteTimeNetworkHawkesModelGibbs(C=5, K=K, dt=dt, dt_max=dt_max, B=B,
+                                                     alpha=1.0, beta=1.0/20.0)
     test_model.add_data(S)
+
+    plt.ion()
+    im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.5)
+    plt.pause(0.001)
+
 
     # Gibbs sample
     N_samples = 200
@@ -99,6 +113,9 @@ def fit_network_hawkes_gibbs(S, K, B, dt, dt_max):
 
         if itr % 1 == 0:
             print "Iteration ", itr, "\t LL: ", lps[-1]
+            im.set_data(test_model.weight_model.A * \
+                        test_model.weight_model.W)
+            plt.pause(0.001)
 
     # Compute sample statistics for second half of samples
     A_samples       = np.array([A for A,_,_,_,_,_,_,_ in samples])

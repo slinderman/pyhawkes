@@ -20,7 +20,7 @@ def demo(seed=None):
     K = 20
     T = 1000
     dt = 1.0
-    B = 1
+    B = 3
 
     # Create a true model
     p = 0.8 * np.eye(C)
@@ -57,7 +57,7 @@ def demo(seed=None):
     N_steps = 1000
     lls = []
     for itr in xrange(N_steps):
-        W,ll,grad = test_model.gradient_descent_step(stepsz=0.001)
+        W,ll,grad = test_model.gradient_descent_step(stepsz=0.0001)
         lls.append(ll)
 
         # Update plot
@@ -86,4 +86,5 @@ def demo(seed=None):
 # demo(2203329564)
 # demo(1940839255)
 # demo(288408413)
-demo(2074381354)
+# demo(2074381354)
+demo()

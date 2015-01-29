@@ -68,6 +68,18 @@ class DiscreteTimeStandardHawkesModel(object):
         WT = WB.sum(axis=2)
         # Then we transpose so that the weight matrix is (outgoing x incoming)
         W = WT.T
+
+        # DEBUG
+        Wmanual = np.zeros((self.K, self.K))
+        for kin in xrange(self.K):
+            for kout in xrange(self.K):
+                start = 1+kout*self.B
+                end = 1+(kout+1)*self.B
+                Wmanual[kout,kin] = self.weights[kin,start:end].sum()
+
+        if not np.allclose(W, Wmanual):
+            import pdb; pdb.set_trace()
+
         return W
 
     @property
@@ -96,6 +108,11 @@ class DiscreteTimeStandardHawkesModel(object):
             # Flatten this into a T x (KxB) matrix
             # [F00, F01, F02, F10, F11, ... F(K-1)0, F(K-1)(B-1)]
             F = Ftens.reshape((T, self.K * self.B))
+            assert np.allclose(F[:,0], Ftens[:,0,0])
+            if self.B > 1:
+                assert np.allclose(F[:,1], Ftens[:,0,1])
+            if self.K > 1:
+                assert np.allclose(F[:,self.B], Ftens[:,1,0])
 
             # Prepend a column of ones
             F = np.concatenate((np.ones((T,1)), F), axis=1)
