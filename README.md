@@ -10,8 +10,8 @@ To check out, run
 To compile the cython code, run
 `python setup.py build_ext --inplace`
   
-The original codebase was written with PyCUDA and is not particularly clean. I am rewriting it in Python with Cython 
-  offloads. Please check back for updates! 
-
+The original codebase was written with PyCUDA and is not particularly clean.
+The most recent code changes correspond to a new parameterization of the
+Hawkes process model that will be outlined in a forthcoming paper.
   
   

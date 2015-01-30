@@ -315,15 +315,16 @@ class DiscreteTimeStandardHawkesModel(object):
 
         return self.weights, ll, grad
 
-    def sgd_step(self, prev_grad, learning_rate, decay):
+    def sgd_step(self, prev_velocity, learning_rate, momentum):
         """
         Take a step of the stochastic gradient descent algorithm
         """
-        if prev_grad is None:
-            prev_grad = np.zeros((self.K, 1+self.K*self.B))
+        if prev_velocity is None:
+            prev_velocity = np.zeros((self.K, 1+self.K*self.B))
 
         # Compute this gradient row by row
         grad = np.zeros((self.K, 1+self.K*self.B))
+        velocity = np.zeros((self.K, 1+self.K*self.B))
 
         # Get a minibatch
         mb = np.random.choice(len(self.data_list))
@@ -332,10 +333,10 @@ class DiscreteTimeStandardHawkesModel(object):
         # Compute gradient and take a step for each process
         for k in xrange(self.K):
             grad[k,:] = self.compute_gradient(k, indices=[mb]) / T
-            velocity = decay * prev_grad[k,:] + (1.0-decay) * grad[k,:]
+            velocity[k,:] = momentum * prev_velocity[k,:] + learning_rate * grad[k,:]
 
             # Gradient steps are taken in log weight space
-            log_weightsk = np.log(self.weights[k,:]) + learning_rate * velocity
+            log_weightsk = np.log(self.weights[k,:]) + velocity[k,:]
 
             # The true weights are stored
             self.weights[k,:] = np.exp(log_weightsk)
@@ -343,7 +344,7 @@ class DiscreteTimeStandardHawkesModel(object):
         # Compute the current objective
         ll = self.log_likelihood()
 
-        return self.weights, ll, grad
+        return self.weights, ll, velocity
 
 
 class _DiscreteTimeNetworkHawkesModelBase(object):

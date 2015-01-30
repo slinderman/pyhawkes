@@ -4,9 +4,34 @@ import matplotlib.pyplot as plt
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs, DiscreteTimeStandardHawkesModel
 from pyhawkes.plotting.plotting import plot_network
 
+
+def sample_from_network_hawkes(C, K, T, dt, B):
+    # Create a true model
+    p = 0.8 * np.eye(C)
+    v = 10.0 * np.eye(C) + 20.0 * (1-np.eye(C))
+    c = (0.0 * (np.arange(K) < 10) + 1.0 * (np.arange(K)  >= 10)).astype(np.int)
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, c=c, p=p, v=v)
+
+    # Plot the true network
+    plt.ion()
+    plot_network(true_model.weight_model.A,
+                 true_model.weight_model.W,
+                 vmax=0.5)
+
+    # Sample from the true model
+    S,R = true_model.generate(T=T)
+
+    # Return the spike count matrix
+    return S, R, true_model
+
 def demo(seed=None):
     """
-    Create a discrete time Hawkes model and generate from it.
+    Suppose we have a very long recording such that computing gradients of
+    the log likelihood is quite expensive. Here we explore the use of
+    stochastic gradient descent to fit the standard Hawkes model, which has
+    a convex log likelihood. We first initialize the parameters using BFGS
+    on a manageable subset of the data. Then we use SGD to refine the parameters
+    on the entire dataset.
 
     :return:
     """
@@ -16,32 +41,30 @@ def demo(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
-    C = 2
-    K = 20
-    T = 1000
-    dt = 1.0
-    B = 1
+    C = 1       # Number of clusters in the true data
+    K = 10      # Number of nodes
+    T = 10000   # Number of time bins to simulate
+    dt = 1.0    # Time bin size
+    B = 3       # Number of basis functions
 
-    # Create a true model
-    p = 0.8 * np.eye(C)
-    v = 10.0 * np.eye(C) + 20.0 * (1-np.eye(C))
-    # m = 0.5 * np.ones(C)
-    c = (0.0 * (np.arange(K) < 10) + 1.0 * (np.arange(K)  >= 10)).astype(np.int)
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, c=c, p=p, v=v)
-    c = true_model.network.c
-    perm = np.argsort(c)
+    # Sample from the network Hawkes model
+    S, R, true_model = sample_from_network_hawkes(C, K, T, dt, B)
 
-    # Plot the true network
-    plt.ion()
-    plot_network(true_model.weight_model.A[np.ix_(perm, perm)],
-                 true_model.weight_model.W[np.ix_(perm, perm)])
-    plt.pause(0.001)
+    # Make a model to initialize the parameters
+    init_len   = 256
+    init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B,
+                                                 l2_penalty=0, l1_penalty=0)
+    init_model.add_data(S[:init_len, :])
 
-    # Sample from the true model
-    S,R = true_model.generate(T=T)
+    print "Initializing with BFGS on first ", init_len, " time bins."
+    init_model.fit_with_bfgs()
 
-    # Make a new model for inference
-    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, l2_penalty=0, l1_penalty=10)
+    # Make another model for inference
+    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B,
+                                                 l2_penalty=0, l1_penalty=0)
+    # Initialize with the BFGS parameters
+    test_model.weights = init_model.weights
+    # Add the data in minibatches
     test_model.add_data(S, minibatchsize=256)
 
     # Plot the true and inferred firing rate
@@ -56,10 +79,10 @@ def demo(seed=None):
     N_steps = 10000
     lls = []
     learning_rate = 0.01 * np.ones(N_steps)
-    decay = 0.8 * np.ones(N_steps)
-    prev_grad = None
+    momentum = 0.8 * np.ones(N_steps)
+    prev_velocity = None
     for itr in xrange(N_steps):
-        W,ll,prev_grad = test_model.sgd_step(prev_grad, learning_rate[itr], decay[itr])
+        W,ll,prev_velocity = test_model.sgd_step(prev_velocity, learning_rate[itr], momentum[itr])
         lls.append(ll)
 
         # Update plot

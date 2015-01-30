@@ -61,10 +61,10 @@ def demo(seed=None):
     plt.show()
 
     # Gradient descent
-    N_steps = 1000
+    N_steps = 10000
     lls = []
     for itr in xrange(N_steps):
-        W,ll,grad = test_model.gradient_descent_step(stepsz=0.0001)
+        W,ll,grad = test_model.gradient_descent_step(stepsz=0.001)
         lls.append(ll)
 
         # Update plot
