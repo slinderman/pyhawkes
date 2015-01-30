@@ -29,10 +29,8 @@ def test_gradients():
                np.log(test_model.weights[0,:]))
 
     print "Checking initial gradient: "
-    test_model.initialize_with_gibbs(true_model.bias_model.lambda0,
-                                     true_model.weight_model.A,
-                                     true_model.weight_model.W,
-                                     true_model.impulse_model.g)
+    test_model.initialize_with_gibbs_model(true_model)
+
     print gradient(np.log(test_model.weights[0,:]))
     check_grad(objective, gradient,
                np.log(test_model.weights[0,:]))

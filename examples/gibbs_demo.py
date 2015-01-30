@@ -1,10 +1,43 @@
 import numpy as np
+# np.seterr(all='raise')
+
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, auc_score
 
-from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs
+from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs, DiscreteTimeStandardHawkesModel
 from pyhawkes.plotting.plotting import plot_network
+
+def sample_from_network_hawkes(C, K, T, dt, B):
+    # Create a true model
+    kappa = 3.0
+
+    # K=20, C=2
+    # p = 0.75 * np.eye(C)
+    # v = kappa * (8.0 * np.eye(C) + 25.0 * (1-np.eye(C)))
+
+    # K=20, C=5
+    p = 0.9 * np.eye(C)
+    v = kappa * (5.0 * np.eye(C) + 25.0 * (1-np.eye(C)))
+
+    assert K % C == 0
+    c = np.arange(C).repeat((K // C))
+    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
+
+    assert true_model.check_stability()
+
+    # Plot the true network
+    plt.ion()
+    plot_network(true_model.weight_model.A,
+                 true_model.weight_model.W)
+    plt.pause(0.001)
+
+    # Sample from the true model
+    S,R = true_model.generate(T=T)
+
+    # Return the spike count matrix
+    return S, R, true_model
+
 
 def demo(seed=None):
     """
@@ -18,39 +51,43 @@ def demo(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
-    C = 2
-    K = 50
+    C = 4
+    K = 20
     T = 1000
     dt = 1.0
     B = 3
+    kappa = 3.0
 
-    # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
-    S,R = true_model.generate(T=T)
-    c = true_model.network.c
-    perm = np.argsort(c)
+    S, R, true_model = sample_from_network_hawkes(C, K, T, dt, B)
 
-    # Plot the true network
-    plt.ion()
-    plot_network(true_model.weight_model.A[np.ix_(perm, perm)],
-                 true_model.weight_model.W[np.ix_(perm, perm)])
-    plt.pause(0.001)
+    # Make a model to initialize the parameters
+    init_len   = T
+    init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B,
+                                                 l2_penalty=0, l1_penalty=0)
+    init_model.add_data(S[:init_len, :])
 
+    print "Initializing with BFGS on first ", init_len, " time bins."
+    init_model.fit_with_bfgs()
 
-    # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
+    # Make another new model for inference
+    test_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B,
+                                                     kappa=kappa, beta=1.0/K,
+                                                     tau0=(C-1.0))
     test_model.add_data(S)
 
+    # Initialize with the standard model parameters
+    test_model.initialize_with_standard_model(init_model)
+
     # Plot the true and inferred firing rate
-    plt.figure()
+    plt.figure(2)
     plt.plot(np.arange(T), R[:,0], '-k', lw=2)
     plt.ion()
     ln = plt.plot(np.arange(T), test_model.compute_rate()[:,0], '-r')[0]
     plt.show()
 
     # Plot the block affiliations
-    plt.figure()
-    im = plt.imshow(test_model.network.c[perm,:],
+    plt.figure(3)
+    im = plt.imshow(test_model.network.c[:,None] * np.ones((1,C)),
                     interpolation="none", cmap="gray",
                     aspect=float(C)/K)
     plt.show()
@@ -65,12 +102,19 @@ def demo(seed=None):
         samples.append(test_model.resample_and_copy())
 
         # Update plot
-        if itr % 5 == 0:
+        if itr % 1 == 0:
+            print "Gibbs iteration ", itr
+
+            plt.figure(2)
             ln.set_data(np.arange(T), test_model.compute_rate()[:,0])
             plt.title("Iteration %d" % itr)
             plt.pause(0.001)
 
-    plt.ioff()
+            plt.figure(3)
+            im.set_data(test_model.network.c[:,None] * np.ones((1,C)))
+            plt.title("Iteration %d" % itr)
+            plt.pause(0.001)
+
 
     # Compute sample statistics for second half of samples
     A_samples       = np.array([A for A,_,_,_,_,_,_,_ in samples])
@@ -125,6 +169,9 @@ def demo(seed=None):
     plt.plot(np.arange(N_samples), arss, '-b')
     plt.xlabel("Iteration")
     plt.ylabel("Clustering score")
+
+
+    plt.ioff()
     plt.show()
 
 # demo(2203329564)

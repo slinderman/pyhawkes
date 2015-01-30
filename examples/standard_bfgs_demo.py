@@ -51,10 +51,7 @@ def demo(seed=None):
     test_model.add_data(S)
 
     # DEBUG: Initialize with the true parameters of the network Hawkes model
-    # test_model.initialize_with_gibbs(true_model.bias_model.lambda0,
-    #                                  true_model.weight_model.A,
-    #                                  true_model.weight_model.W,
-    #                                  true_model.impulse_model.g)
+    # test_model.initialize_with_gibbs_model(true_model)
 
     test_model.fit_with_bfgs()
 

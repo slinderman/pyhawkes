@@ -44,7 +44,7 @@ class DiscreteTimeStandardHawkesModel(object):
         # self.weights = abs((1.0/(1+self.K*self.B)) * np.random.randn(self.K, 1 + self.K * self.B))
 
         # Initialize bias to mean rate and weights to zero
-        self.weights = 1e-1*np.ones((self.K, 1 + self.K*self.B))
+        self.weights = 1e-2*np.ones((self.K, 1 + self.K*self.B))
         self.weights[:,0] = 1.0
 
         # Save the regularization penalties
@@ -54,17 +54,21 @@ class DiscreteTimeStandardHawkesModel(object):
         # Initialize the data list to empty
         self.data_list = []
 
-    def initialize_with_gibbs(self, lambda0, A, W, g):
+    def initialize_with_gibbs_model(self, gibbs_model):
         """
         Initialize with a sample from the network Hawkes model
         :param W:
         :param g:
         :return:
         """
-        assert lambda0.shape == (self.K,)
-        assert A.shape == (self.K, self.K)
-        assert W.shape == (self.K, self.K)
-        assert g.shape == (self.K, self.K, self.B)
+        assert isinstance(gibbs_model, DiscreteTimeNetworkHawkesModelGibbs)
+        assert gibbs_model.K == self.K
+        assert gibbs_model.B == self.B
+
+        lambda0 = gibbs_model.bias_model.lambda0,
+        A = gibbs_model.weight_model.A,
+        W = gibbs_model.weight_model.W,
+        g = gibbs_model.impulse_model.g
 
         Weff = A * W
         for k in xrange(self.K):
@@ -283,10 +287,12 @@ class DiscreteTimeStandardHawkesModel(object):
         """
         def objective(x, k):
             self.weights[k,:] = np.exp(x)
+            self.weights[k,:] = np.nan_to_num(self.weights[k,:])
             return -self.log_likelihood()
 
         def gradient(x, k):
             self.weights[k,:] = np.exp(x)
+            self.weights[k,:] = np.nan_to_num(self.weights[k,:])
             return -self.compute_gradient(k)
 
         itr = [0]
@@ -399,6 +405,58 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         # Initialize the data list to empty
         self.data_list = []
+
+    def initialize_with_standard_model(self, standard_model):
+        """
+        Initialize with a standard Hawkes model. Typically this will have
+        been fit by gradient descent or BFGS, and we just want to copy
+        over the parameters to get a good starting point for MCMC or VB.
+        :param W:
+        :param g:
+        :return:
+        """
+        assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
+        assert standard_model.K == self.K
+        assert standard_model.B == self.B
+
+        lambda0 = standard_model.weights[:,0]
+
+        # Get the connection weights
+        Wg = standard_model.weights[:,1:].reshape((self.K, self.K, self.B))
+        # Permute to out x in x basis
+        Wg = np.transpose(Wg, [1,0,2])
+        # Sum to get the total weight
+        W = Wg.sum(axis=2) + 1e-6
+
+        # The impulse responses are normalized weights
+        g = Wg / W[:,:,None]
+
+
+        # We need to decide how to set A.
+        # The simplest is to initialize it to all ones, but
+        # This immediately puts us in a bad mode of the distribution
+        # which we cannot escape. Instead, start with a sparse matrix
+        # of only strong connections. What sparsity? How about the
+        # mean under the network model
+        sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
+        A = W > np.percentile(W, (1.0 - sparsity) * 100)
+
+        # Set the model parameters
+        self.bias_model.lambda0 = lambda0.copy('C')
+        self.weight_model.A     = A.copy('C')
+        self.weight_model.W     = W.copy('C')
+        self.impulse_model.g    = g.copy('C')
+
+        # TODO: Cluster the standard model with kmeans in order to
+        # initialize the network?
+        from sklearn.cluster import KMeans
+
+        features = []
+        for k in xrange(self.K):
+            features.append(np.concatenate((W[:,k], W[k,:])))
+
+        self.network.c = KMeans(n_clusters=self.C).fit(np.array(features)).labels_
+
 
     def add_data(self, S):
         """
@@ -722,6 +780,13 @@ class DiscreteTimeNetworkHawkesModelGibbs(_DiscreteTimeNetworkHawkesModelBase, M
         # Update the network model
         self.network.resample(data=(self.weight_model.A, self.weight_model.W))
 
+    def initialize_with_standard_model(self, standard_model):
+        super(DiscreteTimeNetworkHawkesModelGibbs, self).\
+            initialize_with_standard_model(standard_model)
+
+        # Update the parents.
+        for _,_,_,p in self.data_list:
+            p.resample(self.bias_model, self.weight_model, self.impulse_model)
 
 class DiscreteTimeNetworkHawkesModelMeanField(_DiscreteTimeNetworkHawkesModelBase,
                                               ModelMeanField):
