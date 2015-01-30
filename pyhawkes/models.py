@@ -6,6 +6,7 @@ import copy
 
 import numpy as np
 from scipy.special import gammaln
+from scipy.optimize import minimize
 
 from pyhawkes.deps.pybasicbayes.models import ModelGibbsSampling, ModelMeanField
 from pyhawkes.internals.bias import GammaBias
@@ -23,7 +24,7 @@ class DiscreteTimeStandardHawkesModel(object):
     """
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
-                 l2_penalty=10.0, l1_penalty=0.0):
+                 l2_penalty=0.0, l1_penalty=0.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
 
@@ -52,6 +53,23 @@ class DiscreteTimeStandardHawkesModel(object):
 
         # Initialize the data list to empty
         self.data_list = []
+
+    def initialize_with_gibbs(self, lambda0, A, W, g):
+        """
+        Initialize with a sample from the network Hawkes model
+        :param W:
+        :param g:
+        :return:
+        """
+        assert lambda0.shape == (self.K,)
+        assert A.shape == (self.K, self.K)
+        assert W.shape == (self.K, self.K)
+        assert g.shape == (self.K, self.K, self.B)
+
+        Weff = A * W
+        for k in xrange(self.K):
+            self.weights[k,0]  = lambda0[k]
+            self.weights[k,1:] = (Weff[:,k][:,None] * g[:,k,:]).ravel()
 
     @property
     def W(self):
@@ -247,18 +265,42 @@ class DiscreteTimeStandardHawkesModel(object):
     def _d_reg_d_W(self, k):
         """
         Compute gradient of regularization
-        d/dW  -L2 * W^2 -L1 * |W|
+        d/dW  -1/2 * L2 * W^2 -L1 * |W|
             = -2*L2*W -L1
 
         since W >= 0
         """
-        d_reg_d_W = -2*self.l2_penalty*self.weights[k,:] -self.l1_penalty
+        d_reg_d_W = -self.l2_penalty*self.weights[k,:] -self.l1_penalty
 
         # Don't penalize the bias
         d_reg_d_W[0] = 0
 
         return d_reg_d_W
 
+    def fit_with_bfgs(self):
+        """
+        Fit the model with BFGS
+        """
+        def objective(x, k):
+            self.weights[k,:] = np.exp(x)
+            return -self.log_likelihood()
+
+        def gradient(x, k):
+            self.weights[k,:] = np.exp(x)
+            return -self.compute_gradient(k)
+
+        itr = [0]
+        def callback(x):
+            if itr[0] % 10 == 0:
+                print "Iteration: ", itr[0], "\t LL: ", self.log_likelihood()
+            itr[0] = itr[0] + 1
+
+        for k in xrange(self.K):
+            print "Optimizing process ", k
+            itr[0] = 0
+            x0 = np.log(self.weights[k,:])
+            res = minimize(objective, x0, args=(k,), jac=gradient, callback=callback)
+            self.weights[k,:] = np.exp(res.x)
 
     def gradient_descent_step(self, stepsz=0.01):
         grad = np.zeros((self.K, 1+self.K*self.B))
