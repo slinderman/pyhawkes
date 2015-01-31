@@ -110,6 +110,7 @@ class GibbsParents(_ParentsBase, GibbsSampling):
         # Call cython function to resample parents
         lambda0 = bias_model.lambda0
         W = weight_model.A * weight_model.W
+        # W = weight_model.W
         g = impulse_model.g
         F = self.F
         resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
@@ -126,6 +127,22 @@ class MeanFieldParents(_ParentsBase, MeanField):
         # Initialize arrays for mean field parameters
         self.EZ  = np.zeros((T,K,K,B))
         self.EZ0 = np.copy(self.S).astype(np.float)
+
+        # Initialize parent arrays for Gibbs sampling
+        # Attribute all events to the background.
+        self.Z  = np.zeros((T,K,K,B), dtype=np.int32)
+        self.Z0 = np.copy(self.S).astype(np.int32)
+
+    def _check_Z(self):
+        """
+        Check that Z adds up to the correct amount
+        :return:
+        """
+        Zsum = self.Z0 + self.Z.sum(axis=(1,3))
+        # assert np.allclose(self.S, Zsum), "_check_Z failed. Zsum does not add up to S!"
+        if not np.allclose(self.S, Zsum):
+            print "_check_Z failed. Zsum does not add up to S!"
+            import pdb; pdb.set_trace()
 
     def _check_EZ(self):
         """
@@ -252,6 +269,28 @@ class MeanFieldParents(_ParentsBase, MeanField):
         vlb += (-self.EZ * ln_u).sum()
 
         return vlb
+
+    def resample(self, bias_model, weight_model, impulse_model):
+        """
+        Resample the parents given the bias_model, weight_model, and impulse_model.
+
+        :param bias_model:
+        :param weight_model:
+        :param impulse_model:
+        :return:
+        """
+
+        # Resample the parents in python
+        # self._resample_Z_python(bias_model, weight_model, impulse_model)
+
+        # Call cython function to resample parents
+        lambda0 = bias_model.lambda0
+        W = weight_model.W
+        g = impulse_model.g
+        F = self.F
+        resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
+
+        self._check_Z()
 
 
 

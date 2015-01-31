@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_network(A, W, vmax=None):
+def plot_network(A, W, vmax=None, cmap="Greys"):
     """
     Plot an image of the network
     :param A:
@@ -14,7 +14,7 @@ def plot_network(A, W, vmax=None):
     if vmax is None:
         vmax = np.amax(A*W)
 
-    im = plt.imshow(A*W, interpolation="none", cmap='gray', vmin=0, vmax=vmax)
+    im = plt.imshow(A*W, interpolation="none", cmap=cmap, vmin=0, vmax=vmax)
     plt.ylabel('k')
     plt.xlabel('k\'')
     plt.title('W_{k \\to k\'}')

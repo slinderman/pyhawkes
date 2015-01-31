@@ -181,7 +181,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         # Resample A given W
         self._resample_A_given_W(model)
 
-class GammaMixtureWeights(MeanField, MeanFieldSVI):
+class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     """
     For variational inference we approximate the spike at zero with a smooth
     Gamma distribution that has infinite density at zero.
@@ -219,8 +219,42 @@ class GammaMixtureWeights(MeanField, MeanFieldSVI):
         # self.mf_v_1 = network.alpha / network.beta * np.ones((self.K, self.K))
         self.mf_v_1 = network.V * np.ones((self.K, self.K))
 
+        # Initialize parameters A and W
+        self.A = np.ones((self.K, self.K))
+        self.W = np.zeros((self.K, self.K))
+        self.resample()
+
     def log_likelihood(self, x):
-        raise NotImplementedError()
+        """
+        Compute the log likelihood of the given A and W
+        :param x:  an (A,W) tuple
+        :return:
+        """
+        A,W = x
+        assert isinstance(A, np.ndarray) and A.shape == (self.K,self.K), \
+            "A must be a KxK adjacency matrix"
+        assert isinstance(W, np.ndarray) and W.shape == (self.K,self.K), \
+            "W must be a KxK weight matrix"
+
+        # LL of A
+        rho = self.network.P
+        lp_A = (A * np.log(rho) + (1-A) * np.log(1-rho))
+
+        # Get the shape and scale parameters from the network model
+        kappa = self.network.kappa
+        v = self.network.V
+
+        # Add the LL of the gamma weights
+        lp_W = A * (kappa * np.log(v) - gammaln(kappa)
+                    + (kappa-1) * np.log(W) - v * W) + \
+               (1-A) * (self.kappa_0 * np.log(self.nu_0) - gammaln(self.kappa_0)
+                        + (self.kappa_0-1) * np.log(W) - self.nu_0 * W)
+        ll = lp_A.sum() + lp_W.sum()
+
+        return ll
+
+    def log_probability(self):
+        return self.log_likelihood((self.A, self.W))
 
     def rvs(self,size=[]):
         raise NotImplementedError()
@@ -355,6 +389,78 @@ class GammaMixtureWeights(MeanField, MeanFieldSVI):
         self.A = np.random.rand(self.K, self.K) < self.mf_p
         self.W = (1-self.A) * np.random.gamma(self.mf_kappa_0, 1.0/self.mf_v_0)
         self.W += self.A * np.random.gamma(self.mf_kappa_1, 1.0/self.mf_v_1)
+
+    # Gibbs sampling
+    def _get_suff_statistics(self, N, Z):
+        """
+        Compute the sufficient statistics from the data set.
+        :param data: a TxK array of event counts assigned to the background process
+        :return:
+        """
+        ss = np.zeros((2, self.K, self.K))
+
+        if N is not None and Z is not None:
+            # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
+            ss[0,:,:] = Z.sum(axis=(0,3))
+            # ss[1,k1,k2] = N[k1]
+            ss[1,:,:] = N[:,None]
+
+        return ss
+
+    def resample(self, N=None, Z=None):
+        ss = self._get_suff_statistics(N,Z)
+
+        # First resample A from its marginal distribution after integrating out W
+        self._resample_A(ss)
+
+        # Then resample W given A
+        self._resample_W_given_A(ss)
+
+    def _resample_A(self, ss):
+        """
+        Resample A from the marginal distribution after integrating out W
+        :param ss:
+        :return:
+        """
+        p = self.network.P
+        v = self.network.V
+
+        kappa0_post = self.kappa_0 + ss[0,:,:]
+        v0_post     = self.nu_0 + ss[1,:,:]
+
+        kappa1_post = self.network.kappa + ss[0,:,:]
+        v1_post     = v + ss[1,:,:]
+
+        # Compute the marginal likelihood of A=1 and of A=0
+        # The result of the integral is a ratio of gamma distribution normalizing constants
+        lp0  = self.kappa_0 * np.log(self.nu_0) - gammaln(self.kappa_0)
+        lp0 += gammaln(kappa0_post) - kappa0_post * np.log(v0_post)
+
+        lp1  = self.network.kappa * np.log(v) - gammaln(self.network.kappa)
+        lp1 += gammaln(kappa1_post) - kappa1_post * np.log(v1_post)
+
+        # Add the prior and normalize
+        lp0 = lp0 + np.log(1.0 - p)
+        lp1 = lp1 + np.log(p)
+        Z   = logsumexp(np.concatenate((lp0[:,:,None], lp1[:,:,None]),
+                                       axis=2),
+                        axis=2)
+
+        # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
+        #           = lp1 - ln(exp(lp0) + exp(lp1))
+        #           = lp1 - Z
+        self.A = np.log(np.random.rand(self.K, self.K)) < lp1 - Z
+
+    def _resample_W_given_A(self, ss):
+        kappa_prior = self.kappa_0 * (1-self.A) + self.network.kappa * self.A
+        kappa_cond  = kappa_prior + ss[0,:,:]
+
+        v_prior     = self.nu_0 * (1-self.A) + self.network.V * self.A
+        v_cond      = v_prior + ss[1,:,:]
+
+        # Resample W from its gamma conditional
+        self.W = np.array(np.random.gamma(kappa_cond, 1.0/v_cond)).\
+                        reshape((self.K, self.K))
 
     def initialize_from_gibbs(self, A, W, scale=100):
         """

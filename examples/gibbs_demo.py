@@ -3,14 +3,14 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, auc_score
+from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, roc_auc_score
 
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs, DiscreteTimeStandardHawkesModel
 from pyhawkes.plotting.plotting import plot_network
 
 def sample_from_network_hawkes(C, K, T, dt, B):
     # Create a true model
-    kappa = 3.0
+    kappa = 10.0
 
     # K=20, C=2
     # p = 0.75 * np.eye(C)
@@ -18,19 +18,17 @@ def sample_from_network_hawkes(C, K, T, dt, B):
 
     # K=20, C=5
     p = 0.9 * np.eye(C)
-    v = kappa * (5.0 * np.eye(C) + 25.0 * (1-np.eye(C)))
+    v = kappa * (5 * np.eye(C) + 25.0 * (1-np.eye(C)))
+
+    # K=50, C=5
+    # p = 0.75 * np.eye(C) + 0.05 * (1-np.eye(C))
+    # v = kappa * (9 * np.eye(C) + 25.0 * (1-np.eye(C)))
 
     assert K % C == 0
     c = np.arange(C).repeat((K // C))
     true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
 
     assert true_model.check_stability()
-
-    # Plot the true network
-    plt.ion()
-    plot_network(true_model.weight_model.A,
-                 true_model.weight_model.W)
-    plt.pause(0.001)
 
     # Sample from the true model
     S,R = true_model.generate(T=T)
@@ -51,12 +49,12 @@ def demo(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
-    C = 4
+    C = 5
     K = 20
     T = 1000
     dt = 1.0
     B = 3
-    kappa = 3.0
+    kappa = 10.0
 
     S, R, true_model = sample_from_network_hawkes(C, K, T, dt, B)
 
@@ -67,16 +65,24 @@ def demo(seed=None):
     init_model.add_data(S[:init_len, :])
 
     print "Initializing with BFGS on first ", init_len, " time bins."
+    init_model.initialize_to_background_rate()
     init_model.fit_with_bfgs()
 
     # Make another new model for inference
     test_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B,
-                                                     kappa=kappa, beta=1.0/K,
-                                                     tau0=(C-1.0))
+                                                     kappa=kappa, beta=2.0/K,
+                                                     tau0=1.0, tau1=1.0)
     test_model.add_data(S)
 
     # Initialize with the standard model parameters
     test_model.initialize_with_standard_model(init_model)
+
+    # Plot the true network
+    plt.ion()
+    plot_network(true_model.weight_model.A,
+                 true_model.weight_model.W)
+    plt.pause(0.001)
+
 
     # Plot the true and inferred firing rate
     plt.figure(2)
@@ -87,14 +93,33 @@ def demo(seed=None):
 
     # Plot the block affiliations
     plt.figure(3)
-    im = plt.imshow(test_model.network.c[:,None] * np.ones((1,C)),
-                    interpolation="none", cmap="gray",
+    KC = np.zeros((K,C))
+    KC[np.arange(K), test_model.network.c] = 1.0
+    im_clus = plt.imshow(KC,
+                    interpolation="none", cmap="Greys",
                     aspect=float(C)/K)
+
+    im_net = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.5)
+    plt.pause(0.001)
+
+    # plt.figure(5)
+    # im_p = plt.imshow(test_model.network.p, interpolation="none", cmap="Greys")
+    # plt.xlabel('c\'')
+    # plt.ylabel('c')
+    # plt.title('P_{c to c\'')
+    #
+    # plt.figure(6)
+    # im_v = plt.imshow(test_model.network.v, interpolation="none", cmap="Greys")
+    # plt.xlabel('c\'')
+    # plt.ylabel('c')
+    # plt.title('V_{c to c\'')
+
+
     plt.show()
     plt.pause(0.001)
 
     # Gibbs sample
-    N_samples = 200
+    N_samples = 100
     samples = []
     lps = []
     for itr in xrange(N_samples):
@@ -111,34 +136,61 @@ def demo(seed=None):
             plt.pause(0.001)
 
             plt.figure(3)
-            im.set_data(test_model.network.c[:,None] * np.ones((1,C)))
+            KC = np.zeros((K,C))
+            KC[np.arange(K), test_model.network.c] = 1.0
+            im_clus.set_data(KC)
             plt.title("Iteration %d" % itr)
             plt.pause(0.001)
 
+            plt.figure(4)
+            print "N_conns: ", test_model.weight_model.A.sum()
+            im_net.set_data(test_model.weight_model.W)
+            plt.pause(0.001)
+
+            # plt.figure(5)
+            # im_p.set_data(test_model.network.p)
+            # plt.pause(0.001)
+            #
+            # plt.figure(6)
+            # im_v.set_data(test_model.network.v)
+            # plt.pause(0.001)
+
 
     # Compute sample statistics for second half of samples
-    A_samples       = np.array([A for A,_,_,_,_,_,_,_ in samples])
-    W_samples       = np.array([W for _,W,_,_,_,_,_,_ in samples])
-    beta_samples    = np.array([b for _,_,b,_,_,_,_,_ in samples])
-    lambda0_samples = np.array([l for _,_,_,l,_,_,_,_ in samples])
-    c_samples       = np.array([c for _,_,_,_,c,_,_,_ in samples])
+    # A_samples       = np.array([A for A,_,_,_,_,_,_,_ in samples])
+    # W_samples       = np.array([W for _,W,_,_,_,_,_,_ in samples])
+    # beta_samples    = np.array([b for _,_,b,_,_,_,_,_ in samples])
+    # lambda0_samples = np.array([l for _,_,_,l,_,_,_,_ in samples])
+    # c_samples       = np.array([c for _,_,_,_,c,_,_,_ in samples])
+    A_samples       = np.array([s.weight_model.A     for s in samples])
+    W_samples       = np.array([s.weight_model.W     for s in samples])
+    g_samples       = np.array([s.impulse_model.g    for s in samples])
+    lambda0_samples = np.array([s.bias_model.lambda0 for s in samples])
+    c_samples       = np.array([s.network.c          for s in samples])
+    p_samples       = np.array([s.network.p          for s in samples])
+    v_samples       = np.array([s.network.v          for s in samples])
     lps             = np.array(lps)
 
     offset = N_samples // 2
     A_mean       = A_samples[offset:, ...].mean(axis=0)
     W_mean       = W_samples[offset:, ...].mean(axis=0)
-    beta_mean    = beta_samples[offset:, ...].mean(axis=0)
+    g_mean       = g_samples[offset:, ...].mean(axis=0)
     lambda0_mean = lambda0_samples[offset:, ...].mean(axis=0)
+    p_mean       = p_samples[offset:, ...].mean(axis=0)
+    v_mean       = v_samples[offset:, ...].mean(axis=0)
+
 
     print "A true:        ", true_model.weight_model.A
     print "W true:        ", true_model.weight_model.W
-    print "beta true:     ", true_model.impulse_model.g
+    print "g true:        ", true_model.impulse_model.g
     print "lambda0 true:  ", true_model.bias_model.lambda0
     print ""
     print "A mean:        ", A_mean
     print "W mean:        ", W_mean
-    print "beta mean:     ", beta_mean
+    print "g mean:        ", g_mean
     print "lambda0 mean:  ", lambda0_mean
+    print "v mean:        ", v_mean
+    print "p mean:        ", p_mean
 
     plt.figure()
     plt.plot(np.arange(N_samples), lps)
@@ -149,7 +201,7 @@ def demo(seed=None):
     # Compute the link prediction accuracy curves
     aucs = []
     for A in A_samples:
-        aucs.append(auc_score(true_model.weight_model.A.ravel(), A.ravel()))
+        aucs.append(roc_auc_score(true_model.weight_model.A.ravel(), A.ravel()))
 
     plt.figure()
     plt.plot(aucs, '-r')
@@ -175,5 +227,6 @@ def demo(seed=None):
     plt.show()
 
 # demo(2203329564)
-demo()
+# demo(2728679796)
 
+demo()

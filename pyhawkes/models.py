@@ -12,7 +12,7 @@ from pyhawkes.deps.pybasicbayes.models import ModelGibbsSampling, ModelMeanField
 from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
-from pyhawkes.internals.parents import Parents
+from pyhawkes.internals.parents import Parents, MeanFieldParents
 from pyhawkes.internals.network import ErdosRenyiModel, StochasticBlockModel
 from pyhawkes.utils.basis import CosineBasis
 
@@ -74,6 +74,17 @@ class DiscreteTimeStandardHawkesModel(object):
         for k in xrange(self.K):
             self.weights[k,0]  = lambda0[k]
             self.weights[k,1:] = (Weff[:,k][:,None] * g[:,k,:]).ravel()
+
+    def initialize_to_background_rate(self):
+        if len(self.data_list) > 0:
+            N = 0
+            T = 0
+            for S,_ in self.data_list:
+                N += S.sum(axis=0)
+                T += S.shape[0] * self.dt
+
+            lambda0 = N / float(T)
+            self.weights[:,0] = lambda0
 
     @property
     def W(self):
@@ -172,6 +183,24 @@ class DiscreteTimeStandardHawkesModel(object):
         else:
             return False
 
+    def copy_sample(self):
+        """
+        Return a copy of the parameters of the model
+        :return: The parameters of the model (A,W,\lambda_0, \beta)
+        """
+        # return copy.deepcopy(self.get_parameters())
+
+        # Shallow copy the data
+        data_list = copy.copy(self.data_list)
+        self.data_list = []
+
+        # Make a deep copy without the data
+        model_copy = copy.deepcopy(self)
+
+        # Reset the data and return the data-less copy
+        self.data_list = data_list
+        return model_copy
+
     def compute_rate(self, index=None, ks=None):
         """
         Compute the rate of the k-th process.
@@ -200,7 +229,7 @@ class DiscreteTimeStandardHawkesModel(object):
         else:
             raise Exception("ks must be int or array of indices in 0..K-1")
 
-    def log_likelihood(self):
+    def log_likelihood(self, ks=None):
         """
         Compute the log likelihood
         :return:
@@ -208,8 +237,13 @@ class DiscreteTimeStandardHawkesModel(object):
         ll = 0
         for index,data in enumerate(self.data_list):
             S,F = data
-            R = self.compute_rate(index)
-            ll += (-gammaln(S+1) + S * np.log(R) -R*self.dt).sum()
+            R = self.compute_rate(index, ks=ks)
+
+            if ks is not None:
+
+                ll += (-gammaln(S[:,ks]+1) + S[:,ks] * np.log(R) -R*self.dt).sum()
+            else:
+                ll += (-gammaln(S+1) + S * np.log(R) -R*self.dt).sum()
 
         return ll
 
@@ -268,6 +302,7 @@ class DiscreteTimeStandardHawkesModel(object):
 
     def _d_reg_d_W(self, k):
         """
+        TODO: Just use a gamma prior (it should be log concave for alpha >= 1)
         Compute gradient of regularization
         d/dW  -1/2 * L2 * W^2 -L1 * |W|
             = -2*L2*W -L1
@@ -288,12 +323,12 @@ class DiscreteTimeStandardHawkesModel(object):
         def objective(x, k):
             self.weights[k,:] = np.exp(x)
             self.weights[k,:] = np.nan_to_num(self.weights[k,:])
-            return -self.log_likelihood()
+            return np.nan_to_num(-self.log_likelihood(ks=np.array([k])))
 
         def gradient(x, k):
             self.weights[k,:] = np.exp(x)
             self.weights[k,:] = np.nan_to_num(self.weights[k,:])
-            return -self.compute_gradient(k)
+            return np.nan_to_num(-self.compute_gradient(k))
 
         itr = [0]
         def callback(x):
@@ -441,14 +476,15 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
         A = W > np.percentile(W, (1.0 - sparsity) * 100)
 
+        W *= A
+
         # Set the model parameters
         self.bias_model.lambda0 = lambda0.copy('C')
         self.weight_model.A     = A.copy('C')
         self.weight_model.W     = W.copy('C')
         self.impulse_model.g    = g.copy('C')
 
-        # TODO: Cluster the standard model with kmeans in order to
-        # initialize the network?
+        # Cluster the standard model with kmeans in order to initialize the network
         from sklearn.cluster import KMeans
 
         features = []
@@ -456,6 +492,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             features.append(np.concatenate((W[:,k], W[k,:])))
 
         self.network.c = KMeans(n_clusters=self.C).fit(np.array(features)).labels_
+
 
 
     def add_data(self, S):
@@ -494,15 +531,38 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         :return:
         """
-        eigs = np.linalg.eigvals(self.weight_model.A * self.weight_model.W)
-        maxeig = np.amax(np.real(eigs))
+        if self.K < 100:
+            eigs = np.linalg.eigvals(self.weight_model.A * self.weight_model.W)
+            maxeig = np.amax(np.real(eigs))
+        else:
+            from scipy.sparse.linalg import eigs
+            maxeig = eigs(self.weight_model.A * self.weight_model.W, k=1)[0]
+
         print "Max eigenvalue: ", maxeig
         if maxeig < 1.0:
             return True
         else:
             return False
 
-    def generate(self, keep=True, T=100):
+    def copy_sample(self):
+        """
+        Return a copy of the parameters of the model
+        :return: The parameters of the model (A,W,\lambda_0, \beta)
+        """
+        # return copy.deepcopy(self.get_parameters())
+
+        # Shallow copy the data
+        data_list = copy.copy(self.data_list)
+        self.data_list = None
+
+        # Make a deep copy without the data
+        model_copy = copy.deepcopy(self)
+
+        # Reset the data and return the data-less copy
+        self.data_list = data_list
+        return model_copy
+
+    def generate(self, keep=True, T=100, print_interval=None):
         """
         Generate a new data set with the sampled parameters
 
@@ -526,6 +586,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             self.weight_model.W[None,:,:] * \
             G
 
+        # Transpose H so that it is faster for tensor mult
+        H = np.transpose(H, axes=[0,2,1])
+
         # Compute the rate matrix R
         R = np.zeros((T+L, self.K))
 
@@ -534,13 +597,19 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         # Iterate over time bins
         for t in xrange(T):
+            if print_interval is not None and t % print_interval == 0:
+                print "Iteration ", t
             # Sample a Poisson number of events for each process
             S[t,:] = np.random.poisson(R[t,:] * self.dt)
 
+            # Compute change in rate via tensor product
+            dR = np.tensordot( H, S[t,:], axes=([2, 0]))
+            R[t+1:t+L+1,:] += dR
+
             # For each sampled event, add a weighted impulse response to the rate
-            for k in xrange(self.K):
-                if S[t,k] > 0:
-                    R[t+1:t+L+1,:] += S[t,k] * H[:,k,:]
+            # for k in xrange(self.K):
+            #     if S[t,k] > 0:
+            #         R[t+1:t+L+1,:] += S[t,k] * H[:,k,:]
 
             # Check Spike limit
             if np.any(S[t,:] >= 1000):
@@ -650,8 +719,10 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             R += self.bias_model.lambda0[None,:]
 
             # Compute the sum of weighted sum of impulse responses
-            H = self.weight_model.A[:,:,None] * \
-                self.weight_model.W[:,:,None] * \
+            # H = self.weight_model.A[:,:,None] * \
+            #     self.weight_model.W[:,:,None] * \
+            #     self.impulse_model.g
+            H = self.weight_model.W[:,:,None] * \
                 self.impulse_model.g
 
             H = np.transpose(H, [2,0,1])
@@ -743,15 +814,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         return lp
 
 class DiscreteTimeNetworkHawkesModelGibbs(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
-    _weight_class = SpikeAndSlabGammaWeights
-    _parent_class = Parents
-
-    def copy_sample(self):
-        """
-        Return a copy of the parameters of the model
-        :return: The parameters of the model (A,W,\lambda_0, \beta)
-        """
-        return copy.deepcopy(self.get_parameters())
+    # _weight_class = SpikeAndSlabGammaWeights
+    _weight_class = GammaMixtureWeights
+    _parent_class = MeanFieldParents
 
     def resample_model(self):
         """
@@ -767,8 +832,11 @@ class DiscreteTimeNetworkHawkesModelGibbs(_DiscreteTimeNetworkHawkesModelBase, M
             data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 
         # Update the weight model given the parents assignments
+        # self.weight_model.resample(
+        #     model=self,
+        #     N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
+        #     Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
         self.weight_model.resample(
-            model=self,
             N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
             Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 

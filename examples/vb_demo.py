@@ -64,7 +64,7 @@ def demo(seed=None):
     plt.show()
     plt.pause(0.001)
 
-    # Gibbs sample
+    # VB coordinate descent
     N_iters = 1000
     vlbs = []
     for itr in xrange(N_iters):
