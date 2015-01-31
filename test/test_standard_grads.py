@@ -1,13 +1,13 @@
 from scipy.optimize import check_grad
 import numpy as np
-from pyhawkes.models import DiscreteTimeStandardHawkesModel, DiscreteTimeNetworkHawkesModelGibbs
+from pyhawkes.models import DiscreteTimeStandardHawkesModel, DiscreteTimeNetworkHawkesModelSpikeAndSlab
 
 def test_gradients():
     K = 1
     B = 3
     T = 100
     dt = 1.0
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, B=B, dt=dt)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, B=B, dt=dt)
     S,R = true_model.generate(T=T)
 
     # Test with a standard Hawkes model
@@ -28,7 +28,7 @@ def test_gradients():
     check_grad(objective, gradient,
                np.log(test_model.weights[0,:]))
 
-    print "Checking initial gradient: "
+    print "Checking gradient at true model parameters: "
     test_model.initialize_with_gibbs_model(true_model)
 
     print gradient(np.log(test_model.weights[0,:]))

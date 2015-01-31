@@ -34,6 +34,10 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         self.W = np.zeros((self.K, self.K))
         self.resample()
 
+    @property
+    def W_effective(self):
+        return self.A * self.W
+
     def log_likelihood(self, x):
         """
         Compute the log likelihood of the given A and W
@@ -186,7 +190,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     For variational inference we approximate the spike at zero with a smooth
     Gamma distribution that has infinite density at zero.
     """
-    def __init__(self, K, network, kappa_0=0.1, nu_0=10):
+    def __init__(self, K, network, kappa_0=0.1, nu_0=10.0):
         """
         Initialize the spike-and-slab gamma weight model with either a
         network object containing the prior or rho, alpha, and beta to
@@ -223,6 +227,10 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         self.A = np.ones((self.K, self.K))
         self.W = np.zeros((self.K, self.K))
         self.resample()
+
+    @property
+    def W_effective(self):
+        return self.W
 
     def log_likelihood(self, x):
         """

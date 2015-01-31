@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 
-from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs, \
-                            DiscreteTimeNetworkHawkesModelMeanField
+from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
+                            DiscreteTimeNetworkHawkesModelGammaMixture
 from pyhawkes.plotting.plotting import plot_network
 
 def test_sbm_mf(seed=None):
@@ -28,7 +28,7 @@ def test_sbm_mf(seed=None):
     B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, tau1=1, tau0=5, beta=1.0/K)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, tau1=1, tau0=5, beta=1.0/K)
     c = true_model.network.c
     perm = np.argsort(c)
     #
@@ -39,7 +39,7 @@ def test_sbm_mf(seed=None):
     plt.pause(0.001)
 
     # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelMeanField(C=C, K=K, dt=dt, B=B, tau1=1, tau0=5, beta=1.0/K)
+    test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B, tau1=1, tau0=5, beta=1.0/K)
     test_model.weight_model.initialize_from_gibbs(true_model.weight_model.A,
                                                   true_model.weight_model.W)
 

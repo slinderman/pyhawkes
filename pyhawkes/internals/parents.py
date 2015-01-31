@@ -36,12 +36,12 @@ class _ParentsBase(BayesianDistribution):
         raise NotImplementedError("No prior for parents to sample from.")
 
 
-class GibbsParents(_ParentsBase, GibbsSampling):
+class SpikeAndSlabParents(_ParentsBase, GibbsSampling):
     """
     Parent distribution with Gibbs sampling
     """
     def __init__(self, T, K, B, S, F):
-        super(GibbsParents, self).__init__(T, K, B, S, F)
+        super(SpikeAndSlabParents, self).__init__(T, K, B, S, F)
 
         # Initialize parent arrays for Gibbs sampling
         # Attribute all events to the background.
@@ -117,16 +117,20 @@ class GibbsParents(_ParentsBase, GibbsSampling):
 
         self._check_Z()
 
-class MeanFieldParents(_ParentsBase, MeanField):
+class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
     """
     Parent distribution with Gibbs sampling
     """
     def __init__(self, T, K, B, S, F):
-        super(MeanFieldParents, self).__init__(T, K, B, S, F)
+        super(GammaMixtureParents, self).__init__(T, K, B, S, F)
 
-        # Initialize arrays for mean field parameters
-        self.EZ  = np.zeros((T,K,K,B))
-        self.EZ0 = np.copy(self.S).astype(np.float)
+        # Lazily initialize arrays for mean field parameters
+        self.EZ  = None
+        self.EZ0 = None
+
+        # Do the same for Gibbs sampling
+        self.Z   = None
+        self.Z0  = None
 
         # Initialize parent arrays for Gibbs sampling
         # Attribute all events to the background.
@@ -209,6 +213,11 @@ class MeanFieldParents(_ParentsBase, MeanField):
         :param impulse_model:
         :return:
         """
+        # If necessary, initialize arrays for mean field parameters
+        if self.EZ is None:
+            self.EZ  = np.zeros((self.T,self.K,self.K,self.B))
+        if self.EZ0 is None:
+            self.EZ0 = np.copy(self.S).astype(np.float)
 
         # Uncomment this line to use python
         # self._mf_update_Z_python(bias_model, weight_model, impulse_model)
@@ -279,6 +288,13 @@ class MeanFieldParents(_ParentsBase, MeanField):
         :param impulse_model:
         :return:
         """
+        # If necessary, initialize parent arrays for Gibbs sampling
+        # Attribute all events to the background.
+        if self.Z is None:
+            self.Z  = np.zeros((self.T,self.K,self.K,self.B),
+                               dtype=np.int32)
+        if self.Z0 is None:
+            self.Z0 = np.copy(self.S).astype(np.int32)
 
         # Resample the parents in python
         # self._resample_Z_python(bias_model, weight_model, impulse_model)
@@ -291,8 +307,3 @@ class MeanFieldParents(_ParentsBase, MeanField):
         resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
 
         self._check_Z()
-
-
-
-class Parents(GibbsParents, MeanFieldParents):
-    pass

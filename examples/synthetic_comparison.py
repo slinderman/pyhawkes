@@ -8,7 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
-    DiscreteTimeNetworkHawkesModelGibbs, DiscreteTimeNetworkHawkesModelMeanField
+    DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
+    DiscreteTimeNetworkHawkesModelGammaMixture
 from pyhawkes.plotting.plotting import plot_network
 
 # np.seterr(over='raise', divide='raise')
@@ -157,8 +158,8 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max, standard_model=None):
     print "Fitting the data with a network Hawkes model using Gibbs sampling"
 
     # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                     alpha=1.0, beta=1.0/20.0)
+    test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
+                                                            alpha=1.0, beta=1.0/20.0)
     test_model.add_data(S)
 
     # Initialize with the standard model parameters
@@ -222,8 +223,8 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max, standard_model=None):
     print "Fitting the data with a network Hawkes model using SVI"
 
     # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelMeanField(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                     alpha=1.0, beta=1.0/20.0)
+    test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
+                                                            alpha=1.0, beta=1.0/20.0)
     test_model.add_data(S)
 
     # Initialize with the standard model parameters

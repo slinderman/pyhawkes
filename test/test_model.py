@@ -1,11 +1,11 @@
 import numpy as np
-from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs
+from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
 
 def test_compute_rate():
     K = 1
     T = 100
     dt = 1.0
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt)
     S,R = true_model.generate(T=T)
 
     print "Expected number of events: ", np.trapz(R, dt * np.arange(T), axis=0)
@@ -22,7 +22,7 @@ def test_generate_statistics():
     K = 1
     T = 100
     dt = 1.0
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(K=K, dt=dt)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt)
     S,R = true_model.generate(T=T)
 
     E_N = np.trapz(R, dt * np.arange(T), axis=0)

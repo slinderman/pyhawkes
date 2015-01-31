@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 
-from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs
+from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
 from pyhawkes.plotting.plotting import plot_network
 
 def test_gibbs_sbm(seed=None):
@@ -27,7 +27,7 @@ def test_gibbs_sbm(seed=None):
     B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, beta=1.0/K)
     # S,R = true_model.generate(T=T)
     c = true_model.network.c
     perm = np.argsort(c)
@@ -40,7 +40,7 @@ def test_gibbs_sbm(seed=None):
 
 
     # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, beta=1.0/K)
+    test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, beta=1.0/K)
     # test_model.add_data(S)
 
     # Gibbs sample

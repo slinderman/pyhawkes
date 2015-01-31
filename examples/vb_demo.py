@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from pyhawkes.models import DiscreteTimeNetworkHawkesModelMeanField, DiscreteTimeNetworkHawkesModelGibbs
+from pyhawkes.models import _DiscreteTimeNetworkHawkesModelGammaMixtureMF, DiscreteTimeNetworkHawkesModelGibbs
 from pyhawkes.plotting.plotting import plot_network
 
 def demo(seed=None):
@@ -42,7 +42,7 @@ def demo(seed=None):
 
 
     # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelMeanField(C=C, K=K, dt=dt, B=B, tau1=1, tau0=5, beta=1.0/5.0)
+    test_model = _DiscreteTimeNetworkHawkesModelGammaMixtureMF(C=C, K=K, dt=dt, B=B, tau1=1, tau0=5, beta=1.0/5.0)
     test_model.resample_from_mf()
     test_model.add_data(S)
 

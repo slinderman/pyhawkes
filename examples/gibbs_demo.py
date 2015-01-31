@@ -5,20 +5,19 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, roc_auc_score
 
-from pyhawkes.models import DiscreteTimeNetworkHawkesModelGibbs, DiscreteTimeStandardHawkesModel
+from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
+    DiscreteTimeStandardHawkesModel, DiscreteTimeNetworkHawkesModelGammaMixture
 from pyhawkes.plotting.plotting import plot_network
 
-def sample_from_network_hawkes(C, K, T, dt, B):
+def sample_from_network_hawkes(C, K, T, dt, B, kappa):
     # Create a true model
-    kappa = 10.0
-
     # K=20, C=2
     # p = 0.75 * np.eye(C)
     # v = kappa * (8.0 * np.eye(C) + 25.0 * (1-np.eye(C)))
 
     # K=20, C=5
-    p = 0.9 * np.eye(C)
-    v = kappa * (5 * np.eye(C) + 25.0 * (1-np.eye(C)))
+    p = 0.75 * np.eye(C)
+    v = kappa * (10 * np.eye(C) + 25.0 * (1-np.eye(C)))
 
     # K=50, C=5
     # p = 0.75 * np.eye(C) + 0.05 * (1-np.eye(C))
@@ -26,7 +25,7 @@ def sample_from_network_hawkes(C, K, T, dt, B):
 
     assert K % C == 0
     c = np.arange(C).repeat((K // C))
-    true_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
 
     assert true_model.check_stability()
 
@@ -35,7 +34,6 @@ def sample_from_network_hawkes(C, K, T, dt, B):
 
     # Return the spike count matrix
     return S, R, true_model
-
 
 def demo(seed=None):
     """
@@ -51,12 +49,12 @@ def demo(seed=None):
 
     C = 5
     K = 20
-    T = 1000
+    T = 10000
     dt = 1.0
     B = 3
-    kappa = 10.0
+    kappa = 3.0
 
-    S, R, true_model = sample_from_network_hawkes(C, K, T, dt, B)
+    S, R, true_model = sample_from_network_hawkes(C, K, T, dt, B, kappa)
 
     # Make a model to initialize the parameters
     init_len   = T
@@ -69,9 +67,9 @@ def demo(seed=None):
     init_model.fit_with_bfgs()
 
     # Make another new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelGibbs(C=C, K=K, dt=dt, B=B,
-                                                     kappa=kappa, beta=2.0/K,
-                                                     tau0=1.0, tau1=1.0)
+    test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B,
+                                                            kappa=kappa, beta=2.0/K,
+                                                            tau0=5.0, tau1=1.0)
     test_model.add_data(S)
 
     # Initialize with the standard model parameters
@@ -99,7 +97,7 @@ def demo(seed=None):
                     interpolation="none", cmap="Greys",
                     aspect=float(C)/K)
 
-    im_net = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.5)
+    im_net = plot_network(np.ones((K,K)), test_model.weight_model.W_effective, vmax=0.5)
     plt.pause(0.001)
 
     # plt.figure(5)
@@ -144,7 +142,7 @@ def demo(seed=None):
 
             plt.figure(4)
             print "N_conns: ", test_model.weight_model.A.sum()
-            im_net.set_data(test_model.weight_model.W)
+            im_net.set_data(test_model.weight_model.W_effective)
             plt.pause(0.001)
 
             # plt.figure(5)
@@ -157,11 +155,6 @@ def demo(seed=None):
 
 
     # Compute sample statistics for second half of samples
-    # A_samples       = np.array([A for A,_,_,_,_,_,_,_ in samples])
-    # W_samples       = np.array([W for _,W,_,_,_,_,_,_ in samples])
-    # beta_samples    = np.array([b for _,_,b,_,_,_,_,_ in samples])
-    # lambda0_samples = np.array([l for _,_,_,l,_,_,_,_ in samples])
-    # c_samples       = np.array([c for _,_,_,_,c,_,_,_ in samples])
     A_samples       = np.array([s.weight_model.A     for s in samples])
     W_samples       = np.array([s.weight_model.W     for s in samples])
     g_samples       = np.array([s.impulse_model.g    for s in samples])
@@ -199,12 +192,19 @@ def demo(seed=None):
     plt.show()
 
     # Compute the link prediction accuracy curves
+    auc_init = roc_auc_score(true_model.weight_model.A.ravel(),
+                             init_model.W.ravel())
+    auc_mean = roc_auc_score(true_model.weight_model.A.ravel(),
+                             A_mean.ravel())
+
     aucs = []
     for A in A_samples:
         aucs.append(roc_auc_score(true_model.weight_model.A.ravel(), A.ravel()))
 
     plt.figure()
     plt.plot(aucs, '-r')
+    plt.plot(auc_mean * np.ones_like(aucs), '--r')
+    plt.plot(auc_init * np.ones_like(aucs), '--k')
     plt.xlabel("Iteration")
     plt.ylabel("Link prediction AUC")
     plt.show()
