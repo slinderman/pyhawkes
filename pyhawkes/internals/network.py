@@ -231,6 +231,9 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         Resample block assignments given the weighted adjacency matrix
         and the impulse response fits (if used)
         """
+        if self.C == 1:
+            return
+
         # Sample each assignment in order
         for k in xrange(self.K):
             # Compute unnormalized log probs of each connection
@@ -279,9 +282,9 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
             return
 
         A,W = data
-        # print "DEBUG: Do not sample p and v"
-        self.resample_p(A)
-        self.resample_v(A, W)
+        print "DEBUG: Do not sample p and v"
+        # self.resample_p(A)
+        # self.resample_v(A, W)
         self.resample_c(A, W)
         self.resample_m()
 
@@ -663,9 +666,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         self.p = np.random.beta(self.mf_tau1, self.mf_tau0)
         self.v = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)
 
-        self.c = np.zeros(self.K)
+        self.c = np.zeros(self.K, dtype=np.int)
         for k in xrange(self.K):
-            self.c[k] = np.random.choice(self.C, p=self.mf_m[k,:])
+            self.c[k] = int(np.random.choice(self.C, p=self.mf_m[k,:]))
 
 class StochasticBlockModel(GibbsSBM, MeanFieldSBM):
     pass

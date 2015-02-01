@@ -51,7 +51,8 @@ class DiscreteTimeStandardHawkesModel(object):
 
         # Initialize with sample from Gamma(alpha, beta)
         # self.weights = np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K, 1 + self.K*self.B))
-        self.weights = self.alpha/self.beta * np.ones((self.K, 1 + self.K*self.B))
+        # self.weights = self.alpha/self.beta * np.ones((self.K, 1 + self.K*self.B))
+        self.weights = 1e-3 * np.ones((self.K, 1 + self.K*self.B))
 
         # Save the regularization penalties
         self.l2_penalty = l2_penalty
@@ -368,7 +369,6 @@ class DiscreteTimeStandardHawkesModel(object):
                 print "Iteration: ", itr[0], "\t LL: ", self.log_likelihood()
             itr[0] = itr[0] + 1
 
-        import pdb; pdb.set_trace()
         for k in xrange(self.K):
             print "Optimizing process ", k
             itr[0] = 0
@@ -948,9 +948,30 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         super(DiscreteTimeNetworkHawkesModelGammaMixture, self).\
             initialize_with_standard_model(standard_model)
 
+        # Set the mean field parameters
+        self.bias_model.mf_alpha = 100 * self.bias_model.lambda0
+        self.bias_model.mf_beta  = 100 * np.ones(self.K)
+
+        # Weight model
+        self.weight_model.mf_kappa_0 = self.weight_model.nu_0 * self.weight_model.W
+        self.weight_model.mf_v_0     = self.weight_model.nu_0 * np.ones((self.K, self.K))
+
+        self.weight_model.mf_kappa_1 = 100 * self.weight_model.W.copy()
+        self.weight_model.mf_v_1     = 100 * np.ones((self.K, self.K))
+
+        self.weight_model.mf_p       = 0.8 * self.weight_model.A + 0.2 * (1-self.weight_model.A)
+
+        # TODO: Set impulse model
+
+        # Set network mean field parameters
+        self.network.mf_m = 0.2 / (self.C-1) * np.ones((self.K, self.C))
+        for c in xrange(self.C):
+            self.network.mf_m[self.network.c == c, c] = 0.8
+
         # Update the parents.
         for _,_,_,p in self.data_list:
             p.resample(self.bias_model, self.weight_model, self.impulse_model)
+            p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
 
     def meanfield_coordinate_descent_step(self):
         # Update the parents.

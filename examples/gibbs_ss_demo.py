@@ -25,7 +25,6 @@ def sample_from_network_hawkes(C, K, T, dt, B, kappa, c, p, v, T_test=1000):
 
     # assert K % C == 0
     # c = np.arange(C).repeat((K // C))
-    # true_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
     true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
 
     assert true_model.check_stability()
@@ -51,19 +50,9 @@ def demo(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
-    # C = 5
-    # K = 50
-    # T = 1000
-    # dt = 1.0
-    # B = 3
-    # kappa = 5.0
-    # c = np.arange(C).repeat((K // C))
-    # p = 0.5 * np.eye(C)
-    # v = kappa * (10 * np.eye(C) + 25.0 * (1-np.eye(C)))
-
     C = 2
     K = 20
-    T = 10000
+    T = 100
     dt = 1.0
     B = 3
     kappa = 2.0
@@ -87,8 +76,8 @@ def demo(seed=None):
     # test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B,
     #                                                         kappa=kappa, beta=2.0/K,
     #                                                         tau0=5.0, tau1=1.0)
-    test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B,
-                                                            kappa=kappa, alpha=1.0, beta=1.0)
+    test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B,
+                                                            kappa=kappa, alpha=1.0, beta=1.0/(kappa*20.0))
     test_model.add_data(S)
     F_test = test_model.basis.convolve_with_basis(S_test)
 
@@ -118,9 +107,7 @@ def demo(seed=None):
                     interpolation="none", cmap="Greys",
                     aspect=float(C)/K)
 
-    im_net = plot_network(np.ones((K,K)),
-                          test_model.weight_model.W_effective,
-                          vmax=0.4)
+    im_net = plot_network(np.ones((K,K)), test_model.weight_model.W_effective, vmax=0.5)
     plt.pause(0.001)
 
     # plt.figure(5)
@@ -140,7 +127,7 @@ def demo(seed=None):
     plt.pause(0.001)
 
     # Gibbs sample
-    N_samples = 1
+    N_samples = 500
     samples = []
     lps = []
     plls = []
@@ -149,17 +136,16 @@ def demo(seed=None):
         plls.append(test_model.heldout_log_likelihood(S_test, F=F_test))
         samples.append(test_model.copy_sample())
 
-        # DEBUG : Fix p and v
-        test_model.network.v = v.copy()
-        test_model.network.p = p.copy()
-
         print ""
         print "Gibbs iteration ", itr
         print "LP: ", lps[-1]
         print "N_conns: ", test_model.weight_model.A.sum()
-        print "W_max: ", test_model.weight_model.W.max()
 
         test_model.resample_model()
+
+        # DEBUG : Fix v
+        test_model.network.v = v.copy()
+        test_model.network.p = p.copy()
 
         # Update plot
         if itr % 1 == 0:
@@ -209,12 +195,12 @@ def demo(seed=None):
 
     print "A true:        ", true_model.weight_model.A
     print "W true:        ", true_model.weight_model.W
-    # print "g true:        ", true_model.impulse_model.g
+    print "g true:        ", true_model.impulse_model.g
     print "lambda0 true:  ", true_model.bias_model.lambda0
     print ""
     print "A mean:        ", A_mean
     print "W mean:        ", W_mean
-    # print "g mean:        ", g_mean
+    print "g mean:        ", g_mean
     print "lambda0 mean:  ", lambda0_mean
     print "v mean:        ", v_mean
     print "p mean:        ", p_mean

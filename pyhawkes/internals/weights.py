@@ -470,15 +470,19 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         self.A = np.log(np.random.rand(self.K, self.K)) < lp1 - Z
 
     def _resample_W_given_A(self, ss):
+        # import pdb; pdb.set_trace()
         kappa_prior = self.kappa_0 * (1-self.A) + self.network.kappa * self.A
         kappa_cond  = kappa_prior + ss[0,:,:]
 
+        print self.network.v
         v_prior     = self.nu_0 * (1-self.A) + self.network.V * self.A
         v_cond      = v_prior + ss[1,:,:]
 
         # Resample W from its gamma conditional
         self.W = np.array(np.random.gamma(kappa_cond, 1.0/v_cond)).\
                         reshape((self.K, self.K))
+
+        self.W = np.clip(self.W, 1e-32, np.inf)
 
     def initialize_from_gibbs(self, A, W, scale=100):
         """
