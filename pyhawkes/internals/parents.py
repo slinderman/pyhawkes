@@ -301,9 +301,9 @@ class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
 
         # Call cython function to resample parents
         lambda0 = bias_model.lambda0
-        W = weight_model.W
+        W = weight_model.W_effective
         g = impulse_model.g
         F = self.F
         resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
 
-        self._check_Z()
+        # self._check_Z()

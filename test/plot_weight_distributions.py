@@ -18,14 +18,14 @@ def plot_weight_distributions(kappa_delta, v_delta,
 def plot_synthetic_weight_distributions():
     # Delta function is
     kappa_delta = 0.1
-    v_delta     = 10.0
+    v_delta     = 1.0
 
     # K=20, C=5
-    kappa_1 = 5.0
-    v_1      = kappa_1 * 5.0
+    kappa_1 = 10.0
+    v_1      = kappa_1 * 3.0
 
-    kappa_0 = 5.0
-    v_0     = kappa_0 * 20.0
+    kappa_0 = 10.0
+    v_0     = kappa_0 * 10.0
 
     plot_weight_distributions(kappa_delta, v_delta,
                               kappa_1, v_1,

@@ -9,31 +9,34 @@ from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
     DiscreteTimeStandardHawkesModel, DiscreteTimeNetworkHawkesModelGammaMixture
 from pyhawkes.plotting.plotting import plot_network
 
-def sample_from_network_hawkes(C, K, T, dt, B, kappa):
+def sample_from_network_hawkes(C, K, T, dt, B, kappa, c, p, v, T_test=1000):
     # Create a true model
     # K=20, C=2
     # p = 0.75 * np.eye(C)
     # v = kappa * (8.0 * np.eye(C) + 25.0 * (1-np.eye(C)))
 
     # K=20, C=5
-    p = 0.75 * np.eye(C)
-    v = kappa * (10 * np.eye(C) + 25.0 * (1-np.eye(C)))
+    # p = 0.2 * np.eye(C) + 0.02 * (1-np.eye(C))
+    # v = kappa * (3 * np.eye(C) + 5.0 * (1-np.eye(C)))
 
     # K=50, C=5
     # p = 0.75 * np.eye(C) + 0.05 * (1-np.eye(C))
     # v = kappa * (9 * np.eye(C) + 25.0 * (1-np.eye(C)))
 
-    assert K % C == 0
-    c = np.arange(C).repeat((K // C))
-    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
+    # assert K % C == 0
+    # c = np.arange(C).repeat((K // C))
+    true_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
 
     assert true_model.check_stability()
 
     # Sample from the true model
     S,R = true_model.generate(T=T)
 
+    # Sample test data
+    S_test,_ = true_model.generate(T=T_test)
+
     # Return the spike count matrix
-    return S, R, true_model
+    return S, R, S_test, true_model
 
 def demo(seed=None):
     """
@@ -48,13 +51,16 @@ def demo(seed=None):
     np.random.seed(seed)
 
     C = 5
-    K = 20
-    T = 10000
+    K = 50
+    T = 1000
     dt = 1.0
     B = 3
-    kappa = 3.0
+    kappa = 5.0
+    c = np.arange(C).repeat((K // C))
+    p = 0.5 * np.eye(C)
+    v = kappa * (10 * np.eye(C) + 25.0 * (1-np.eye(C)))
 
-    S, R, true_model = sample_from_network_hawkes(C, K, T, dt, B, kappa)
+    S, R, S_test, true_model = sample_from_network_hawkes(C, K, T, dt, B, kappa, c, p, v)
 
     # Make a model to initialize the parameters
     init_len   = T
@@ -67,13 +73,17 @@ def demo(seed=None):
     init_model.fit_with_bfgs()
 
     # Make another new model for inference
+    # test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B,
+    #                                                         kappa=kappa, beta=2.0/K,
+    #                                                         tau0=5.0, tau1=1.0)
     test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B,
-                                                            kappa=kappa, beta=2.0/K,
-                                                            tau0=5.0, tau1=1.0)
+                                                            kappa=kappa, alpha=1.0, beta=1.0/(kappa*20.0))
     test_model.add_data(S)
+    F_test = test_model.basis.convolve_with_basis(S_test)
+
 
     # Initialize with the standard model parameters
-    test_model.initialize_with_standard_model(init_model)
+    # test_model.initialize_with_standard_model(init_model)
 
     # Plot the true network
     plt.ion()
@@ -120,14 +130,20 @@ def demo(seed=None):
     N_samples = 100
     samples = []
     lps = []
+    plls = []
     for itr in xrange(N_samples):
         lps.append(test_model.log_probability())
-        samples.append(test_model.resample_and_copy())
+        plls.append(test_model.heldout_log_likelihood(S_test, F=F_test))
+        samples.append(test_model.copy_sample())
+
+        print ""
+        print "Gibbs iteration ", itr
+        print "LP: ", lps[-1]
+
+        test_model.resample_model()
 
         # Update plot
         if itr % 1 == 0:
-            print "Gibbs iteration ", itr
-
             plt.figure(2)
             ln.set_data(np.arange(T), test_model.compute_rate()[:,0])
             plt.title("Iteration %d" % itr)
@@ -141,7 +157,6 @@ def demo(seed=None):
             plt.pause(0.001)
 
             plt.figure(4)
-            print "N_conns: ", test_model.weight_model.A.sum()
             im_net.set_data(test_model.weight_model.W_effective)
             plt.pause(0.001)
 
@@ -186,16 +201,27 @@ def demo(seed=None):
     print "p mean:        ", p_mean
 
     plt.figure()
-    plt.plot(np.arange(N_samples), lps)
+    plt.plot(np.arange(N_samples), lps, 'k')
     plt.xlabel("Iteration")
     plt.ylabel("Log probability")
+    plt.show()
+
+    # Predictive log likelihood
+    pll_init = init_model.heldout_log_likelihood(S_test)
+    plt.figure()
+    plt.plot(np.arange(N_samples), pll_init * np.ones(N_samples), 'k')
+    plt.plot(np.arange(N_samples), plls, 'r')
+    plt.xlabel("Iteration")
+    plt.ylabel("Predictive log probability")
     plt.show()
 
     # Compute the link prediction accuracy curves
     auc_init = roc_auc_score(true_model.weight_model.A.ravel(),
                              init_model.W.ravel())
-    auc_mean = roc_auc_score(true_model.weight_model.A.ravel(),
-                             A_mean.ravel())
+    auc_A_mean = roc_auc_score(true_model.weight_model.A.ravel(),
+                               A_mean.ravel())
+    auc_W_mean = roc_auc_score(true_model.weight_model.A.ravel(),
+                               W_mean.ravel())
 
     aucs = []
     for A in A_samples:
@@ -203,11 +229,13 @@ def demo(seed=None):
 
     plt.figure()
     plt.plot(aucs, '-r')
-    plt.plot(auc_mean * np.ones_like(aucs), '--r')
+    plt.plot(auc_A_mean * np.ones_like(aucs), '--r')
+    plt.plot(auc_W_mean * np.ones_like(aucs), '--b')
     plt.plot(auc_init * np.ones_like(aucs), '--k')
     plt.xlabel("Iteration")
     plt.ylabel("Link prediction AUC")
     plt.show()
+
 
     # Compute the adjusted mutual info score of the clusterings
     amis = []
@@ -229,4 +257,4 @@ def demo(seed=None):
 # demo(2203329564)
 # demo(2728679796)
 
-demo()
+demo(11223344)

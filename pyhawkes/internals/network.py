@@ -193,6 +193,7 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
                                        kappa=kappa)
 
         # Initialize parameter estimates
+        # print "Uncomment GibbsSBM init"
         if not self.fixed:
             self.c = np.random.choice(self.C, size=(self.K))
             self.m = 1.0/C * np.ones(self.C)
@@ -274,7 +275,11 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         self.m = np.random.dirichlet(pi)
 
     def resample(self, data=[]):
+        if self.fixed:
+            return
+
         A,W = data
+        # print "DEBUG: Do not sample p and v"
         self.resample_p(A)
         self.resample_v(A, W)
         self.resample_c(A, W)

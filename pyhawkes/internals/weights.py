@@ -253,11 +253,21 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         v = self.network.V
 
         # Add the LL of the gamma weights
-        lp_W = A * (kappa * np.log(v) - gammaln(kappa)
-                    + (kappa-1) * np.log(W) - v * W) + \
-               (1-A) * (self.kappa_0 * np.log(self.nu_0) - gammaln(self.kappa_0)
-                        + (self.kappa_0-1) * np.log(W) - self.nu_0 * W)
-        ll = lp_A.sum() + lp_W.sum()
+        # lp_W = np.zeros((self.K, self.K))
+        # lp_W = A * (kappa * np.log(v) - gammaln(kappa)
+        #             + (kappa-1) * np.log(W) - v * W)
+
+        lp_W0 = (self.kappa_0 * np.log(self.nu_0) - gammaln(self.kappa_0)
+                    + (self.kappa_0-1) * np.log(W) - self.nu_0 * W)[A==0]
+
+        lp_W1 = (kappa * np.log(v) - gammaln(kappa)
+                    + (kappa-1) * np.log(W) - v * W)[A==1]
+
+        # lp_W = A * (kappa * np.log(v) - gammaln(kappa)
+        #             + (kappa-1) * np.log(W) - v * W) + \
+        #        (1-A) * (self.kappa_0 * np.log(self.nu_0) - gammaln(self.kappa_0)
+        #                 + (self.kappa_0-1) * np.log(W) - self.nu_0 * W)
+        ll = lp_A.sum() + lp_W0.sum() + lp_W1.sum()
 
         return ll
 

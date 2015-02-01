@@ -227,14 +227,20 @@ class DiscreteTimeStandardHawkesModel(object):
         else:
             raise Exception("ks must be int or array of indices in 0..K-1")
 
-    def log_likelihood(self, ks=None):
+    def log_likelihood(self, indices=None, ks=None):
         """
         Compute the log likelihood
         :return:
         """
         ll = 0
-        for index,data in enumerate(self.data_list):
-            S,F = data
+
+        if indices is None:
+            indices = np.arange(len(self.data_list))
+        if isinstance(indices, int):
+            indices = [indices]
+
+        for index in indices:
+            S,F = self.data_list[index]
             R = self.compute_rate(index, ks=ks)
 
             if ks is not None:
@@ -244,6 +250,12 @@ class DiscreteTimeStandardHawkesModel(object):
                 ll += (-gammaln(S+1) + S * np.log(R) -R*self.dt).sum()
 
         return ll
+
+    def heldout_log_likelihood(self, S):
+        self.add_data(S)
+        hll = self.log_likelihood(indices=-1)
+        self.data_list.pop()
+        return hll
 
     def compute_gradient(self, k, indices=None):
         """
@@ -467,12 +479,13 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         # We need to decide how to set A.
         # The simplest is to initialize it to all ones, but
-        # This immediately puts us in a bad mode of the distribution
-        # which we cannot escape. Instead, start with a sparse matrix
+        # A = np.ones((self.K, self.K))
+        # Alternatively, we can start with a sparse matrix
         # of only strong connections. What sparsity? How about the
         # mean under the network model
         sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
         A = W > np.percentile(W, (1.0 - sparsity) * 100)
+
 
         # Set the model parameters
         self.bias_model.lambda0 = lambda0.copy('C')
@@ -480,21 +493,25 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.weight_model.W     = W.copy('C')
         self.impulse_model.g    = g.copy('C')
 
-        # Cluster the standard model with kmeans in order to initialize the network
-        from sklearn.cluster import KMeans
 
-        features = []
-        for k in xrange(self.K):
-            features.append(np.concatenate((W[:,k], W[k,:])))
+        if not self.network.fixed:
+            # Cluster the standard model with kmeans in order to initialize the network
+            from sklearn.cluster import KMeans
 
-        self.network.c = KMeans(n_clusters=self.C).fit(np.array(features)).labels_
-        self.network.resample_p(self.weight_model.A)
-        self.network.resample_v(self.weight_model.A, self.weight_model.W)
-        self.network.resample_m()
+            features = []
+            for k in xrange(self.K):
+                features.append(np.concatenate((W[:,k], W[k,:])))
+
+            self.network.c = KMeans(n_clusters=self.C).fit(np.array(features)).labels_
+
+            # print "DEBUG: Do not set p and v in init from standard model"
+            self.network.resample_p(self.weight_model.A)
+            self.network.resample_v(self.weight_model.A, self.weight_model.W)
+            self.network.resample_m()
 
 
 
-    def add_data(self, S):
+    def add_data(self, S, F=None):
         """
         Add a data set to the list of observations.
         First, filter the data with the impulse response basis,
@@ -511,7 +528,11 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         N = np.atleast_1d(S.sum(axis=0))
 
         # Filter the data into a TxKxB array
-        F = self.basis.convolve_with_basis(S)
+        if F is not None:
+            assert isinstance(F, np.ndarray) and F.shape == (T, self.K, self.B), \
+                "F must be a filtered event count matrix"
+        else:
+            F = self.basis.convolve_with_basis(S)
 
         # # Check that \sum_t F[t,k,b] ~= Nk / dt
         # Fsum = F.sum(axis=0)
@@ -531,13 +552,13 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         :return:
         """
         if self.K < 100:
-            eigs = np.linalg.eigvals(self.weight_model.A * self.weight_model.W)
+            eigs = np.linalg.eigvals(self.weight_model.W_effective)
             maxeig = np.amax(np.real(eigs))
         else:
             from scipy.sparse.linalg import eigs
-            maxeig = eigs(self.weight_model.A * self.weight_model.W, k=1)[0]
+            maxeig = eigs(self.weight_model.W_effective, k=1)[0]
 
-        # print "Max eigenvalue: ", maxeig
+        print "Max eigenvalue: ", maxeig
         if maxeig < 1.0:
             return True
         else:
@@ -689,7 +710,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.network.v = v
         self.network.m = m
 
-    def compute_rate(self, index=0, proc=None, S=None):
+    def compute_rate(self, index=0, proc=None, S=None, F=None):
         """
         Compute the rate function for a given data set
         :param index:   An integer specifying which dataset (if S is None)
@@ -702,7 +723,10 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             T,K = S.shape
 
             # Filter the data into a TxKxB array
-            F = self.basis.convolve_with_basis(S)
+            if F is not None:
+                assert F.shape == (T,K, self.B)
+            else:
+                F = self.basis.convolve_with_basis(S)
 
         else:
             assert len(self.data_list) > index, "Dataset %d does not exist!" % index
@@ -753,24 +777,46 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         """
         return (-gammaln(S+1) + S * np.log(R*self.dt) - R*self.dt).sum()
 
-    def heldout_log_likelihood(self, S):
+    def heldout_log_likelihood(self, S, F=None):
         """
         Compute the held out log likelihood of a data matrix S.
         :param S:   TxK matrix of event counts
         :return:    log likelihood of those counts under the current model
         """
-        R = self.compute_rate(S=S)
+        R = self.compute_rate(S=S, F=F)
         return self._poisson_log_likelihood(S, R)
 
-    def log_likelihood(self):
+    # def heldout_log_likelihood(self, S, F=None):
+    #     self.add_data(S, F=F)
+    #     hll = self.log_likelihood(indices=-1)
+    #     self.data_list.pop()
+    #     return hll
+
+    def log_prior(self):
+        # Get the parameter priors
+        lp  = 0
+        # lp += self.bias_model.log_probability()
+        lp += self.weight_model.log_probability()
+        # lp += self.impulse_model.log_probability()
+        # lp += self.network.log_probability()
+
+        return lp
+
+    def log_likelihood(self, indices=None):
         """
         Compute the joint log probability of the data and the parameters
         :return:
         """
         ll = 0
 
+        if indices is None:
+            indices = np.arange(len(self.data_list))
+        if isinstance(indices, int):
+            indices = [indices]
+
         # Get the likelihood of the datasets
-        for ind,(S,_,_,_)  in enumerate(self.data_list):
+        for ind in indices:
+            S,_,_,_  = self.data_list[ind]
             R = self.compute_rate(index=ind)
             ll += self._poisson_log_likelihood(S,R)
 
@@ -798,14 +844,10 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         :return:
         """
         lp = self.log_likelihood()
-
-        # Get the parameter priors
-        lp += self.bias_model.log_probability()
-        lp += self.weight_model.log_probability()
-        lp += self.impulse_model.log_probability()
-        lp += self.network.log_probability()
+        lp += self.log_prior()
 
         return lp
+
 
 
 class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
