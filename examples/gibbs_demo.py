@@ -65,7 +65,7 @@ def demo(seed=None):
     # Make a model to initialize the parameters
     init_len   = T
     init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B,
-                                                 l2_penalty=0, l1_penalty=0)
+                                                 alpha=1.0, beta=1.0 / 0.5 *17.5)
     init_model.add_data(S[:init_len, :])
 
     print "Initializing with BFGS on first ", init_len, " time bins."
@@ -83,7 +83,7 @@ def demo(seed=None):
 
 
     # Initialize with the standard model parameters
-    # test_model.initialize_with_standard_model(init_model)
+    test_model.initialize_with_standard_model(init_model)
 
     # Plot the true network
     plt.ion()

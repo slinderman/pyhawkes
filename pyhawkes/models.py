@@ -24,6 +24,7 @@ class DiscreteTimeStandardHawkesModel(object):
     """
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
+                 alpha=1.0, beta=1.0,
                  l2_penalty=0.0, l1_penalty=0.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -43,9 +44,14 @@ class DiscreteTimeStandardHawkesModel(object):
         # Randomly initialize parameters (bias and weights)
         # self.weights = abs((1.0/(1+self.K*self.B)) * np.random.randn(self.K, 1 + self.K * self.B))
 
-        # Initialize bias to mean rate and weights to zero
-        self.weights = 1e-2*np.ones((self.K, 1 + self.K*self.B))
-        self.weights[:,0] = 1.0
+        # Save the gamma prior
+        assert alpha >= 1.0, "Alpha must be greater than 1.0 to ensure log concavity"
+        self.alpha = alpha
+        self.beta = beta
+
+        # Initialize with sample from Gamma(alpha, beta)
+        # self.weights = np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K, 1 + self.K*self.B))
+        self.weights = self.alpha/self.beta * np.ones((self.K, 1 + self.K*self.B))
 
         # Save the regularization penalties
         self.l2_penalty = l2_penalty
@@ -281,10 +287,12 @@ class DiscreteTimeStandardHawkesModel(object):
 
         # Subtract the regularization penalty
         # import pdb; pdb.set_trace()
-        d_reg_d_W = self._d_reg_d_W(k)
-        grad += d_reg_d_W.dot(d_W_d_log_W)
+        # d_reg_d_W = self._d_reg_d_W(k)
+        # grad += d_reg_d_W.dot(d_W_d_log_W)
 
-        # TODO: Implement group lasso
+        # Add the prior
+        d_prior_d_W = self._d_prior_d_W(k)
+        grad += d_prior_d_W.dot(d_W_d_log_W)
 
         return grad
 
@@ -312,7 +320,6 @@ class DiscreteTimeStandardHawkesModel(object):
 
     def _d_reg_d_W(self, k):
         """
-        TODO: Just use a gamma prior (it should be log concave for alpha >= 1)
         Compute gradient of regularization
         d/dW  -1/2 * L2 * W^2 -L1 * |W|
             = -2*L2*W -L1
@@ -325,6 +332,21 @@ class DiscreteTimeStandardHawkesModel(object):
         d_reg_d_W[0] = 0
 
         return d_reg_d_W
+
+    def _d_prior_d_W(self, k):
+        """
+        Use a gamma prior (it is log concave for alpha >= 1)
+        Compute gradient of prior wrt W
+        d/dW  (alpha-1) * log(W) - beta*W
+            = (alpha-1) / W - beta
+        """
+        d_prior_d_W = (self.alpha-1.0) / self.weights[k,:] - self.beta
+
+        # Don't put a prior on the bias
+        d_prior_d_W[0] = 0
+
+        return d_prior_d_W
+
 
     def fit_with_bfgs(self):
         """
@@ -346,6 +368,7 @@ class DiscreteTimeStandardHawkesModel(object):
                 print "Iteration: ", itr[0], "\t LL: ", self.log_likelihood()
             itr[0] = itr[0] + 1
 
+        import pdb; pdb.set_trace()
         for k in xrange(self.K):
             print "Optimizing process ", k
             itr[0] = 0

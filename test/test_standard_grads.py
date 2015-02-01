@@ -1,13 +1,13 @@
 from scipy.optimize import check_grad
 import numpy as np
-from pyhawkes.models import DiscreteTimeStandardHawkesModel, DiscreteTimeNetworkHawkesModelSpikeAndSlab
+from pyhawkes.models import DiscreteTimeStandardHawkesModel, DiscreteTimeNetworkHawkesModelGammaMixture
 
 def test_gradients():
     K = 1
     B = 3
     T = 100
     dt = 1.0
-    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, B=B, dt=dt)
+    true_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, B=B, dt=dt)
     S,R = true_model.generate(T=T)
 
     # Test with a standard Hawkes model
