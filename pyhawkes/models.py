@@ -538,7 +538,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
 
 
-    def add_data(self, S, F=None):
+    def add_data(self, S, F=None, minibatchsize=None):
         """
         Add a data set to the list of observations.
         First, filter the data with the impulse response basis,
@@ -552,25 +552,46 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                "Data must be a TxK array of event counts"
 
         T = S.shape[0]
-        N = np.atleast_1d(S.sum(axis=0))
 
         # Filter the data into a TxKxB array
         if F is not None:
             assert isinstance(F, np.ndarray) and F.shape == (T, self.K, self.B), \
                 "F must be a filtered event count matrix"
         else:
+            print "Convolving with basis"
             F = self.basis.convolve_with_basis(S)
 
         # # Check that \sum_t F[t,k,b] ~= Nk / dt
         # Fsum = F.sum(axis=0)
         # print "F_err:  ", Fsum - N/self.dt
 
-        # Instantiate corresponding parent object
-        parents = self._parent_class(T, self.K, self.B, S, F)
-        parents.resample(self.bias_model, self.weight_model, self.impulse_model)
+        # If minibatchsize is not None, add minibatches of data
+        if minibatchsize is not None:
+            for offset in np.arange(T, step=minibatchsize):
+                end = min(offset+minibatchsize, T)
+                T_mb = end - offset
+                S_mb = S[offset:end,:]
+                F_mb = F[offset:end,:]
+                N_mb = np.atleast_1d(S_mb.sum(axis=0))
 
-        # Add to the data list
-        self.data_list.append((S, N, F, parents))
+                # Instantiate parent object for this minibatch
+                parents = self._parent_class(T_mb, self.K, self.B, S_mb, F_mb)
+
+                # Add minibatch to the data list
+                self.data_list.append((S_mb, N_mb, F_mb, parents))
+
+        else:
+            # Instantiate corresponding parent object
+            parents = self._parent_class(T, self.K, self.B, S, F)
+
+            # TODO: Remove this resample as it allocates memory
+            # parents.resample(self.bias_model, self.weight_model, self.impulse_model)
+
+            # Get the event count
+            N = np.atleast_1d(S.sum(axis=0))
+
+            # Add to the data list
+            self.data_list.append((S, N, F, parents))
 
     def check_stability(self):
         """
@@ -745,6 +766,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                         compute the model's rate
         :return:        TxK array of rates
         """
+        # TODO: Write a Cython function to evaluate this
         if S is not None:
             assert isinstance(S, np.ndarray) and S.ndim == 2, "S must be a TxK array."
             T,K = S.shape
@@ -886,6 +908,11 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
         Perform one iteration of the Gibbs sampling algorithm.
         :return:
         """
+        # Update the parents.
+        # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
+        for _,_,_,p in self.data_list:
+            p.resample(self.bias_model, self.weight_model, self.impulse_model)
+
         # Update the bias model given the parents assigned to the background
         self.bias_model.resample(
             data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
@@ -894,19 +921,14 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
         self.impulse_model.resample(
             data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
 
+        # Update the network model
+        self.network.resample(data=(self.weight_model.A, self.weight_model.W))
+
         # Update the weight model given the parents assignments
         self.weight_model.resample(
             model=self,
             N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
             Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
-
-        # Update the parents.
-        # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
-        for _,_,_,p in self.data_list:
-            p.resample(self.bias_model, self.weight_model, self.impulse_model)
-
-        # Update the network model
-        self.network.resample(data=(self.weight_model.A, self.weight_model.W))
 
     def initialize_with_standard_model(self, standard_model):
         super(DiscreteTimeNetworkHawkesModelSpikeAndSlab, self).\
@@ -927,6 +949,10 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         Perform one iteration of the Gibbs sampling algorithm.
         :return:
         """
+        # Update the parents.
+        for _,_,_,p in self.data_list:
+            p.resample(self.bias_model, self.weight_model, self.impulse_model)
+
         # Update the bias model given the parents assigned to the background
         self.bias_model.resample(
             data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
@@ -939,10 +965,6 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         self.weight_model.resample(
             N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
             Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
-
-        # Update the parents.
-        for _,_,_,p in self.data_list:
-            p.resample(self.bias_model, self.weight_model, self.impulse_model)
 
         # Update the network model
         if resample_network:
@@ -974,9 +996,9 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
             self.network.mf_m[self.network.c == c, c] = 0.8
 
         # Update the parents.
-        for _,_,_,p in self.data_list:
-            p.resample(self.bias_model, self.weight_model, self.impulse_model)
-            p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
+        # for _,_,_,p in self.data_list:
+        #     p.resample(self.bias_model, self.weight_model, self.impulse_model)
+        #     p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
 
     def meanfield_coordinate_descent_step(self):
         # Update the parents.
@@ -1035,6 +1057,9 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
 
         # Create a parent object for this minibatch
         p = self._parent_class(T_minibatch, self.K, self.B, S_minibatch, F_minibatch)
+
+        # TODO: Grab one dataset from the data_list and assume
+        # it has been added in minibatches
 
         # Update the parents using a standard mean field update
         p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
