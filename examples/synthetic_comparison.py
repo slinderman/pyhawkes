@@ -12,13 +12,12 @@ from scipy.special import gammaln
 import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
-    DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
     DiscreteTimeNetworkHawkesModelGammaMixture
 from pyhawkes.plotting.plotting import plot_network
 
-from sklearn.metrics import roc_auc_score
+from baselines.xcorr import infer_net_from_xcorr
 
-# np.seterr(over='raise', divide='raise')
+from sklearn.metrics import roc_auc_score
 
 def run_comparison(data_path, test_path, output_path, seed=None):
     """
@@ -31,6 +30,8 @@ def run_comparison(data_path, test_path, output_path, seed=None):
 
     print "Setting seed to ", seed
     np.random.seed(seed)
+
+    assert os.path.exists(os.path.dirname(output_path)), "Output directory does not exist!"
 
     if data_path.endswith(".gz"):
         with gzip.open(data_path, 'r') as f:
@@ -52,8 +53,11 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     dt     = true_model.dt
     dt_max = true_model.dt_max
 
+    # Compute the cross correlation to estimate the connectivity
+    W_xcorr = infer_net_from_xcorr(S, dtmax=true_model.dt_max // true_model.dt)
+
     # Fit a standard Hawkes model on subset of data with BFGS
-    init_model, init_time = fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max,
+    bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max,
                                                            output_path=output_path)
 
     # Fit a standard Hawkes model with SGD
@@ -81,21 +85,25 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     # Fit a network Hawkes model with SVI
     svi_models, timestamps = fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
                                                     output_path,
-                                                    standard_model=init_model)
+                                                    standard_model=bfgs_model)
 
-    aucs = compute_auc(true_model, bfgs_model=init_model, svi_models=svi_models)
+    aucs = compute_auc(true_model,
+                       W_xcorr=W_xcorr,
+                       bfgs_model=bfgs_model,
+                       svi_models=svi_models)
     pprint.pprint(aucs)
 
     plls = compute_predictive_ll(S_test, S,
                                  true_model=true_model,
-                                 bfgs_model=init_model,
+                                 bfgs_model=bfgs_model,
                                  svi_models=svi_models)
-    print "Log Predictive Likelihoods: "
-    pprint.pprint(plls)
+    # print "Log Predictive Likelihoods: "
+    # pprint.pprint(plls)
 
     # Plot the predictive log likelihood
     N_iters = plls['svi'].size
     N_test  = S_test.sum()
+    plt.ioff()
     plt.figure()
     plt.plot(np.arange(N_iters),
              (plls['true'] - plls['homog'])/N_test * np.ones(N_iters),
@@ -126,20 +134,46 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
 
     else:
         print "Fitting the data with a standard Hawkes model"
+        betas = np.logspace(-1,1.3,num=10)
 
-        # Make a model to initialize the parameters
-        init_len   = 10000
-        init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, dt_max=dt_max,
-                                                     l2_penalty=0, l1_penalty=0)
-        init_model.add_data(S[:init_len, :])
+        init_models = []
+        init_len    = 10000
+        S_init      = S[:init_len,:]
 
-        # Initialize the background rates to their mean
-        init_model.initialize_to_background_rate()
+        xv_len      = 1000
+        xv_ll       = np.zeros(len(betas))
+        S_xv        = S[init_len:init_len+xv_len, :]
 
-        print "Initializing with BFGS on first ", init_len, " time bins."
         start = time.clock()
-        init_model.fit_with_bfgs()
+        for i,beta in enumerate(betas):
+            print "Fitting with BFGS on first ", init_len, " time bins, beta = ", beta
+            # Make a model to initialize the parameters
+            init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, dt_max=dt_max, beta=beta)
+            init_model.add_data(S_init)
+            # Initialize the background rates to their mean
+            init_model.initialize_to_background_rate()
+            init_model.fit_with_bfgs()
+            init_models.append(init_model)
+
+            # Compute the heldout likelihood on the xv data
+            xv_ll[i] = init_model.heldout_log_likelihood(S_xv)
+            if not np.isfinite(xv_ll[i]):
+                xv_ll[i] = -np.inf
+
+
         init_time = time.clock() - start
+
+        # Take the best model
+        print "XV predictive log likelihoods: "
+        for beta, ll in zip(betas, xv_ll):
+            print "Beta: %.2f\tLL: %.2f" % (beta, ll)
+        best_ind = np.argmax(xv_ll)
+        print "Best beta: ", betas[best_ind]
+        init_model = init_models[best_ind]
+
+        if best_ind == 0 or best_ind == len(betas) - 1:
+            print "WARNING: Best BFGS model was for extreme value of beta. " \
+                  "Consider expanding the beta range."
 
         # Save the model (sans data)
         init_model.data_list.pop()
@@ -354,6 +388,7 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
     return samples, timestamps
 
 def compute_auc(true_model,
+                W_xcorr=None,
                 bfgs_model=None,
                 sgd_model=None,
                 gibbs_samples=None,
@@ -367,6 +402,10 @@ def compute_auc(true_model,
 
     # Get the true adjacency matrix
     A_true = true_model.weight_model.A.ravel()
+
+    if W_xcorr is not None:
+        aucs['xcorr'] = roc_auc_score(A_true,
+                                     W_xcorr.ravel())
 
     if bfgs_model is not None:
         assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
@@ -416,7 +455,6 @@ def compute_predictive_ll(S_test, S_train,
     T = S_train.shape[0]
     T_test = S_test.shape[0]
     lam_homog = S_train.sum(axis=0) / float(T)
-    import pdb; pdb.set_trace()
     plls['homog']  = 0
     plls['homog'] += -gammaln(S_test+1).sum()
     plls['homog'] += (-lam_homog * T_test).sum()
@@ -474,7 +512,7 @@ def compute_predictive_ll(S_test, S_train,
 
         svi_plls = np.zeros((N_models, N_samples))
         for i, svi_model in enumerate(svi_models):
-            print "Computing pred ll for SVI iteration ", i
+            # print "Computing pred ll for SVI iteration ", i
             for j in xrange(N_samples):
                 svi_model.resample_from_mf()
                 svi_plls[i,j] = svi_model.heldout_log_likelihood(S_test, F=F_test)
@@ -493,11 +531,12 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
+run = 2
 K = 50
 C = 5
 T = 100000
 T_test = 1000
 data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
 test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl" % (K,C,T_test))
-out_path = os.path.join("data", "synthetic", "results_K%d_C%d_T%d" % (K,C,T))
+out_path = os.path.join("data", "synthetic", "results_K%d_C%d_T%d" % (K,C,T), "run%03d" %run, "results" )
 run_comparison(data_path, test_path, out_path, seed=seed)

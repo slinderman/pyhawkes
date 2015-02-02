@@ -13,9 +13,10 @@ from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
 from pyhawkes.internals.parents import SpikeAndSlabParents, GammaMixtureParents
-from pyhawkes.internals.network import ErdosRenyiModel, StochasticBlockModel
+from pyhawkes.internals.network import StochasticBlockModel
 from pyhawkes.utils.basis import CosineBasis
 
+# TODO: Add a simple HomogeneousPoissonProcessModel
 
 class DiscreteTimeStandardHawkesModel(object):
     """
@@ -366,7 +367,7 @@ class DiscreteTimeStandardHawkesModel(object):
         itr = [0]
         def callback(x):
             if itr[0] % 10 == 0:
-                print "Iteration: ", itr[0], "\t LL: ", self.log_likelihood()
+                print "Iteration: %03d\t LL: %.1f" % (itr[0], self.log_likelihood())
             itr[0] = itr[0] + 1
 
         for k in xrange(self.K):
@@ -502,6 +503,12 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             for k2 in xrange(self.K):
                 if g[k1,k2,:].sum() < 1e-2:
                     g[k1,k2,:] = 1.0/self.B
+
+        # Clip g to make sure it is stable for MF updates
+        g = np.clip(g, 1e-2, np.inf)
+
+        # Make sure g is normalized
+        g = g / g.sum(axis=2)[:,:,None]
 
 
         # We need to decide how to set A.
