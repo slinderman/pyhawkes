@@ -55,7 +55,11 @@ def run_comparison(data_path, output_path, seed=None):
     dt_max = 0.06
 
     # Compute the cross correlation to estimate the connectivity
-    import pdb; pdb.set_trace()
+    print "Estimating network via cross correlation"
+    F_xcorr = infer_net_from_xcorr(F[:-T_test,:], dtmax=10)
+
+    # Compute the cross correlation to estimate the connectivity
+    print "Estimating network via cross correlation"
     W_xcorr = infer_net_from_xcorr(S, dtmax=dt_max // dt)
 
     # Fit a standard Hawkes model on subset of data with BFGS
@@ -91,7 +95,7 @@ def run_comparison(data_path, output_path, seed=None):
 
     # Compute AUC of inferred network
     aucs = compute_auc(network,
-                       W_xcorr=W_xcorr,
+                       W_xcorr=F_xcorr,
                        bfgs_model=bfgs_model)
     pprint.pprint(aucs)
 
@@ -102,8 +106,10 @@ def run_comparison(data_path, output_path, seed=None):
     # pprint.pprint(plls)
 
     # Plot the predictive log likelihood
-    N_iters = plls['svi'].size
-    N_test  = S_test.sum()
+    import pdb; pdb.set_trace()
+    # N_iters = plls['svi'].size
+    N_iters = 100
+    N_test  = S_test.size
     plt.ioff()
     plt.figure()
     plt.plot(np.arange(N_iters),
@@ -396,20 +402,21 @@ def compute_auc(A_true,
     Compute the AUC score for each of competing models
     :return:
     """
+    A_flat = A_true.ravel()
     aucs = {}
 
     if W_xcorr is not None:
-        aucs['xcorr'] = roc_auc_score(A_true,
-                                     W_xcorr.ravel())
+        aucs['xcorr'] = roc_auc_score(A_flat,
+                                      W_xcorr.ravel())
 
     if bfgs_model is not None:
         assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
-        aucs['bfgs'] = roc_auc_score(A_true,
+        aucs['bfgs'] = roc_auc_score(A_flat,
                                      bfgs_model.W.ravel())
 
     if sgd_model is not None:
         assert isinstance(sgd_model, DiscreteTimeStandardHawkesModel)
-        aucs['sgd'] = roc_auc_score(A_true,
+        aucs['sgd'] = roc_auc_score(A_flat,
                                      sgd_model.W.ravel())
 
     if gibbs_samples is not None:
@@ -419,16 +426,16 @@ def compute_auc(A_true,
         offset       = N_samples // 2
         Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
 
-        aucs['gibbs'] = roc_auc_score(A_true, Weff_mean)
+        aucs['gibbs'] = roc_auc_score(A_flat, Weff_mean)
 
     if vb_models is not None:
         # Compute ROC based on E[A] under variational posterior
-        aucs['vb'] = roc_auc_score(A_true,
+        aucs['vb'] = roc_auc_score(A_flat,
                                    vb_models[-1].weight_model.expected_A().ravel())
 
     if svi_models is not None:
         # Compute ROC based on E[A] under variational posterior
-        aucs['svi'] = roc_auc_score(A_true,
+        aucs['svi'] = roc_auc_score(A_flat,
                                     svi_models[-1].weight_model.expected_A().ravel())
 
     return aucs

@@ -43,7 +43,7 @@ class Basis(object):
         # Compute convolutions fo each basis vector, one at a time
         for b in np.arange(B):
             F[:,:,b] = sig.fftconvolve(S,
-                                       np.reshape(self.basis[:,b],(R+1,1)),
+                                       np.reshape(self.basis[:,b],(R,1)),
                                        'full')[:T,:]
 
         # Check for positivity
