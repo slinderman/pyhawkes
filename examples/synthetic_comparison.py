@@ -235,49 +235,28 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max, standard_model=None):
     im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.5)
     plt.pause(0.001)
 
-    # Gibbs sample
-    N_samples = 200
+    # Stochastic variational inference
+    N_iters = 1000
     samples = []
-    lps = []
+    minibatchsize = 250
+    delay = 1.0
+    forgetting_rate = 0.5
+    stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
     timestamps = []
-    for itr in xrange(N_samples):
-        lps.append(test_model.log_probability())
-        samples.append(test_model.resample_and_copy())
+    for itr in xrange(N_iters):
+        print "SVI Iter: ", itr, "\tStepsize: ", stepsize[itr]
+        test_model.sgd_step(minibatchsize=minibatchsize, stepsize=stepsize[itr])
+        test_model.resample_from_mf()
+        samples.append(test_model.copy_sample())
         timestamps.append(time.clock())
 
         if itr % 1 == 0:
-            print "Iteration ", itr, "\t LL: ", lps[-1]
-            im.set_data(test_model.weight_model.A * \
-                        test_model.weight_model.W)
+            print "Iteration ", itr
+            im.set_data(test_model.weight_model.expected_W())
             plt.pause(0.001)
 
-    # Compute sample statistics for second half of samples
-    A_samples       = np.array([s.weight_model.A     for s in samples])
-    W_samples       = np.array([s.weight_model.W     for s in samples])
-    g_samples       = np.array([s.impulse_model.g    for s in samples])
-    lambda0_samples = np.array([s.bias_model.lamdba0 for s in samples])
-    c_samples       = np.array([s.network.c          for s in samples])
-    lps             = np.array(lps)
-
-    offset = N_samples // 2
-    A_mean          = A_samples[offset:, ...].mean(axis=0)
-    W_mean          = W_samples[offset:, ...].mean(axis=0)
-    g_mean          = g_samples[offset:, ...].mean(axis=0)
-    lambda0_mean    = lambda0_samples[offset:, ...].mean(axis=0)
-
-    print "A mean:        ", A_mean
-    print "W mean:        ", W_mean
-    print "g mean:        ", g_mean
-    print "lambda0 mean:  ", lambda0_mean
-
-    plt.figure()
-    plt.plot(np.arange(N_samples), lps)
-    plt.xlabel("Iteration")
-    plt.ylabel("Log probability")
-    plt.show()
-
-    plot_network(test_model.weight_model.A, test_model.weight_model.W)
-    plt.show()
+        # with gzip.open('iter%03d' % itr,'w') as outfile:
+        #     cPickle.dump(model,outfile,protocol=-1)
 
     return samples, timestamps
 

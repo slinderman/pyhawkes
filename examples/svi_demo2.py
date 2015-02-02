@@ -61,14 +61,14 @@ def demo(seed=None):
     # p = 0.5 * np.eye(C)
     # v = kappa * (10 * np.eye(C) + 25.0 * (1-np.eye(C)))
 
-    C = 2
-    K = 20
+    C = 5
+    K = 50
     T = 10000
     dt = 1.0
     B = 3
     kappa = 2.0
     c = np.arange(C).repeat((K // C))
-    p = 0.4 * np.eye(C) + 0.02 * (1-np.eye(C))
+    p = 0.4 * np.eye(C) + 0.01 * (1-np.eye(C))
     v = kappa * (5 * np.eye(C) + 5.0 * (1-np.eye(C)))
 
     S, R, S_test, true_model = sample_from_network_hawkes(C, K, T, dt, B, kappa, c, p, v)
@@ -128,9 +128,9 @@ def demo(seed=None):
     plt.pause(0.001)
     plt.show()
 
-    # VB coordinate descent
-    N_iters = 1000
-    minibatchsize = 256
+    # Stochastic variational inference
+    N_iters = 500
+    minibatchsize = 500
     delay = 1.0
     forgetting_rate = 0.5
     stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
@@ -224,4 +224,5 @@ def demo(seed=None):
 
 # demo(11223344)
 
+# Nails the connectivity and the clustering.
 demo(3848328624)

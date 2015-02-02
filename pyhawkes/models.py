@@ -498,6 +498,10 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         # The impulse responses are normalized weights
         g = Wg / W[:,:,None]
+        for k1 in xrange(self.K):
+            for k2 in xrange(self.K):
+                if g[k1,k2,:].sum() < 1e-2:
+                    g[k1,k2,:] = 1.0/self.B
 
 
         # We need to decide how to set A.
@@ -961,7 +965,8 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
 
         self.weight_model.mf_p       = 0.8 * self.weight_model.A + 0.2 * (1-self.weight_model.A)
 
-        # TODO: Set impulse model
+        # Set mean field parameters of the impulse model
+        self.impulse_model.mf_gamma = 100 * self.impulse_model.g.copy('C')
 
         # Set network mean field parameters
         self.network.mf_m = 0.2 / (self.C-1) * np.ones((self.K, self.C))
