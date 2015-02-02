@@ -8,6 +8,7 @@ import gzip
 import pprint
 import numpy as np
 from scipy.misc import logsumexp
+from scipy.special import gammaln
 import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
@@ -85,15 +86,31 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     aucs = compute_auc(true_model, bfgs_model=init_model, svi_models=svi_models)
     pprint.pprint(aucs)
 
-    plls = compute_predictive_ll(S_test, S, bfgs_model=init_model, svi_models=svi_models)
+    plls = compute_predictive_ll(S_test, S,
+                                 true_model=true_model,
+                                 bfgs_model=init_model,
+                                 svi_models=svi_models)
+    print "Log Predictive Likelihoods: "
+    pprint.pprint(plls)
+
+    # Plot the predictive log likelihood
     N_iters = plls['svi'].size
     N_test  = S_test.sum()
     plt.figure()
-    plt.plot(np.arange(N_iters), (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters), '-k')
-    plt.plot(np.arange(N_iters), (plls['svi'] - plls['homog'])/N_test, '-r')
+    plt.plot(np.arange(N_iters),
+             (plls['true'] - plls['homog'])/N_test * np.ones(N_iters),
+             '-k', label='True')
+    plt.plot(np.arange(N_iters),
+             (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters),
+             '-b', label='BFGS')
+    plt.plot(np.arange(N_iters),
+             (plls['svi'] - plls['homog'])/N_test,
+             '-r', label='SVI')
     plt.xlabel('Iteration')
     plt.ylabel('Log Predictive Likelihood')
+    plt.legend()
     plt.show()
+
 
 def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
     """
@@ -383,6 +400,7 @@ def compute_auc(true_model,
     return aucs
 
 def compute_predictive_ll(S_test, S_train,
+                          true_model=None,
                           bfgs_model=None,
                           sgd_models=None,
                           gibbs_samples=None,
@@ -398,7 +416,14 @@ def compute_predictive_ll(S_test, S_train,
     T = S_train.shape[0]
     T_test = S_test.shape[0]
     lam_homog = S_train.sum(axis=0) / float(T)
-    plls['homog'] = (-lam_homog * T_test + S_train.sum(axis=0) * np.log(lam_homog)).sum()
+    import pdb; pdb.set_trace()
+    plls['homog']  = 0
+    plls['homog'] += -gammaln(S_test+1).sum()
+    plls['homog'] += (-lam_homog * T_test).sum()
+    plls['homog'] += (S_test.sum(axis=0) * np.log(lam_homog)).sum()
+
+    if true_model is not None:
+        plls['true'] = true_model.heldout_log_likelihood(S_test)
 
     if bfgs_model is not None:
         assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
@@ -472,7 +497,7 @@ K = 50
 C = 5
 T = 100000
 T_test = 1000
-data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl" % (K,C,T))
+data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
 test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl" % (K,C,T_test))
 out_path = os.path.join("data", "synthetic", "results_K%d_C%d_T%d" % (K,C,T))
 run_comparison(data_path, test_path, out_path, seed=seed)
