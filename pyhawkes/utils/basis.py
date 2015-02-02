@@ -36,10 +36,6 @@ class Basis(object):
         (T,K) = S.shape
         (R,B) = self.basis.shape
 
-        # First, by convention, the impulse responses are apply to times
-        # (t-R:t-1). That means we need to prepend a row of zeros to make
-        # sure the basis remains causal
-        basis = np.vstack((np.zeros((1,B)), self.basis.copy()))
 
         # Initialize array for filtered stimulus
         F = np.empty((T,K,B))
@@ -47,7 +43,7 @@ class Basis(object):
         # Compute convolutions fo each basis vector, one at a time
         for b in np.arange(B):
             F[:,:,b] = sig.fftconvolve(S,
-                                       np.reshape(basis[:,b],(R+1,1)),
+                                       np.reshape(self.basis[:,b],(R+1,1)),
                                        'full')[:T,:]
 
         # Check for positivity
@@ -57,7 +53,9 @@ class Basis(object):
 
         return F
 
-    def interpolate_basis(self, basis, dt, dt_max, norm=True):
+    def interpolate_basis(self, basis, dt, dt_max,
+                          norm=True,
+                          allow_instantaneous=False):
         # Interpolate basis at the resolution of the data
         L,B = basis.shape
         t_int = np.arange(0.0, dt_max, step=dt)
@@ -71,6 +69,12 @@ class Basis(object):
         if norm:
             # ibasis /= np.trapz(ibasis,t_int,axis=0)
             ibasis /= (dt * np.sum(ibasis, axis=0))
+
+        if not allow_instantaneous:
+            # Typically, the impulse responses are applied to times
+            # (t+1:t+R). That means we need to prepend a row of zeros to make
+            # sure the basis remains causal
+            ibasis = np.vstack((np.zeros((1,B)), ibasis))
 
         return ibasis
 

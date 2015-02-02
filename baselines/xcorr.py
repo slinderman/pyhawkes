@@ -3,6 +3,19 @@ Estimate connectivity from covariance
 """
 import numpy as np
 
+
+def infer_net_from_xcorr(S, dtmax, smooth=None):
+    # Smooth S with a window of size dtmax
+    if smooth is not None:
+        S = _moving_average(S, window=smooth, axis=0)
+
+    H = xcorr(S, dtmax)
+
+    # Find the pairs with highest total correlation
+    H_sum = np.sum(np.abs(H), axis=2)
+
+    return H_sum
+
 def xcorr(S, dtmax=10):
     """
     Cross correlate each pair of columns in S at offsets up to dtmax
@@ -32,18 +45,8 @@ def xcorr(S, dtmax=10):
 
     return H
 
-def infer_net_from_xcorr(S, dtmax, thr=1.0):
-    # Smooth S with a window of size dtmax
-    S = _moving_average(S, ws=dtmax//5, axis=0)
 
-    H = xcorr(S, dtmax)
-
-    # Find the pairs with highest total correlation
-    H_sum = np.sum(np.abs(H), axis=2)
-
-    return H_sum
-
-def _moving_average(a, axis=0, ws=10):
-    ret = np.cumsum(a, dtype=float, axis=axis)
-    ret[ws:] = ret[ws:] - ret[:-ws]
-    return ret[ws - 1:] / ws
+def _moving_average(a, axis=0, window=10):
+    ret = np.cumsum(a, dtype=np.float64, axis=axis)
+    ret[window:] = ret[window:] - ret[:-window]
+    return ret[window - 1:] / window

@@ -26,7 +26,8 @@ class DiscreteTimeStandardHawkesModel(object):
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha=1.0, beta=1.0,
-                 l2_penalty=0.0, l1_penalty=0.0):
+                 l2_penalty=0.0, l1_penalty=0.0,
+                 allow_instantaneous=False):
         """
         Initialize a discrete time network Hawkes model with K processes.
 
@@ -41,6 +42,7 @@ class DiscreteTimeStandardHawkesModel(object):
         # Initialize the basis
         self.B = B
         self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True)
+        self.allow_instantaneous = allow_instantaneous
 
         # Randomly initialize parameters (bias and weights)
         # self.weights = abs((1.0/(1+self.K*self.B)) * np.random.randn(self.K, 1 + self.K * self.B))
@@ -519,7 +521,6 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         # mean under the network model
         sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
         A = W > np.percentile(W, (1.0 - sparsity) * 100)
-
 
         # Set the model parameters
         self.bias_model.lambda0 = lambda0.copy('C')
