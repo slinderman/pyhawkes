@@ -85,11 +85,12 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     aucs = compute_auc(true_model, bfgs_model=init_model, svi_models=svi_models)
     pprint.pprint(aucs)
 
-    plls = compute_predictive_ll(S_test, bfgs_model=init_model, svi_models=svi_models)
+    plls = compute_predictive_ll(S_test, S, bfgs_model=init_model, svi_models=svi_models)
     N_iters = plls['svi'].size
+    N_test  = S_test.sum()
     plt.figure()
-    plt.plot(np.arange(N_iters), plls['bfgs'] * np.ones(N_iters), '-k')
-    plt.plot(np.arange(N_iters), plls['svi'], '-r')
+    plt.plot(np.arange(N_iters), (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters), '-k')
+    plt.plot(np.arange(N_iters), (plls['svi'] - plls['homog'])/N_test, '-r')
     plt.xlabel('Iteration')
     plt.ylabel('Log Predictive Likelihood')
     plt.show()
@@ -381,7 +382,7 @@ def compute_auc(true_model,
 
     return aucs
 
-def compute_predictive_ll(S_test,
+def compute_predictive_ll(S_test, S_train,
                           bfgs_model=None,
                           sgd_models=None,
                           gibbs_samples=None,
@@ -392,6 +393,12 @@ def compute_predictive_ll(S_test,
     :return:
     """
     plls = {}
+
+    # Compute homogeneous pred ll
+    T = S_train.shape[0]
+    T_test = S_test.shape[0]
+    lam_homog = S_train.sum(axis=0) / float(T)
+    plls['homog'] = (-lam_homog * T_test + S_train.sum(axis=0) * np.log(lam_homog)).sum()
 
     if bfgs_model is not None:
         assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
@@ -436,7 +443,7 @@ def compute_predictive_ll(S_test,
     if svi_models is not None:
         # Compute predictive likelihood over samples from VB model
         N_models  = len(svi_models)
-        N_samples = 100
+        N_samples = 1
         # Preconvolve with the VB model's basis
         F_test = svi_models[0].basis.convolve_with_basis(S_test)
 
