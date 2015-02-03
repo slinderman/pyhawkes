@@ -123,6 +123,7 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     plt.ylabel('Log Predictive Likelihood')
     plt.legend()
     plt.show()
+    plt.savefig(output_path + "_predll.pdf")
 
 
 def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
@@ -161,7 +162,6 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
         start = time.clock()
         for i,beta in enumerate(betas):
             print "Fitting with BFGS on first ", init_len, " time bins, beta = ", beta
-            import pdb; pdb.set_trace()
             init_model.beta = beta
             init_model.fit_with_bfgs()
             init_models.append(init_model.copy_sample())
