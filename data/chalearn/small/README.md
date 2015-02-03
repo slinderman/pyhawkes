@@ -1,6 +1,6 @@
 Download the small network file from the Chalearn Connectomics challenge into this directory
 
-`wget https://www.kaggle.com/c/connectomics/download/small.tgz`
+`wget http://openconnecto.me/data/public/chalearn/small.tgz`
 
 Then extract the files:
 

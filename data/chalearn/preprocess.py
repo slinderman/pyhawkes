@@ -10,6 +10,12 @@ import sys
 import cPickle
 import gzip
 import numpy as np
+
+# Use the Agg backend in running on a server without the DISPLAY variable
+if "DISPLAY" not in os.environ:
+    import matplotlib
+    matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
 
 # Import OOPSI. Available at: https://github.com/liubenyuan/py-oopsi
