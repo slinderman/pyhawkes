@@ -251,6 +251,21 @@ class DiscreteTimeStandardHawkesModel(object):
         else:
             raise Exception("ks must be int or array of indices in 0..K-1")
 
+    def log_prior(self, ks=None):
+        """
+        Compute the log prior probability of log W
+        :param ks:
+        :return:
+        """
+        lp = 0
+        for k in ks:
+            # lp += (self.alpha * np.log(self.weights[k,1:])).sum()
+            # lp += (-self.beta * self.weights[k,1:]).sum()
+            if self.alpha > 1:
+                lp += (self.alpha -1) * np.log(self.weights[k,1:]).sum()
+            lp += (-self.beta * self.weights[k,1:]).sum()
+        return lp
+
     def log_likelihood(self, indices=None, ks=None):
         """
         Compute the log likelihood
@@ -268,17 +283,19 @@ class DiscreteTimeStandardHawkesModel(object):
             R = self.compute_rate(index, ks=ks)
 
             if ks is not None:
-
                 ll += (-gammaln(S[:,ks]+1) + S[:,ks] * np.log(R) -R*self.dt).sum()
             else:
                 ll += (-gammaln(S+1) + S * np.log(R) -R*self.dt).sum()
 
-            # Add prior
-            if self.alpha > 1:
-                ll += ((self.alpha-1) * np.log(self.weights[ks,1:])).sum()
-            ll += (-self.beta * self.weights[ks,1:]).sum()
-
         return ll
+
+    def log_posterior(self, indices=None, ks=None):
+        if ks is None:
+            ks = np.arange(self.K)
+
+        lp = self.log_likelihood(indices, ks)
+        lp += self.log_prior(ks)
+        return lp
 
     def heldout_log_likelihood(self, S):
         self.add_data(S)
@@ -299,8 +316,8 @@ class DiscreteTimeStandardHawkesModel(object):
         if indices is None:
             indices = np.arange(len(self.data_list))
 
+        d_W_d_log_W = self._d_W_d_logW(k)
         for index in indices:
-            d_W_d_log_W = self._d_W_d_logW(k)
             d_rate_d_W = self._d_rate_d_W(index, k)
             d_rate_d_log_W = d_rate_d_W.dot(d_W_d_log_W)
             d_ll_d_rate = self._d_ll_d_rate(index, k)
@@ -314,8 +331,12 @@ class DiscreteTimeStandardHawkesModel(object):
         # grad += d_reg_d_W.dot(d_W_d_log_W)
 
         # Add the prior
-        d_prior_d_W = self._d_prior_d_W(k)
-        grad += d_prior_d_W.dot(d_W_d_log_W)
+        # d_log_prior_d_log_W = self._d_log_prior_d_log_W(k)
+        # grad += d_log_prior_d_log_W
+
+        d_log_prior_d_W = self._d_log_prior_d_W(k)
+        assert np.allclose(d_log_prior_d_W[0], 0.0)
+        grad += d_log_prior_d_W.dot(d_W_d_log_W)
 
         # Zero out the gradient if
         if not self.allow_self_connections:
@@ -346,35 +367,55 @@ class DiscreteTimeStandardHawkesModel(object):
         """
         return np.diag(self.weights[k,:])
 
-    def _d_reg_d_W(self, k):
+    # def _d_reg_d_W(self, k):
+    #     """
+    #     Compute gradient of regularization
+    #     d/dW  -1/2 * L2 * W^2 -L1 * |W|
+    #         = -2*L2*W -L1
+    #
+    #     since W >= 0
+    #     """
+    #     d_reg_d_W = -self.l2_penalty*self.weights[k,:] -self.l1_penalty
+    #
+    #     # Don't penalize the bias
+    #     d_reg_d_W[0] = 0
+    #
+    #     return d_reg_d_W
+
+    def _d_log_prior_d_log_W(self, k):
         """
-        Compute gradient of regularization
-        d/dW  -1/2 * L2 * W^2 -L1 * |W|
-            = -2*L2*W -L1
+        Use a gamma prior on W (it is log concave for alpha >= 1)
+        By change of variables this implies that
+        LN p(LN W) = const + \alpha LN W - \beta W
+        and
+        d/d (LN W) (LN p(LN W)) = \alpha - \beta W
 
-        since W >= 0
+        TODO: Is this still concave? It is a concave function of W,
+        but what about of LN W? As a function of u=LN(W) it is
+        linear plus a -\beta e^u which is concave for beta > 0,
+        so yes, it is still concave.
+
+        So why does BFGS not converge monotonically?
+
         """
-        d_reg_d_W = -self.l2_penalty*self.weights[k,:] -self.l1_penalty
+        d_log_prior_d_log_W = np.zeros_like(self.weights[k,:])
+        d_log_prior_d_log_W[1:] = self.alpha  - self.beta * self.weights[k,1:]
+        return d_log_prior_d_log_W
 
-        # Don't penalize the bias
-        d_reg_d_W[0] = 0
-
-        return d_reg_d_W
-
-    def _d_prior_d_W(self, k):
+    def _d_log_prior_d_W(self, k):
         """
-        Use a gamma prior (it is log concave for alpha >= 1)
-        Compute gradient of prior wrt W
-        d/dW  (alpha-1) * log(W) - beta*W
-            = (alpha-1) / W - beta
+        Use a gamma prior on W (it is log concave for alpha >= 1)
+
+        and
+        LN p(W)       = (\alpha-1)LN W - \beta W
+        d/dW LN p(W)) = (\alpha -1)/W  - \beta
         """
-        d_prior_d_W = (self.alpha-1.0) / self.weights[k,:] - self.beta
+        d_log_prior_d_W = np.zeros_like(self.weights[k,:])
+        if self.alpha > 1.0:
+            d_log_prior_d_W[1:] += (self.alpha-1) / self.weights[k,1:]
 
-        # Don't put a prior on the bias
-        d_prior_d_W[0] = 0
-
-        return d_prior_d_W
-
+        d_log_prior_d_W[1:] += -self.beta
+        return d_log_prior_d_W
 
     def fit_with_bfgs(self):
         """
@@ -383,7 +424,7 @@ class DiscreteTimeStandardHawkesModel(object):
         def objective(x, k):
             self.weights[k,:] = np.exp(x)
             self.weights[k,:] = np.nan_to_num(self.weights[k,:])
-            return np.nan_to_num(-self.log_likelihood(ks=np.array([k])))
+            return np.nan_to_num(-self.log_posterior(ks=np.array([k])))
 
         def gradient(x, k):
             self.weights[k,:] = np.exp(x)
@@ -393,7 +434,7 @@ class DiscreteTimeStandardHawkesModel(object):
         itr = [0]
         def callback(x):
             if itr[0] % 10 == 0:
-                print "Iteration: %03d\t LL: %.1f" % (itr[0], self.log_likelihood())
+                print "Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior())
             itr[0] = itr[0] + 1
 
         for k in xrange(self.K):

@@ -415,8 +415,10 @@ def compute_auc(A_true,
 
     if bfgs_model is not None:
         assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
+        W_bfgs = bfgs_model.W.copy()
+        W_bfgs -= np.diag(np.diag(W_bfgs))
         aucs['bfgs'] = roc_auc_score(A_flat,
-                                     bfgs_model.W.ravel())
+                                     W_bfgs.ravel())
 
     if sgd_model is not None:
         assert isinstance(sgd_model, DiscreteTimeStandardHawkesModel)
@@ -538,6 +540,6 @@ def compute_clustering_score():
 # seed = 2650533028
 seed = None
 run = 4
-data_path = os.path.join("data", "chalearn", "small", "network1.pkl.gz")
+data_path = os.path.join("data", "chalearn", "small", "network1a.pkl.gz")
 out_path  = os.path.join("data", "chalearn", "small", "network1_run%03d" %run, "results" )
 run_comparison(data_path, out_path, seed=seed)

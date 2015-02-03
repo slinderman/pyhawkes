@@ -134,7 +134,9 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
 
     else:
         print "Fitting the data with a standard Hawkes model"
-        betas = np.logspace(-1,1.3,num=10)
+        # betas = np.logspace(-3,-0.8,num=10)
+        betas = np.array([0.1, 1.0, 10.0, 20.0, 50.0, 100.0])
+        # betas = np.concatenate(([0], betas))
 
         init_models = []
         init_len    = 10000
@@ -144,16 +146,20 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
         xv_ll       = np.zeros(len(betas))
         S_xv        = S[init_len:init_len+xv_len, :]
 
+        # Make a model to initialize the parameters
+        init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, dt_max=dt_max, beta=0.0)
+        init_model.add_data(S_init)
+        # Initialize the background rates to their mean
+        init_model.initialize_to_background_rate()
+
+
         start = time.clock()
         for i,beta in enumerate(betas):
             print "Fitting with BFGS on first ", init_len, " time bins, beta = ", beta
-            # Make a model to initialize the parameters
-            init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, dt_max=dt_max, beta=beta)
-            init_model.add_data(S_init)
-            # Initialize the background rates to their mean
-            init_model.initialize_to_background_rate()
+            import pdb; pdb.set_trace()
+            init_model.beta = beta
             init_model.fit_with_bfgs()
-            init_models.append(init_model)
+            init_models.append(init_model.copy_sample())
 
             # Compute the heldout likelihood on the xv data
             xv_ll[i] = init_model.heldout_log_likelihood(S_xv)
@@ -176,7 +182,6 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
                   "Consider expanding the beta range."
 
         # Save the model (sans data)
-        init_model.data_list.pop()
         with open(output_path + ".bfgs.pkl", 'w') as f:
             print "Saving BFGS results to ", (output_path + ".bfgs.pkl")
             cPickle.dump((init_model, init_time), f, protocol=-1)
@@ -531,7 +536,7 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
-run = 2
+run = 6
 K = 50
 C = 5
 T = 100000

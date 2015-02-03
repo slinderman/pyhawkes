@@ -23,8 +23,6 @@ class Basis(object):
         self.basis = self.interpolate_basis(self.create_basis(), self.dt, self.dt_max, self.norm)
         self.L = self.basis.shape[0]
 
-        import pdb; pdb.set_trace()
-
     @abc.abstractmethod
     def create_basis(self):
         raise NotImplementedError()

@@ -6,16 +6,22 @@ up since it didn't make use of numpy functions and it was woefully
 lacking in useful comments.
 """
 import os
+import sys
 import cPickle
 import gzip
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Import OOPSI. Available at: https://github.com/liubenyuan/py-oopsi
+# or originally in Matlab from https://github.com/jovo/oopsi
+pyoopsi_path = os.path.join(os.path.expanduser("~"), "Install", "py-oopsi")
+sys.path.append(pyoopsi_path)
+import oopsi
 
 def process_dataset(K=100,
                     suffix="_iNet1_Size100_CC01inh.txt",
                     dir="data/chalearn/small",
-                    outfile="network1.pkl"):
+                    outfile="network1c.pkl"):
 
     # Get the full filenames
     fluor_file = os.path.join(dir, "fluorescence" + suffix)
@@ -29,11 +35,16 @@ def process_dataset(K=100,
 
     # Discretize the fluorescence signal
     # Hardcode the bins
-    # bins = np.array([-10, 0.2, 10]).reshape((1,3)).repeat(K, axis=0)
+    # bins = np.array([-10, 0.17, 10]).reshape((1,3)).repeat(K, axis=0)
     # S, _ = discretize_fluorescence(F, edges=bins, binsui=False)
-    # S, bins = discretize_fluorescence(F, nbins=2, binsui=True)
-    S, bins = discretize_fluorescence(F, nbins=3, binsui=True)
-    # S = remove_double_spikes(S)
+    # # S, bins = discretize_fluorescence(F, nbins=2, binsui=True)
+    # # S, bins = discretize_fluorescence(F, nbins=3, binsui=True)
+    # # S = remove_double_spikes(S)
+
+    # Get the spike times with oopsi
+    # fast-oopsi,
+    S,C = extract_spike_oopsi(F, dt=0.02)
+
 
     # Plot a segment of fluorescence traces and spikes
     start = 0
@@ -68,7 +79,7 @@ def process_dataset(K=100,
     plt.show()
 
     with gzip.open(os.path.join(dir, outfile + ".gz"), 'w') as f:
-        cPickle.dump((S, F, bins, network, pos), f, protocol=-1)
+        cPickle.dump((S, F, C, network, pos), f, protocol=-1)
 
 
 def parse_fluorescence_file(filename, K, delimiter=','):
@@ -138,6 +149,26 @@ def parse_position_file(filename, K):
             pos[k,1] = y
 
     return pos
+
+def extract_spike_oopsi(F, dt):
+    """
+    Extract the spike times with OOPSI
+
+    :param F:           Fluorescence data (each row a time bin, each column a neuron).
+    :param dt:          Time bin size
+    :return             The discretized signal
+    """
+    D = np.zeros_like(F)
+    C = np.zeros_like(F)
+    for k in xrange(F.shape[1]):
+        print "Running oopsi on neuron ", k
+        D[:,k], C[:,k] = oopsi.fast(F[:,k], dt=dt, iter_max=6)
+
+    # Cast D to an integer matrix
+    D = D.astype(np.int)
+
+    return D, C
+
 
 def discretize_fluorescence(F,
                             nbins=2,
