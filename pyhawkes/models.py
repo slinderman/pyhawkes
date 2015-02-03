@@ -27,7 +27,8 @@ class DiscreteTimeStandardHawkesModel(object):
                  B=5, basis=None,
                  alpha=1.0, beta=1.0,
                  l2_penalty=0.0, l1_penalty=0.0,
-                 allow_instantaneous=False):
+                 allow_instantaneous=False,
+                 allow_self_connections=True):
         """
         Initialize a discrete time network Hawkes model with K processes.
 
@@ -41,8 +42,12 @@ class DiscreteTimeStandardHawkesModel(object):
 
         # Initialize the basis
         self.B = B
-        self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True)
         self.allow_instantaneous = allow_instantaneous
+        self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True,
+                                 allow_instantaneous=allow_instantaneous)
+        self.allow_self_connections = allow_self_connections
+        assert not (self.allow_instantaneous and self.allow_self_connections), \
+            "Cannot allow instantaneous self connections"
 
         # Randomly initialize parameters (bias and weights)
         # self.weights = abs((1.0/(1+self.K*self.B)) * np.random.randn(self.K, 1 + self.K * self.B))
@@ -56,6 +61,8 @@ class DiscreteTimeStandardHawkesModel(object):
         # self.weights = np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K, 1 + self.K*self.B))
         # self.weights = self.alpha/self.beta * np.ones((self.K, 1 + self.K*self.B))
         self.weights = 1e-3 * np.ones((self.K, 1 + self.K*self.B))
+        if not self.allow_self_connections:
+            self._remove_self_weights()
 
         # Save the regularization penalties
         self.l2_penalty = l2_penalty
@@ -63,6 +70,10 @@ class DiscreteTimeStandardHawkesModel(object):
 
         # Initialize the data list to empty
         self.data_list = []
+
+    def _remove_self_weights(self):
+        for k in xrange(self.K):
+                self.weights[k,1+(k*self.B):1+(k+1)*self.B] = 1e-32
 
     def initialize_with_gibbs_model(self, gibbs_model):
         """
@@ -82,6 +93,9 @@ class DiscreteTimeStandardHawkesModel(object):
         for k in xrange(self.K):
             self.weights[k,0]  = lambda0[k]
             self.weights[k,1:] = (Weff[:,k][:,None] * g[:,k,:]).ravel()
+
+        if not self.allow_self_connections:
+            self._remove_self_weights()
 
     def initialize_to_background_rate(self):
         if len(self.data_list) > 0:
@@ -259,6 +273,11 @@ class DiscreteTimeStandardHawkesModel(object):
             else:
                 ll += (-gammaln(S+1) + S * np.log(R) -R*self.dt).sum()
 
+            # Add prior
+            if self.alpha > 1:
+                ll += ((self.alpha-1) * np.log(self.weights[ks,1:])).sum()
+            ll += (-self.beta * self.weights[ks,1:]).sum()
+
         return ll
 
     def heldout_log_likelihood(self, S):
@@ -297,6 +316,11 @@ class DiscreteTimeStandardHawkesModel(object):
         # Add the prior
         d_prior_d_W = self._d_prior_d_W(k)
         grad += d_prior_d_W.dot(d_W_d_log_W)
+
+        # Zero out the gradient if
+        if not self.allow_self_connections:
+            assert np.allclose(self.weights[k,1+k*self.B:1+(k+1)*self.B], 0.0)
+            grad[1+k*self.B:1+(k+1)*self.B] = 0
 
         return grad
 

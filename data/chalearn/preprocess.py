@@ -31,8 +31,9 @@ def process_dataset(K=100,
     # Hardcode the bins
     # bins = np.array([-10, 0.2, 10]).reshape((1,3)).repeat(K, axis=0)
     # S, _ = discretize_fluorescence(F, edges=bins, binsui=False)
-    S, bins = discretize_fluorescence(F, nbins=2, binsui=True)
-    S = remove_double_spikes(S)
+    # S, bins = discretize_fluorescence(F, nbins=2, binsui=True)
+    S, bins = discretize_fluorescence(F, nbins=3, binsui=True)
+    # S = remove_double_spikes(S)
 
     # Plot a segment of fluorescence traces and spikes
     start = 0

@@ -11,15 +11,19 @@ class Basis(object):
 
     def __init__(self, B, dt, dt_max,
                  orth=False,
-                 norm=False):
+                 norm=False,
+                 allow_instantaneous=False):
         self.B = B
         self.dt = dt
         self.dt_max = dt_max
         self.orth = orth
         self.norm = norm
+        self.allow_instantaneous = allow_instantaneous
 
         self.basis = self.interpolate_basis(self.create_basis(), self.dt, self.dt_max, self.norm)
         self.L = self.basis.shape[0]
+
+        import pdb; pdb.set_trace()
 
     @abc.abstractmethod
     def create_basis(self):
@@ -54,8 +58,7 @@ class Basis(object):
         return F
 
     def interpolate_basis(self, basis, dt, dt_max,
-                          norm=True,
-                          allow_instantaneous=False):
+                          norm=True):
         # Interpolate basis at the resolution of the data
         L,B = basis.shape
         t_int = np.arange(0.0, dt_max, step=dt)
@@ -70,7 +73,7 @@ class Basis(object):
             # ibasis /= np.trapz(ibasis,t_int,axis=0)
             ibasis /= (dt * np.sum(ibasis, axis=0))
 
-        if not allow_instantaneous:
+        if not self.allow_instantaneous:
             # Typically, the impulse responses are applied to times
             # (t+1:t+R). That means we need to prepend a row of zeros to make
             # sure the basis remains causal
@@ -89,6 +92,7 @@ class CosineBasis(Basis):
                  B, dt, dt_max,
                  orth=False,
                  norm=True,
+                 allow_instantaneous=False,
                  n_eye=0,
                  a=1.0/120,
                  b=0.5,
@@ -99,7 +103,7 @@ class CosineBasis(Basis):
         self.b = b
         self.L = L
 
-        super(CosineBasis, self).__init__(B, dt, dt_max, orth, norm)
+        super(CosineBasis, self).__init__(B, dt, dt_max, orth, norm, allow_instantaneous)
 
     def create_basis(self):
         n_pts = self.L              # Number of points at which to evaluate the basis

@@ -52,19 +52,20 @@ def run_comparison(data_path, output_path, seed=None):
     C      = 1
     B      = 3
     dt     = 0.02
-    dt_max = 0.06
+    dt_max = 0.08
 
     # Compute the cross correlation to estimate the connectivity
     print "Estimating network via cross correlation"
-    F_xcorr = infer_net_from_xcorr(F[:-T_test,:], dtmax=10)
+    # W_xcorr = infer_net_from_xcorr(F[:10000,:], dtmax=3)
 
     # Compute the cross correlation to estimate the connectivity
-    print "Estimating network via cross correlation"
-    W_xcorr = infer_net_from_xcorr(S, dtmax=dt_max // dt)
+    # print "Estimating network via cross correlation"
+    W_xcorr = infer_net_from_xcorr(S[:10000], dtmax=dt_max // dt)
 
     # Fit a standard Hawkes model on subset of data with BFGS
-    bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max,
-                                                           output_path=output_path)
+    bfgs_model = None
+    # bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max,
+    #                                                        output_path=output_path)
 
     # Fit a standard Hawkes model with SGD
     # standard_models, timestamps = fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max,
@@ -95,7 +96,7 @@ def run_comparison(data_path, output_path, seed=None):
 
     # Compute AUC of inferred network
     aucs = compute_auc(network,
-                       W_xcorr=F_xcorr,
+                       W_xcorr=W_xcorr,
                        bfgs_model=bfgs_model)
     pprint.pprint(aucs)
 
@@ -138,7 +139,8 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
 
     else:
         print "Fitting the data with a standard Hawkes model"
-        betas = np.logspace(-1,1.3,num=10)
+        # betas = np.logspace(-1,1.3,num=1)
+        betas = [0]
 
         init_models = []
         init_len    = 10000
@@ -152,7 +154,9 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
         for i,beta in enumerate(betas):
             print "Fitting with BFGS on first ", init_len, " time bins, beta = ", beta
             # Make a model to initialize the parameters
-            init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, dt_max=dt_max, beta=beta)
+            init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, dt_max=dt_max, beta=beta,
+                                                         allow_instantaneous=True,
+                                                         allow_self_connections=False)
             init_model.add_data(S_init)
             # Initialize the background rates to their mean
             init_model.initialize_to_background_rate()
@@ -533,11 +537,7 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
-run = 1
-K = 50
-C = 5
-T = 100000
-T_test = 1000
+run = 4
 data_path = os.path.join("data", "chalearn", "small", "network1.pkl.gz")
 out_path  = os.path.join("data", "chalearn", "small", "network1_run%03d" %run, "results" )
 run_comparison(data_path, out_path, seed=seed)
