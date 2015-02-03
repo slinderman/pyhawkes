@@ -9,6 +9,11 @@ import pprint
 import numpy as np
 from scipy.misc import logsumexp
 from scipy.special import gammaln
+
+# Use the Agg backend in running on a server without the DISPLAY variable
+if "DISPLAY" not in os.environ:
+    import matplotlib
+    matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
