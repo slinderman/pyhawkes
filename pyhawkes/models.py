@@ -513,6 +513,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                  kappa=1.0,
                  v=None, alpha=1, beta=1,
                  p=None, tau1=0.5, tau0=0.5,
+                 allow_self_connections=True,
                  gamma=1.0):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -524,8 +525,15 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.dt_max = dt_max
 
         # Initialize the basis
-        self.B = B
-        self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True)
+        if basis is None:
+            self.B = B
+            # self.allow_instantaneous = allow_instantaneous
+            self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True,
+                                     allow_instantaneous=False)
+        else:
+            self.basis = basis
+            self.B = basis.B
+            # self.allow_instantaneous = allow_instantaneous
 
         # Initialize the model components
         self.bias_model = GammaBias(self.K, self.dt, alpha0, beta0)
@@ -538,6 +546,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.network = StochasticBlockModel(C=self.C, K=self.K,
                                             c=c,
                                             p=p, tau1=tau1, tau0=tau0,
+                                            allow_self_connections=allow_self_connections,
                                             kappa=kappa,
                                             v=v, alpha=alpha, beta=beta,
                                             pi=1.0)
@@ -1070,9 +1079,12 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         self.impulse_model.mf_gamma = 100 * self.impulse_model.g.copy('C')
 
         # Set network mean field parameters
-        self.network.mf_m = 0.2 / (self.C-1) * np.ones((self.K, self.C))
-        for c in xrange(self.C):
-            self.network.mf_m[self.network.c == c, c] = 0.8
+        if self.C > 1:
+            self.network.mf_m = 0.2 / (self.C-1) * np.ones((self.K, self.C))
+            for c in xrange(self.C):
+                self.network.mf_m[self.network.c == c, c] = 0.8
+        else:
+            self.network.mf_m = np.ones((self.K, self.C))
 
         # Update the parents.
         # for _,_,_,p in self.data_list:

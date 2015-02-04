@@ -23,7 +23,7 @@ from pyhawkes.plotting.plotting import plot_network
 
 from baselines.xcorr import infer_net_from_xcorr
 
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
 
 def run_comparison(data_path, output_path, seed=None):
     """
@@ -68,7 +68,7 @@ def run_comparison(data_path, output_path, seed=None):
 
     # Compute the cross correlation to estimate the connectivity
     print "Estimating network via cross correlation"
-    # W_xcorr = infer_net_from_xcorr(F[:10000,:], dtmax=3)
+    F_xcorr = infer_net_from_xcorr(F[:10000,:], dtmax=3)
 
     # Compute the cross correlation to estimate the connectivity
     # print "Estimating network via cross correlation"
@@ -101,18 +101,29 @@ def run_comparison(data_path, output_path, seed=None):
     #     cPickle.dump((vb_models, timestamps), f, protocol=-1)
 
     # Fit a network Hawkes model with SVI
-    # svi_models, timestamps = fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
-    #                                                 output_path,
-    #                                                 standard_model=bfgs_model)
+    svi_models, timestamps = fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
+                                                    output_path,
+                                                    standard_model=bfgs_model)
 
-    # Compute AUC of inferred network
-    aucs = compute_auc(network,
-                       W_xcorr=W_xcorr,
-                       bfgs_model=bfgs_model)
-    pprint.pprint(aucs)
+    # Compute area under roc curve of inferred network
+    auc_rocs = compute_auc_roc(network,
+                               W_xcorr=W_xcorr,
+                               bfgs_model=bfgs_model,
+                               svi_models=svi_models)
+    print "AUC-ROC"
+    pprint.pprint(auc_rocs)
+
+    # Compute area under precisino recall curve of inferred network
+    auc_prcs = compute_auc_prc(network,
+                               W_xcorr=W_xcorr,
+                               bfgs_model=bfgs_model,
+                               svi_models=svi_models)
+    print "AUC-PRC"
+    pprint.pprint(auc_prcs)
 
     plls = compute_predictive_ll(S_test, S,
-                                 bfgs_model=bfgs_model)
+                                 bfgs_model=bfgs_model,
+                                 svi_models=svi_models)
 
     # print "Log Predictive Likelihoods: "
     # pprint.pprint(plls)
@@ -134,6 +145,8 @@ def run_comparison(data_path, output_path, seed=None):
     plt.legend()
     plt.show()
 
+    import pdb; pdb.set_trace()
+
 
 def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
     """
@@ -150,18 +163,17 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
     else:
         print "Fitting the data with a standard Hawkes model"
         # betas = np.logspace(-1,1.3,num=1)
-        betas = [ 10.0, 50., 100., 200.]
+        betas = [ 0.0 ]
 
         init_models = []
         init_len    = 10000
         S_init      = S[:init_len,:]
 
-        xv_len      = 1000
+        xv_len      = 10000
         xv_ll       = np.zeros(len(betas))
         S_xv        = S[init_len:init_len+xv_len, :]
 
         # Make a model to initialize the parameters
-        import pdb; pdb.set_trace()
         test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
         init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, beta=0.0,
                                                      basis=test_basis,
@@ -310,43 +322,6 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
             print "Saving Gibbs samples to ", (output_path + ".gibbs.pkl")
             cPickle.dump((samples, timestamps), f, protocol=-1)
 
-    # Remove the temporary sample files
-    # print "Cleaning up temporary sample files"
-    # for itr in xrange(N_samples):
-    #     if os.path.exists(output_path + ".gibbs.itr%04d.pkl" % itr):
-    #         os.remove(output_path + ".gibbs.itr%04d.pkl" % itr)
-
-    # TODO: Remove the plotting code for server runs
-    # # Compute sample statistics for second half of samples
-    # A_samples       = np.array([s.weight_model.A     for s in samples])
-    # W_samples       = np.array([s.weight_model.W     for s in samples])
-    # g_samples       = np.array([s.impulse_model.g    for s in samples])
-    # lambda0_samples = np.array([s.bias_model.lambda0 for s in samples])
-    # c_samples       = np.array([s.network.c          for s in samples])
-    # lps             = np.array(lps)
-    #
-    # offset = len(samples) // 2
-    # A_mean          = A_samples[offset:, ...].mean(axis=0)
-    # W_mean          = W_samples[offset:, ...].mean(axis=0)
-    # g_mean          = g_samples[offset:, ...].mean(axis=0)
-    # lambda0_mean    = lambda0_samples[offset:, ...].mean(axis=0)
-    #
-    # print "A mean:        ", A_mean
-    # print "W mean:        ", W_mean
-    # print "g mean:        ", g_mean
-    # print "lambda0 mean:  ", lambda0_mean
-    #
-    # plt.ioff()
-    # plt.figure()
-    # plt.plot(np.arange(N_samples), lps)
-    # plt.xlabel("Iteration")
-    # plt.ylabel("Log probability")
-    # plt.show()
-    #
-    # plot_network(samples[-1].weight_model.A,
-    #              samples[-1].weight_model.W)
-    # plt.show()
-
     return samples, timestamps
 
 
@@ -365,8 +340,11 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         print "Fitting the data with a network Hawkes model using SVI"
 
         # Make a new model for inference
+        test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
         test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+                                                                alpha=1.0, beta=1.0/20.0,
+                                                                basis=test_basis,
+                                                                allow_self_connections=False)
         # Initialize with the standard model parameters
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)
@@ -376,7 +354,7 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         plt.pause(0.001)
 
         # TODO: Add the data in minibatches
-        minibatchsize = 500
+        minibatchsize = 1000
         test_model.add_data(S)
 
 
@@ -409,13 +387,13 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
 
     return samples, timestamps
 
-def compute_auc(A_true,
-                W_xcorr=None,
-                bfgs_model=None,
-                sgd_model=None,
-                gibbs_samples=None,
-                vb_models=None,
-                svi_models=None):
+def compute_auc_roc(A_true,
+                    W_xcorr=None,
+                    bfgs_model=None,
+                    sgd_model=None,
+                    gibbs_samples=None,
+                    vb_models=None,
+                    svi_models=None):
     """
     Compute the AUC score for each of competing models
     :return:
@@ -459,6 +437,64 @@ def compute_auc(A_true,
                                     svi_models[-1].weight_model.expected_A().ravel())
 
     return aucs
+
+def compute_auc_prc(A_true,
+                    W_xcorr=None,
+                    bfgs_model=None,
+                    sgd_model=None,
+                    gibbs_samples=None,
+                    vb_models=None,
+                    svi_models=None,
+                    average="macro"):
+    """
+    Compute the AUC of the precision recall curve
+    :return:
+    """
+    A_flat = A_true.ravel()
+    aucs = {}
+
+    if W_xcorr is not None:
+        aucs['xcorr'] = average_precision_score(A_flat,
+                                                W_xcorr.ravel(),
+                                                average=average)
+
+    if bfgs_model is not None:
+        assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
+        W_bfgs = bfgs_model.W.copy()
+        W_bfgs -= np.diag(np.diag(W_bfgs))
+        aucs['bfgs'] = average_precision_score(A_flat,
+                                               W_bfgs.ravel(),
+                                               average=average)
+
+    if sgd_model is not None:
+        assert isinstance(sgd_model, DiscreteTimeStandardHawkesModel)
+        aucs['sgd'] = average_precision_score(A_flat,
+                                              sgd_model.W.ravel(),
+                                              average=average)
+
+    if gibbs_samples is not None:
+        # Compute ROC based on mean value of W_effective in second half of samples
+        Weff_samples = np.array([s.weight_model.W_effective for s in gibbs_samples])
+        N_samples    = Weff_samples.shape[0]
+        offset       = N_samples // 2
+        Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
+
+        aucs['gibbs'] = average_precision_score(A_flat, Weff_mean, average=average)
+
+    if vb_models is not None:
+        # Compute ROC based on E[A] under variational posterior
+        aucs['vb'] = average_precision_score(A_flat,
+                                             vb_models[-1].weight_model.expected_A().ravel(),
+                                             average=average)
+
+    if svi_models is not None:
+        # Compute ROC based on E[A] under variational posterior
+        aucs['svi'] = average_precision_score(A_flat,
+                                              svi_models[-1].weight_model.expected_A().ravel(),
+                                              average=average)
+
+    return aucs
+
 
 def compute_predictive_ll(S_test, S_train,
                           true_model=None,
@@ -553,7 +589,7 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
-run = 5
+run = 8
 data_path = os.path.join("data", "chalearn", "small", "network1_oopsi.pkl.gz")
 out_path  = os.path.join("data", "chalearn", "small", "network1_run%03d" %run, "results" )
 run_comparison(data_path, out_path, seed=seed)

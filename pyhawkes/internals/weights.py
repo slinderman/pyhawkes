@@ -474,7 +474,6 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         kappa_prior = self.kappa_0 * (1-self.A) + self.network.kappa * self.A
         kappa_cond  = kappa_prior + ss[0,:,:]
 
-        print self.network.v
         v_prior     = self.nu_0 * (1-self.A) + self.network.V * self.A
         v_cond      = v_prior + ss[1,:,:]
 

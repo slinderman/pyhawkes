@@ -62,7 +62,8 @@ class _StochasticBlockModelBase(BayesianDistribution):
                  c=None, m=None, pi=1.0,
                  p=None, tau0=0.1, tau1=0.1,
                  v=None, alpha=1.0, beta=1.0,
-                 kappa=1.0):
+                 kappa=1.0,
+                 allow_self_connections=True):
         """
         Initialize SBM with parameters defined above.
         """
@@ -83,6 +84,7 @@ class _StochasticBlockModelBase(BayesianDistribution):
         self.kappa = kappa
         self.alpha = alpha
         self.beta  = beta
+        self.allow_self_connections = allow_self_connections
 
         if m is not None:
             assert isinstance(m, np.ndarray) and m.shape == (C,) \
@@ -140,7 +142,10 @@ class _StochasticBlockModelBase(BayesianDistribution):
         Get the KxK matrix of probabilities
         :return:
         """
-        return self.p[np.ix_(self.c, self.c)]
+        P = self.p[np.ix_(self.c, self.c)]
+        if not self.allow_self_connections:
+            np.fill_diagonal(P, 0.0)
+        return P
 
     @property
     def V(self):
@@ -185,12 +190,14 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
                  c=None, pi=1.0, m=None,
                  p=None, tau0=0.1, tau1=0.1,
                  v=None, alpha=1.0, beta=1.0,
-                 kappa=1.0):
+                 kappa=1.0,
+                 allow_self_connections=True):
         super(GibbsSBM, self).__init__(K=K, C=C,
                                        c=c, pi=pi, m=m,
                                        p=p, tau0=tau0, tau1=tau1,
                                        v=v, alpha=alpha, beta=beta,
-                                       kappa=kappa)
+                                       kappa=kappa,
+                                       allow_self_connections=allow_self_connections)
 
         # Initialize parameter estimates
         # print "Uncomment GibbsSBM init"
@@ -209,6 +216,11 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         for c1 in xrange(self.C):
             for c2 in xrange(self.C):
                 Ac1c2 = A[np.ix_(self.c==c1, self.c==c2)]
+
+                if not self.allow_self_connections:
+                    # TODO: Account for self connections
+                    pass
+
                 tau1 = self.tau1 + Ac1c2.sum()
                 tau0 = self.tau0 + (1-Ac1c2).sum()
                 self.p[c1,c2] = np.random.beta(tau1, tau0)
@@ -296,12 +308,14 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
                  c=None, pi=1.0, m=None,
                  p=None, tau0=0.1, tau1=0.1,
                  v=None, alpha=1.0, beta=1.0,
-                 kappa=1.0):
+                 kappa=1.0,
+                 allow_self_connections=True):
         super(MeanFieldSBM, self).__init__(K=K, C=C,
                                            c=c, pi=pi, m=m,
                                            p=p, tau0=tau0, tau1=tau1,
                                            v=v, alpha=alpha, beta=beta,
-                                           kappa=kappa)
+                                           kappa=kappa,
+                                           allow_self_connections=allow_self_connections)
 
         # Initialize mean field parameters
         self.mf_pi    = np.ones(self.C)
@@ -331,6 +345,10 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
 
                 # Get the probability of a connection for this pair of classes
                 E_p += pc1c2 * self.mf_tau1 / (self.mf_tau0 + self.mf_tau1)
+
+        if not self.allow_self_connections:
+            np.fill_diagonal(E_p, 0.0)
+
         return E_p
 
     def expected_notp(self):
@@ -358,6 +376,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
                 E_ln_p += pc1c2 * (psi(self.mf_tau1[c1,c2])
                                    - psi(self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2]))
 
+        if not self.allow_self_connections:
+            np.fill_diagonal(E_ln_p, -np.inf)
+
         return E_ln_p
 
     def expected_log_notp(self):
@@ -377,6 +398,9 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
                 # Get the probability of a connection for this pair of classes
                 E_ln_notp += pc1c2 * (psi(self.mf_tau0[c1,c2])
                                       - psi(self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2]))
+
+        if not self.allow_self_connections:
+            np.fill_diagonal(E_ln_notp, 0.0)
 
         return E_ln_notp
 
@@ -512,20 +536,21 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
                                                         E_ln_beta=E_ln_v_cnotk_to_ck)).sum()
 
                 # Compute expected log prob of self connection
-                E_ln_p_ck_to_ck    = psi(self.mf_tau1[ck, ck]) - psi(self.mf_tau0[ck, ck] + self.mf_tau1[ck, ck])
-                E_ln_notp_ck_to_ck = psi(self.mf_tau0[ck, ck]) - psi(self.mf_tau0[ck, ck] + self.mf_tau1[ck, ck])
-                lp[ck] += Bernoulli().negentropy(E_x=E_A[k, k],
-                                                 E_notx=E_notA[k, k],
-                                                 E_ln_p=E_ln_p_ck_to_ck,
-                                                 E_ln_notp=E_ln_notp_ck_to_ck
-                                                )
-                E_v_ck_to_ck    = self.mf_alpha[ck, ck] / self.mf_beta[ck, ck]
-                E_ln_v_ck_to_ck = psi(self.mf_alpha[ck, ck]) - np.log(self.mf_beta[ck, ck])
-                lp[ck] += (E_A[k, k] *
-                           Gamma(self.kappa).negentropy(E_ln_lambda=E_ln_W_given_A[k, k],
-                                                        E_lambda=E_W_given_A[k,k],
-                                                        E_beta=E_v_ck_to_ck,
-                                                        E_ln_beta=E_ln_v_ck_to_ck))
+                if self.allow_self_connections:
+                    E_ln_p_ck_to_ck    = psi(self.mf_tau1[ck, ck]) - psi(self.mf_tau0[ck, ck] + self.mf_tau1[ck, ck])
+                    E_ln_notp_ck_to_ck = psi(self.mf_tau0[ck, ck]) - psi(self.mf_tau0[ck, ck] + self.mf_tau1[ck, ck])
+                    lp[ck] += Bernoulli().negentropy(E_x=E_A[k, k],
+                                                     E_notx=E_notA[k, k],
+                                                     E_ln_p=E_ln_p_ck_to_ck,
+                                                     E_ln_notp=E_ln_notp_ck_to_ck
+                                                    )
+                    E_v_ck_to_ck    = self.mf_alpha[ck, ck] / self.mf_beta[ck, ck]
+                    E_ln_v_ck_to_ck = psi(self.mf_alpha[ck, ck]) - np.log(self.mf_beta[ck, ck])
+                    lp[ck] += (E_A[k, k] *
+                               Gamma(self.kappa).negentropy(E_ln_lambda=E_ln_W_given_A[k, k],
+                                                            E_lambda=E_W_given_A[k,k],
+                                                            E_beta=E_v_ck_to_ck,
+                                                            E_ln_beta=E_ln_v_ck_to_ck))
 
 
                 # TODO: Get probability of impulse responses g
@@ -550,8 +575,14 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
 
-                tau1_hat = self.tau1 + (pc1c2 * E_A).sum()
-                tau0_hat = self.tau0 + (pc1c2 * E_notA).sum()
+                if self.allow_self_connections:
+                    tau1_hat = self.tau1 + (pc1c2 * E_A).sum()
+                    tau0_hat = self.tau0 + (pc1c2 * E_notA).sum()
+                else:
+                    # TODO: Account for self connections
+                    tau1_hat = self.tau1 + (pc1c2 * E_A).sum()
+                    tau0_hat = self.tau0 + (pc1c2 * E_notA).sum()
+
                 self.mf_tau1[c1,c2] = (1.0 - stepsize) * self.mf_tau1[c1,c2] + stepsize * tau1_hat
                 self.mf_tau0[c1,c2] = (1.0 - stepsize) * self.mf_tau0[c1,c2] + stepsize * tau0_hat
 

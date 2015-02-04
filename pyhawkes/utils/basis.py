@@ -159,7 +159,7 @@ class IdentityBasis(Basis):
         self.dt_max = dt_max
         self.allow_instantaneous = allow_instantaneous
         self.norm = norm
-        self.B = dt_max // dt
+        self.B = int(dt_max // dt)
 
         if allow_instantaneous:
             self.B += 1
