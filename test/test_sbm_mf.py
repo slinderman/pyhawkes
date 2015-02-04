@@ -21,14 +21,14 @@ def test_sbm_mf(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
-    C = 20
-    K = 16
+    C = 5
+    K = 50
     T = 1000
     dt = 1.0
     B = 3
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, tau1=1, tau0=5, beta=1.0/K)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, tau1=0.5, tau0=0.5, beta=1.0/K)
     c = true_model.network.c
     perm = np.argsort(c)
     #
@@ -39,14 +39,14 @@ def test_sbm_mf(seed=None):
     plt.pause(0.001)
 
     # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B, tau1=1, tau0=5, beta=1.0/K)
+    test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B, tau1=0.5, tau0=0.5, beta=1.0/K)
     test_model.weight_model.initialize_from_gibbs(true_model.weight_model.A,
                                                   true_model.weight_model.W)
 
     # Plot the block probabilities
     plt.figure()
     im = plt.imshow(test_model.network.mf_m[perm,:],
-                    interpolation="none", cmap="gray",
+                    interpolation="none", cmap="Greys",
                     aspect=float(C)/K)
     plt.xlabel('C')
     plt.ylabel('K')

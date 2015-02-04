@@ -285,11 +285,11 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         Compute the expected W under the variational approximation
         """
         p_A = self.expected_A()
-
         E_W =  p_A * self.expected_W_given_A(1.0) + (1-p_A) * self.expected_W_given_A(0.0)
 
         if not self.network.allow_self_connections:
             np.fill_diagonal(E_W, 0.0)
+
         return E_W
 
     def expected_W_given_A(self, A):

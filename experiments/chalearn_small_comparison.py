@@ -43,8 +43,14 @@ def run_comparison(data_path, output_path, seed=None):
         # The oopsi data has a probability of spike
         thresh = 0.1
         with gzip.open(data_path, 'r') as f:
-            P, F, bins, network, pos = cPickle.load(f)
-            S_full = P > thresh
+            P, F, Cf, network, pos = cPickle.load(f)
+            # S_full = P > thresh
+            onespk = np.bitwise_and(P > thresh, Cf < 0.3)
+            twospk = np.bitwise_and(P > thresh, Cf >= 0.3)
+            S_full = np.zeros_like(P)
+            S_full[onespk] = 1
+            S_full[twospk] = 2
+
     elif data_path.endswith(".gz"):
         with gzip.open(data_path, 'r') as f:
             S_full, F, bins, network, pos = cPickle.load(f)
@@ -120,6 +126,7 @@ def run_comparison(data_path, output_path, seed=None):
     print "AUC-PRC"
     pprint.pprint(auc_prcs)
 
+    # Compute the predictive log likelihoods
     plls = compute_predictive_ll(S_test, S,
                                  bfgs_model=bfgs_model,
                                  svi_models=svi_models)
@@ -136,6 +143,7 @@ def run_comparison(data_path, output_path, seed=None):
     plt.plot(np.arange(N_iters),
              (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters),
              '-b', label='BFGS')
+    import pdb; pdb.set_trace()
     plt.plot(np.arange(N_iters),
              (plls['svi'] - plls['homog'])/N_test * np.ones(N_iters),
              '-g', label='SVI')
@@ -148,7 +156,6 @@ def run_comparison(data_path, output_path, seed=None):
     plt.legend()
     plt.show()
 
-    import pdb; pdb.set_trace()
 
 
 def fit_standard_hawkes_model_bfgs(S, K, dt, dt_max, output_path):
@@ -330,7 +337,8 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
 
 def fit_network_hawkes_svi(S, K, C, dt, dt_max,
                            output_path,
-                           standard_model=None):
+                           standard_model=None,
+                            N_iters=500):
 
 
     # Check for existing Gibbs results
@@ -338,9 +346,9 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
     #     with gzip.open(output_path + ".svi.pkl.gz", 'r') as f:
     #         print "Loading SVI results from ", (output_path + ".svi.pkl.gz")
     #         (samples, timestamps) = cPickle.load(f)
-    if os.path.exists(output_path + ".svi.itr0999.pkl"):
-            with open(output_path + ".svi.itr0999.pkl", 'r') as f:
-                print "Loading SVI results from ", (output_path + ".svi.itr0999.pkl")
+    if os.path.exists(output_path + ".svi.itr%04d.pkl" % (N_iters-1)):
+            with open(output_path + ".svi.itr%04d.pkl" % (N_iters-1), 'r') as f:
+                print "Loading SVI results from ", (output_path + ".svi.itr%04d.pkl" % (N_iters-1))
                 sample = cPickle.load(f)
                 samples = [sample]
                 timestamps = None
@@ -352,7 +360,7 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
         # Make a new model for inference
         test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
         test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max,
-                                                                alpha=1.0, beta=1.0,
+                                                                alpha=1.0, beta=0.1,
                                                                 tau0=10.0, tau1=1.0,
                                                                 basis=test_basis,
                                                                 allow_self_connections=False)
@@ -370,7 +378,6 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
 
 
         # Stochastic variational inference
-        N_iters = 1000
         samples = []
         delay = 1.0
         forgetting_rate = 0.5
@@ -601,8 +608,8 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
-net = 6
-run = 2
+net = 1
+run = 12
 data_path = os.path.join("data", "chalearn", "small", "network%d_oopsi.pkl.gz" % net)
 out_path  = os.path.join("data", "chalearn", "small", "network%d_run%03d" % (net,run), "results" )
 run_comparison(data_path, out_path, seed=seed)
