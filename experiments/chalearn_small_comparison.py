@@ -39,7 +39,13 @@ def run_comparison(data_path, output_path, seed=None):
 
     assert os.path.exists(os.path.dirname(output_path)), "Output directory does not exist!"
 
-    if data_path.endswith(".gz"):
+    if data_path.endswith("_oopsi.pkl.gz"):
+        # The oopsi data has a probability of spike
+        thresh = 0.1
+        with gzip.open(data_path, 'r') as f:
+            P, F, bins, network, pos = cPickle.load(f)
+            S_full = P > thresh
+    elif data_path.endswith(".gz"):
         with gzip.open(data_path, 'r') as f:
             S_full, F, bins, network, pos = cPickle.load(f)
     else:
@@ -547,7 +553,7 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
-run = 4
-data_path = os.path.join("data", "chalearn", "small", "network1c.pkl.gz")
+run = 5
+data_path = os.path.join("data", "chalearn", "small", "network1_oopsi.pkl.gz")
 out_path  = os.path.join("data", "chalearn", "small", "network1_run%03d" %run, "results" )
 run_comparison(data_path, out_path, seed=seed)
