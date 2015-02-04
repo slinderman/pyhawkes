@@ -294,9 +294,8 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
             return
 
         A,W = data
-        print "DEBUG: Do not sample p and v"
-        # self.resample_p(A)
-        # self.resample_v(A, W)
+        self.resample_p(A)
+        self.resample_v(A, W)
         self.resample_c(A, W)
         self.resample_m()
 

@@ -61,8 +61,7 @@ def run_comparison(data_path, output_path, seed=None):
     S_test = S_full[-T_test:, :]
 
     K      = S.shape[1]
-    C      = 1
-    B      = 3
+    C      = 5
     dt     = 0.02
     dt_max = 0.08
 
@@ -75,11 +74,11 @@ def run_comparison(data_path, output_path, seed=None):
     W_xcorr = infer_net_from_xcorr(S[:10000], dtmax=dt_max // dt)
 
     # Fit a standard Hawkes model on subset of data with BFGS
-    bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max,
+    bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, dt, dt_max,
                                                            output_path=output_path)
 
     # Fit a standard Hawkes model with SGD
-    # standard_models, timestamps = fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max,
+    # standard_models, timestamps = fit_standard_hawkes_model_sgd(S, K, dt, dt_max,
     #                                                         init_model=init_model)
     #
     # # Save the models
@@ -88,12 +87,12 @@ def run_comparison(data_path, output_path, seed=None):
     #     cPickle.dump((standard_models, timestamps), f, protocol=-1)
 
     # Fit a network Hawkes model with Gibbs
-    # gibbs_samples, timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
+    # gibbs_samples, timestamps = fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
     #                                          output_path=output_path,
     #                                          standard_model=init_model)
 
     # Fit a network Hawkes model with Batch VB
-    # vb_models, timestamps = fit_network_hawkes_vb(S, K, B, dt, dt_max,
+    # vb_models, timestamps = fit_network_hawkes_vb(S, K, dt, dt_max,
     #                                          standard_model=standard_models[-1])
     #
     # with open(output_path + ".vb.pkl", 'w') as f:
@@ -101,7 +100,7 @@ def run_comparison(data_path, output_path, seed=None):
     #     cPickle.dump((vb_models, timestamps), f, protocol=-1)
 
     # Fit a network Hawkes model with SVI
-    svi_models, timestamps = fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
+    svi_models, timestamps = fit_network_hawkes_svi(S, K, C, dt, dt_max,
                                                     output_path,
                                                     standard_model=bfgs_model)
 
@@ -137,6 +136,10 @@ def run_comparison(data_path, output_path, seed=None):
     plt.plot(np.arange(N_iters),
              (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters),
              '-b', label='BFGS')
+    plt.plot(np.arange(N_iters),
+             (plls['svi'] - plls['homog'])/N_test * np.ones(N_iters),
+             '-g', label='SVI')
+
     # plt.plot(np.arange(N_iters),
     #          (plls['svi'] - plls['homog'])/N_test,
     #          '-r', label='SVI')
@@ -148,7 +151,7 @@ def run_comparison(data_path, output_path, seed=None):
     import pdb; pdb.set_trace()
 
 
-def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
+def fit_standard_hawkes_model_bfgs(S, K, dt, dt_max, output_path):
     """
     Fit
     :param S:
@@ -217,7 +220,7 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
 
     return init_model, init_time
 
-def fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max, init_model=None):
+def fit_standard_hawkes_model_sgd(S, K, dt, dt_max, init_model=None):
     """
     Fit
     :param S:
@@ -270,7 +273,7 @@ def fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max, init_model=None):
 
     return samples, timestamps
 
-def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
+def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
                              output_path,
                              standard_model=None):
 
@@ -325,24 +328,32 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
     return samples, timestamps
 
 
-def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
+def fit_network_hawkes_svi(S, K, C, dt, dt_max,
                            output_path,
                            standard_model=None):
 
 
     # Check for existing Gibbs results
-    if os.path.exists(output_path + ".svi.pkl.gz"):
-        with gzip.open(output_path + ".svi.pkl.gz", 'r') as f:
-            print "Loading SVI results from ", (output_path + ".svi.pkl.gz")
-            (samples, timestamps) = cPickle.load(f)
+    # if os.path.exists(output_path + ".svi.pkl.gz"):
+    #     with gzip.open(output_path + ".svi.pkl.gz", 'r') as f:
+    #         print "Loading SVI results from ", (output_path + ".svi.pkl.gz")
+    #         (samples, timestamps) = cPickle.load(f)
+    if os.path.exists(output_path + ".svi.itr0999.pkl"):
+            with open(output_path + ".svi.itr0999.pkl", 'r') as f:
+                print "Loading SVI results from ", (output_path + ".svi.itr0999.pkl")
+                sample = cPickle.load(f)
+                samples = [sample]
+                timestamps = None
+                # (samples, timestamps) = cPickle.load(f)
 
     else:
         print "Fitting the data with a network Hawkes model using SVI"
 
         # Make a new model for inference
         test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0,
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max,
+                                                                alpha=1.0, beta=1.0,
+                                                                tau0=10.0, tau1=1.0,
                                                                 basis=test_basis,
                                                                 allow_self_connections=False)
         # Initialize with the standard model parameters
@@ -381,9 +392,9 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
                 cPickle.dump(samples[-1], f, protocol=-1)
 
         # Save the Gibbs samples
-        with gzip.open(output_path + ".svi.pkl.gz", 'w') as f:
-            print "Saving SVI samples to ", (output_path + ".svi.pkl.gz")
-            cPickle.dump((samples, timestamps), f, protocol=-1)
+        # with gzip.open(output_path + ".svi.pkl.gz", 'w') as f:
+        #     print "Saving SVI samples to ", (output_path + ".svi.pkl.gz")
+        #     cPickle.dump((samples, timestamps), f, protocol=-1)
 
     return samples, timestamps
 
@@ -562,6 +573,7 @@ def compute_predictive_ll(S_test, S_train,
         plls['vb'] = -np.log(N_samples) + logsumexp(vb_plls, axis=1)
 
     if svi_models is not None:
+        print "Computing predictive likelihood for SVI models"
         # Compute predictive likelihood over samples from VB model
         N_models  = len(svi_models)
         N_samples = 1
@@ -589,7 +601,8 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
-run = 8
-data_path = os.path.join("data", "chalearn", "small", "network1_oopsi.pkl.gz")
-out_path  = os.path.join("data", "chalearn", "small", "network1_run%03d" %run, "results" )
+net = 1
+run = 10
+data_path = os.path.join("data", "chalearn", "small", "network%d_oopsi.pkl.gz" % net)
+out_path  = os.path.join("data", "chalearn", "small", "network%d_run%03d" % (net,run), "results" )
 run_comparison(data_path, out_path, seed=seed)
