@@ -16,6 +16,7 @@ if "DISPLAY" not in os.environ:
     matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from pyhawkes.utils.basis import IdentityBasis
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
     DiscreteTimeNetworkHawkesModelGammaMixture
 from pyhawkes.plotting.plotting import plot_network
@@ -68,9 +69,8 @@ def run_comparison(data_path, output_path, seed=None):
     W_xcorr = infer_net_from_xcorr(S[:10000], dtmax=dt_max // dt)
 
     # Fit a standard Hawkes model on subset of data with BFGS
-    bfgs_model = None
-    # bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max,
-    #                                                        output_path=output_path)
+    bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max,
+                                                           output_path=output_path)
 
     # Fit a standard Hawkes model with SGD
     # standard_models, timestamps = fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max,
@@ -112,7 +112,6 @@ def run_comparison(data_path, output_path, seed=None):
     # pprint.pprint(plls)
 
     # Plot the predictive log likelihood
-    import pdb; pdb.set_trace()
     # N_iters = plls['svi'].size
     N_iters = 100
     N_test  = S_test.size
@@ -145,7 +144,7 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
     else:
         print "Fitting the data with a standard Hawkes model"
         # betas = np.logspace(-1,1.3,num=1)
-        betas = [0]
+        betas = [ 10.0, 50., 100., 200.]
 
         init_models = []
         init_len    = 10000
@@ -155,18 +154,23 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
         xv_ll       = np.zeros(len(betas))
         S_xv        = S[init_len:init_len+xv_len, :]
 
+        # Make a model to initialize the parameters
+        import pdb; pdb.set_trace()
+        test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
+        init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, beta=0.0,
+                                                     basis=test_basis,
+                                                     allow_self_connections=False)
+        init_model.add_data(S_init)
+        # Initialize the background rates to their mean
+        init_model.initialize_to_background_rate()
+
+
         start = time.clock()
         for i,beta in enumerate(betas):
             print "Fitting with BFGS on first ", init_len, " time bins, beta = ", beta
-            # Make a model to initialize the parameters
-            init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, dt_max=dt_max, beta=beta,
-                                                         allow_instantaneous=True,
-                                                         allow_self_connections=False)
-            init_model.add_data(S_init)
-            # Initialize the background rates to their mean
-            init_model.initialize_to_background_rate()
+            init_model.beta = beta
             init_model.fit_with_bfgs()
-            init_models.append(init_model)
+            init_models.append(init_model.copy_sample())
 
             # Compute the heldout likelihood on the xv data
             xv_ll[i] = init_model.heldout_log_likelihood(S_xv)
@@ -189,7 +193,6 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
                   "Consider expanding the beta range."
 
         # Save the model (sans data)
-        init_model.data_list.pop()
         with open(output_path + ".bfgs.pkl", 'w') as f:
             print "Saving BFGS results to ", (output_path + ".bfgs.pkl")
             cPickle.dump((init_model, init_time), f, protocol=-1)
@@ -545,6 +548,6 @@ def compute_clustering_score():
 # seed = 2650533028
 seed = None
 run = 4
-data_path = os.path.join("data", "chalearn", "small", "network1a.pkl.gz")
+data_path = os.path.join("data", "chalearn", "small", "network1c.pkl.gz")
 out_path  = os.path.join("data", "chalearn", "small", "network1_run%03d" %run, "results" )
 run_comparison(data_path, out_path, seed=seed)

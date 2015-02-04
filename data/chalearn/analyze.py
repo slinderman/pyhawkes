@@ -18,7 +18,7 @@ from baselines.xcorr import infer_net_from_xcorr
 
 from sklearn.metrics import roc_auc_score
 
-data_path = os.path.join("data", "chalearn", "small", "network1b.pkl.gz")
+data_path = os.path.join("data", "chalearn", "small", "network1c.pkl.gz")
 
 with gzip.open(data_path, 'r') as f:
     S_full, F, bins, network, pos = cPickle.load(f)

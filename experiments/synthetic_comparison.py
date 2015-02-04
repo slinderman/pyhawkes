@@ -107,9 +107,9 @@ def run_comparison(data_path, test_path, output_path, seed=None):
 
     # Plot the predictive log likelihood
     N_iters = plls['svi'].size
-    N_test  = S_test.sum()
+    N_test  = S_test.size
     plt.ioff()
-    plt.figure()
+    fig1 =plt.figure()
     plt.plot(np.arange(N_iters),
              (plls['true'] - plls['homog'])/N_test * np.ones(N_iters),
              '-k', label='True')
@@ -121,9 +121,22 @@ def run_comparison(data_path, test_path, output_path, seed=None):
              '-r', label='SVI')
     plt.xlabel('Iteration')
     plt.ylabel('Log Predictive Likelihood')
+    plt.ylim(0, (plls['true'] - plls['homog'])/N_test + 0.01)
     plt.legend()
+    fig1.savefig(output_path + "_predll.pdf")
     plt.show()
-    plt.savefig(output_path + "_predll.pdf")
+
+    fig2 = plt.figure()
+    plt.subplot(1,2,1)
+    plt.imshow(svi_models[0].network.mf_m,
+               interpolation="none", cmap="Greys", aspect=float(C)/K)
+    plt.subplot(1,2,2)
+    plt.imshow(svi_models[-1].network.mf_m,
+                    interpolation="none", cmap="Greys",
+                    aspect=float(C)/K)
+    plt.show()
+
+
 
 
 def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
@@ -141,7 +154,7 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
     else:
         print "Fitting the data with a standard Hawkes model"
         # betas = np.logspace(-3,-0.8,num=10)
-        betas = np.array([0.1, 1.0, 10.0, 20.0, 50.0, 100.0])
+        betas = np.array([0.01, 0.1, 1.0, 10.0, 20.0])
         # betas = np.concatenate(([0], betas))
 
         init_models = []
@@ -341,7 +354,6 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
 def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
                            output_path,
                            standard_model=None):
-
 
     # Check for existing Gibbs results
     if os.path.exists(output_path + ".svi.pkl.gz"):

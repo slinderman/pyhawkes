@@ -5,6 +5,7 @@ import numpy as np
 import scipy.linalg
 import scipy.signal as sig
 
+# TODO: Clean up this interface
 class Basis(object):
 
     __metaclass__ = abc.ABCMeta
@@ -147,3 +148,41 @@ class CosineBasis(Basis):
 
         return basis
 
+class IdentityBasis(Basis):
+
+    def __init__(self,
+                 dt, dt_max,
+                 norm=True,
+                 allow_instantaneous=False):
+
+        self.dt = dt
+        self.dt_max = dt_max
+        self.allow_instantaneous = allow_instantaneous
+        self.norm = norm
+        self.B = dt_max // dt
+
+        if allow_instantaneous:
+            self.B += 1
+
+        # The length is always the current time bin + dt_max / dt
+        self.L = dt_max // dt + 1
+
+        # Save allow instantaneous
+        self.basis = self.create_basis()
+
+
+    def create_basis(self):
+        ibasis = np.eye(self.B)
+
+        # Typically we don't allow the instantaneous connection
+        # since this is no longer a generative model
+        if not self.allow_instantaneous:
+            ibasis = np.vstack((np.zeros((1,self.B)), ibasis))
+
+        assert ibasis.shape == (self.L, self.B)
+
+        # Normalize so that the interpolated basis has volume 1
+        if self.norm:
+            ibasis /= (self.dt * np.sum(ibasis, axis=0))
+
+        return ibasis

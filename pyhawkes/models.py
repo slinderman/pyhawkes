@@ -39,13 +39,19 @@ class DiscreteTimeStandardHawkesModel(object):
         self.K = K
         self.dt = dt
         self.dt_max = dt_max
+        self.allow_self_connections = allow_self_connections
 
         # Initialize the basis
-        self.B = B
-        self.allow_instantaneous = allow_instantaneous
-        self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True,
-                                 allow_instantaneous=allow_instantaneous)
-        self.allow_self_connections = allow_self_connections
+        if basis is None:
+            self.B = B
+            self.allow_instantaneous = allow_instantaneous
+            self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True,
+                                     allow_instantaneous=allow_instantaneous)
+        else:
+            self.basis = basis
+            self.allow_instantaneous = basis.allow_instantaneous
+            self.B = basis.B
+
         assert not (self.allow_instantaneous and self.allow_self_connections), \
             "Cannot allow instantaneous self connections"
 
@@ -1048,7 +1054,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
             initialize_with_standard_model(standard_model)
 
         # Set the mean field parameters
-        self.bias_model.mf_alpha = 100 * self.bias_model.lambda0
+        self.bias_model.mf_alpha = np.clip(100 * self.bias_model.lambda0, 1e-8, np.inf)
         self.bias_model.mf_beta  = 100 * np.ones(self.K)
 
         # Weight model

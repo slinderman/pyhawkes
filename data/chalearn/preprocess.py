@@ -36,6 +36,12 @@ def process_dataset(K=100,
 
     # Parse the files
     F       = parse_fluorescence_file(fluor_file, K)
+
+    # # Load the oopsi processed fluorescence
+    # data_path = os.path.join("data", "chalearn", "small", "network1c.pkl.gz")
+    # with gzip.open(data_path, 'r') as f:
+    #     _, F, C, network, pos = cPickle.load(f)
+
     network = parse_network_file(net_file, K)
     pos     = parse_position_file(pos_file, K)
 
@@ -44,7 +50,7 @@ def process_dataset(K=100,
     # bins = np.array([-10, 0.17, 10]).reshape((1,3)).repeat(K, axis=0)
     # S, _ = discretize_fluorescence(F, edges=bins, binsui=False)
     # # S, bins = discretize_fluorescence(F, nbins=2, binsui=True)
-    # # S, bins = discretize_fluorescence(F, nbins=3, binsui=True)
+    # S, bins = discretize_fluorescence(C, nbins=2, binsui=True)
     # # S = remove_double_spikes(S)
 
     # Get the spike times with oopsi
@@ -171,7 +177,7 @@ def extract_spike_oopsi(F, dt):
         D[:,k], C[:,k] = oopsi.fast(F[:,k], dt=dt, iter_max=6)
 
     # Cast D to an integer matrix
-    D = D.astype(np.int)
+    # D = D.astype(np.int)
 
     return D, C
 

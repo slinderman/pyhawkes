@@ -3,13 +3,15 @@ import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab, DiscreteTimeStandardHawkesModel
 from pyhawkes.plotting.plotting import plot_network
+from pyhawkes.utils.basis import IdentityBasis
 
-def sample_from_network_hawkes(C, K, T, dt, B):
+def sample_from_network_hawkes(C, K, T, dt, dt_max, B):
     # Create a true model
     p = 0.8 * np.eye(C)
     v = 10.0 * np.eye(C) + 20.0 * (1-np.eye(C))
     c = (0.0 * (np.arange(K) < 10) + 1.0 * (np.arange(K)  >= 10)).astype(np.int)
-    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, c=c, p=p, v=v)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, dt_max=dt_max,
+                                                            B=B, c=c, p=p, v=v)
 
     # Plot the true network
     plt.ion()
@@ -38,16 +40,19 @@ def demo(seed=None):
     C = 1       # Number of clusters in the true data
     K = 10      # Number of nodes
     T = 1000    # Number of time bins to simulate
-    dt = 1.0    # Time bin size
+    dt = 0.02   # Time bin size
+    dt_max = 0.08
     B = 3       # Number of basis functions
 
     # Sample from a sparse network Hawkes model
-    S, true_model = sample_from_network_hawkes(C, K, T, dt, B)
+    S, true_model = sample_from_network_hawkes(C, K, T, dt, dt_max, B)
 
     # Make a new model for inference
-    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B,
-                                                 l2_penalty=0,
-                                                 l1_penalty=0)
+    test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=False)
+    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max+dt,
+                                                 beta=1.0,
+                                                 basis=test_basis,
+                                                 allow_self_connections=True)
     test_model.add_data(S)
 
     # DEBUG: Initialize with the true parameters of the network Hawkes model
@@ -65,7 +70,14 @@ def demo(seed=None):
 
     plot_network(np.ones((K,K)), test_model.W, vmax=0.5)
 
+    # Plot the rates
+    plt.figure()
+    for k in xrange(3):
+        plt.subplot(3,1,k+1)
+        plt.plot(np.arange(T) * dt, true_model.compute_rate(proc=k), '-b')
+        plt.plot(np.arange(T) * dt, test_model.compute_rate(ks=k), '-r')
+
     plt.ioff()
     plt.show()
 
-demo()
+demo(11223344)
