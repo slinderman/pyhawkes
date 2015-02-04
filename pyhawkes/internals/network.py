@@ -343,7 +343,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
                 # Get the probability of a connection for this pair of classes
-                E_p += pc1c2 * self.mf_tau1 / (self.mf_tau0 + self.mf_tau1)
+                E_p += pc1c2 * self.mf_tau1[c1,c2] / (self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2])
 
         if not self.allow_self_connections:
             np.fill_diagonal(E_p, 0.0)
