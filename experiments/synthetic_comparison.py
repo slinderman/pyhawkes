@@ -22,7 +22,7 @@ from pyhawkes.plotting.plotting import plot_network
 
 from baselines.xcorr import infer_net_from_xcorr
 
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
 
 def run_comparison(data_path, test_path, output_path, seed=None):
     """
@@ -92,11 +92,21 @@ def run_comparison(data_path, test_path, output_path, seed=None):
                                                     output_path,
                                                     standard_model=bfgs_model)
 
-    aucs = compute_auc(true_model,
+    auc_rocs = compute_auc(true_model,
                        W_xcorr=W_xcorr,
                        bfgs_model=bfgs_model,
                        svi_models=svi_models)
-    pprint.pprint(aucs)
+    print "AUC-ROC"
+    pprint.pprint(auc_rocs)
+
+    # Compute area under precisino recall curve of inferred network
+    auc_prcs = compute_auc_prc(true_model,
+                               W_xcorr=W_xcorr,
+                               bfgs_model=bfgs_model,
+                               svi_models=svi_models)
+    print "AUC-PRC"
+    pprint.pprint(auc_prcs)
+
 
     plls = compute_predictive_ll(S_test, S,
                                  true_model=true_model,
@@ -457,6 +467,64 @@ def compute_auc(true_model,
         # Compute ROC based on E[A] under variational posterior
         aucs['svi'] = roc_auc_score(A_true,
                                     svi_models[-1].weight_model.expected_A().ravel())
+
+    return aucs
+
+
+def compute_auc_prc(true_model,
+                    W_xcorr=None,
+                    bfgs_model=None,
+                    sgd_model=None,
+                    gibbs_samples=None,
+                    vb_models=None,
+                    svi_models=None,
+                    average="macro"):
+    """
+    Compute the AUC of the precision recall curve
+    :return:
+    """
+    A_flat = true_model.network.A.ravel()
+    aucs = {}
+
+    if W_xcorr is not None:
+        aucs['xcorr'] = average_precision_score(A_flat,
+                                                W_xcorr.ravel(),
+                                                average=average)
+
+    if bfgs_model is not None:
+        assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
+        W_bfgs = bfgs_model.W.copy()
+        W_bfgs -= np.diag(np.diag(W_bfgs))
+        aucs['bfgs'] = average_precision_score(A_flat,
+                                               W_bfgs.ravel(),
+                                               average=average)
+
+    if sgd_model is not None:
+        assert isinstance(sgd_model, DiscreteTimeStandardHawkesModel)
+        aucs['sgd'] = average_precision_score(A_flat,
+                                              sgd_model.W.ravel(),
+                                              average=average)
+
+    if gibbs_samples is not None:
+        # Compute ROC based on mean value of W_effective in second half of samples
+        Weff_samples = np.array([s.weight_model.W_effective for s in gibbs_samples])
+        N_samples    = Weff_samples.shape[0]
+        offset       = N_samples // 2
+        Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
+
+        aucs['gibbs'] = average_precision_score(A_flat, Weff_mean, average=average)
+
+    if vb_models is not None:
+        # Compute ROC based on E[A] under variational posterior
+        aucs['vb'] = average_precision_score(A_flat,
+                                             vb_models[-1].weight_model.expected_A().ravel(),
+                                             average=average)
+
+    if svi_models is not None:
+        # Compute ROC based on E[A] under variational posterior
+        aucs['svi'] = average_precision_score(A_flat,
+                                              svi_models[-1].weight_model.expected_A().ravel(),
+                                              average=average)
 
     return aucs
 
