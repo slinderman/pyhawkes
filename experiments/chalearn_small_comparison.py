@@ -124,8 +124,8 @@ def run_comparison(data_path, output_path, seed=None):
                                  bfgs_model=bfgs_model,
                                  svi_models=svi_models)
 
-    # print "Log Predictive Likelihoods: "
-    # pprint.pprint(plls)
+    print "Log Predictive Likelihoods: "
+    pprint.pprint(plls)
 
     # Plot the predictive log likelihood
     # N_iters = plls['svi'].size
@@ -601,8 +601,8 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
-net = 1
-run = 10
+net = 6
+run = 2
 data_path = os.path.join("data", "chalearn", "small", "network%d_oopsi.pkl.gz" % net)
 out_path  = os.path.join("data", "chalearn", "small", "network%d_run%03d" % (net,run), "results" )
 run_comparison(data_path, out_path, seed=seed)

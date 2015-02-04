@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 
 # Import OOPSI. Available at: https://github.com/liubenyuan/py-oopsi
 # or originally in Matlab from https://github.com/jovo/oopsi
-pyoopsi_path = os.path.join(os.path.expanduser("~"), "Install", "py-oopsi")
+pyoopsi_path = os.path.join("/home", "pyhawkes", "py-oopsi")
 sys.path.append(pyoopsi_path)
 import oopsi
 
@@ -103,7 +103,7 @@ def parse_fluorescence_file(filename, K, delimiter=','):
     :return:                TxK matrix of fluorescence values
     """
 
-    assert os.path.exists(filename), "File doesn't exist!"
+    assert os.path.exists(filename), "File doesn't exist! %s" % filename
 
     # Define an iterator to yield split lines
     def iter_func():
@@ -276,4 +276,7 @@ def remove_double_spikes(D):
 
     return Dhat
 
-process_dataset()
+for i in xrange(2,7):
+    print "Processing network ", i
+    process_dataset(suffix="_iNet1_Size100_CC0%dinh.txt" % i,
+                    outfile="network%d_oopsi.pkl" % i)

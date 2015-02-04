@@ -75,9 +75,9 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     #     cPickle.dump((standard_models, timestamps), f, protocol=-1)
 
     # Fit a network Hawkes model with Gibbs
-    # gibbs_samples, timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
-    #                                          output_path=output_path,
-    #                                          standard_model=init_model)
+    gibbs_samples, timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
+                                                         output_path=output_path,
+                                                         standard_model=bfgs_model)
 
     # Fit a network Hawkes model with Batch VB
     # vb_models, timestamps = fit_network_hawkes_vb(S, K, B, dt, dt_max,
@@ -296,10 +296,10 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
         plt.pause(0.001)
 
         # Gibbs sample
-        N_samples = 2
+        N_samples = 1000
         samples = []
         lps = []
-        timestamps = []
+        timestamps = [time.clock()]
         for itr in xrange(N_samples):
             # lps.append(test_model.log_probability())
             lps.append(test_model.log_likelihood())
@@ -308,13 +308,18 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
 
             if itr % 1 == 0:
                 print "Iteration ", itr, "\t LL: ", lps[-1]
-                im.set_data(test_model.weight_model.A * \
-                            test_model.weight_model.W)
-                plt.pause(0.001)
+            #    im.set_data(test_model.weight_model.A * \
+            #                test_model.weight_model.W)
+            #    plt.pause(0.001)
 
             # Save this sample
             with open(output_path + ".gibbs.itr%04d.pkl" % itr, 'w') as f:
-                cPickle.dump(samples[-1], f, protocol=-1)
+                cPickle.dump((samples[-1], timestamps[-1]-timestamps[0]), f, protocol=-1)
+
+        # Save the Gibbs timestamps
+        with open(output_path + ".gibbs.timestamps.pkl", 'w') as f:
+            print "Saving Gibbs samples to ", (output_path + ".gibbs.timestamps.pkl")
+            cPickle.dump(timestamps, f, protocol=-1)
 
         # Save the Gibbs samples
         with open(output_path + ".gibbs.pkl", 'w') as f:
@@ -483,7 +488,7 @@ def compute_auc_prc(true_model,
     Compute the AUC of the precision recall curve
     :return:
     """
-    A_flat = true_model.network.A.ravel()
+    A_flat = true_model.weight_model.A.ravel()
     aucs = {}
 
     if W_xcorr is not None:
@@ -580,12 +585,14 @@ def compute_predictive_ll(S_test, S_train,
     if vb_models is not None:
         # Compute predictive likelihood over samples from VB model
         N_models  = len(vb_models)
-        N_samples = 100
+        N_samples = 1
         # Preconvolve with the VB model's basis
         F_test = vb_models[0].basis.convolve_with_basis(S_test)
 
         vb_plls = np.zeros((N_models, N_samples))
         for i, vb_model in enumerate(vb_models):
+            if i < N_models - 10:
+                continue
             for j in xrange(N_samples):
                 vb_model.resample_from_mf()
                 vb_plls[i,j] = vb_model.heldout_log_likelihood(S_test, F=F_test)
@@ -621,7 +628,7 @@ def compute_clustering_score():
 
 # seed = 2650533028
 seed = None
-run = 6
+run = 2
 K = 50
 C = 5
 T = 100000

@@ -1067,7 +1067,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         self.bias_model.mf_beta  = 100 * np.ones(self.K)
 
         # Weight model
-        self.weight_model.mf_kappa_0 = self.weight_model.nu_0 * self.weight_model.W
+        self.weight_model.mf_kappa_0 = self.weight_model.nu_0 * self.weight_model.W.copy()
         self.weight_model.mf_v_0     = self.weight_model.nu_0 * np.ones((self.K, self.K))
 
         self.weight_model.mf_kappa_1 = 100 * self.weight_model.W.copy()
