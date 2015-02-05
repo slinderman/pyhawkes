@@ -17,7 +17,7 @@ if "DISPLAY" not in os.environ:
 import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
-    DiscreteTimeNetworkHawkesModelGammaMixture
+    DiscreteTimeNetworkHawkesModelGammaMixture, DiscreteTimeNetworkHawkesModelSpikeAndSlab
 from pyhawkes.plotting.plotting import plot_network
 
 from baselines.xcorr import infer_net_from_xcorr
@@ -90,6 +90,11 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                                                              output_path=output_path,
                                                              standard_model=bfgs_model)
 
+        # Fit a spike and slab network Hawkes model with Gibbs
+        gibbs_ss_samples, gibbs_ss_timestamps = fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
+                                                                 output_path=output_path,
+                                                                 standard_model=bfgs_model)
+
         # Fit a network Hawkes model with Batch VB
         vb_models, vb_timestamps = fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
                                                       output_path=output_path,
@@ -105,6 +110,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
         timestamps = {}
         timestamps['bfgs'] = bfgs_time
         timestamps['gibbs'] = gibbs_timestamps
+        timestamps['gibbs_ss'] = gibbs_ss_timestamps
         timestamps['svi'] = svi_timestamps
         timestamps['vb'] = vb_timestamps
 
@@ -112,6 +118,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                            W_xcorr=W_xcorr,
                            bfgs_model=bfgs_model,
                            gibbs_samples=gibbs_samples,
+                           gibbs_ss_samples=gibbs_samples,
                            svi_models=svi_models,
                            vb_models=vb_models)
         print "AUC-ROC"
@@ -122,6 +129,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                                    W_xcorr=W_xcorr,
                                    bfgs_model=bfgs_model,
                                    gibbs_samples=gibbs_samples,
+                                   gibbs_ss_samples=gibbs_samples,
                                    svi_models=svi_models,
                                    vb_models=vb_models)
         print "AUC-PRC"
@@ -132,6 +140,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                                      true_model=true_model,
                                      bfgs_model=bfgs_model,
                                      gibbs_samples=gibbs_samples,
+                                     gibbs_ss_samples=gibbs_samples,
                                      svi_models=svi_models,
                                      vb_models=vb_models)
 
@@ -407,42 +416,56 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
             print "Saving Gibbs samples to ", (output_path + ".gibbs.pkl")
             cPickle.dump((samples, timestamps[1:] - timestamps[0]), f, protocol=-1)
 
-    # Remove the temporary sample files
-    # print "Cleaning up temporary sample files"
-    # for itr in xrange(N_samples):
-    #     if os.path.exists(output_path + ".gibbs.itr%04d.pkl" % itr):
-    #         os.remove(output_path + ".gibbs.itr%04d.pkl" % itr)
+    return samples, timestamps
 
-    # TODO: Remove the plotting code for server runs
-    # # Compute sample statistics for second half of samples
-    # A_samples       = np.array([s.weight_model.A     for s in samples])
-    # W_samples       = np.array([s.weight_model.W     for s in samples])
-    # g_samples       = np.array([s.impulse_model.g    for s in samples])
-    # lambda0_samples = np.array([s.bias_model.lambda0 for s in samples])
-    # c_samples       = np.array([s.network.c          for s in samples])
-    # lps             = np.array(lps)
-    #
-    # offset = len(samples) // 2
-    # A_mean          = A_samples[offset:, ...].mean(axis=0)
-    # W_mean          = W_samples[offset:, ...].mean(axis=0)
-    # g_mean          = g_samples[offset:, ...].mean(axis=0)
-    # lambda0_mean    = lambda0_samples[offset:, ...].mean(axis=0)
-    #
-    # print "A mean:        ", A_mean
-    # print "W mean:        ", W_mean
-    # print "g mean:        ", g_mean
-    # print "lambda0 mean:  ", lambda0_mean
-    #
-    # plt.ioff()
-    # plt.figure()
-    # plt.plot(np.arange(N_samples), lps)
-    # plt.xlabel("Iteration")
-    # plt.ylabel("Log probability")
-    # plt.show()
-    #
-    # plot_network(samples[-1].weight_model.A,
-    #              samples[-1].weight_model.W)
-    # plt.show()
+
+def fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
+                                output_path,
+                                standard_model=None):
+
+    samples_and_timestamps = load_partial_results(output_path, typ="gibbs_ss")
+    if samples_and_timestamps is not None:
+        samples, timestamps = samples_and_timestamps
+
+
+    else:
+        print "Fitting the data with a spike adn slab network Hawkes model using Gibbs sampling"
+
+        # Make a new model for inference
+        test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                alpha=1.0, beta=1.0/20.0)
+        test_model.add_data(S)
+
+        # Initialize with the standard model parameters
+        if standard_model is not None:
+            test_model.initialize_with_standard_model(standard_model)
+
+        # Gibbs sample
+        N_samples = 1000
+        samples = []
+        lps = []
+        timestamps = [time.clock()]
+        for itr in xrange(N_samples):
+            lps.append(test_model.log_probability())
+            samples.append(test_model.resample_and_copy())
+            timestamps.append(time.clock())
+
+            if itr % 1 == 0:
+                print "Iteration ", itr, "\t LL: ", lps[-1]
+
+            # Save this sample
+            with open(output_path + ".gibbs_ss.itr%04d.pkl" % itr, 'w') as f:
+                cPickle.dump((samples[-1], timestamps[-1]-timestamps[0]), f, protocol=-1)
+
+        # Save the Gibbs timestamps
+        with open(output_path + ".gibbs_ss.timestamps.pkl", 'w') as f:
+            print "Saving spike and slab Gibbs samples to ", (output_path + ".gibbs_ss.timestamps.pkl")
+            cPickle.dump(timestamps, f, protocol=-1)
+
+        # Save the Gibbs samples
+        with open(output_path + ".gibbs_ss.pkl", 'w') as f:
+            print "Saving Gibbs samples to ", (output_path + ".gibbs_ss.pkl")
+            cPickle.dump((samples, timestamps[1:] - timestamps[0]), f, protocol=-1)
 
     return samples, timestamps
 
@@ -577,6 +600,7 @@ def compute_auc(true_model,
                 bfgs_model=None,
                 sgd_model=None,
                 gibbs_samples=None,
+                gibbs_ss_samples=None,
                 vb_models=None,
                 svi_models=None):
     """
@@ -611,6 +635,15 @@ def compute_auc(true_model,
 
         aucs['gibbs'] = roc_auc_score(A_true, Weff_mean.ravel())
 
+    if gibbs_ss_samples is not None:
+        # Compute ROC based on mean value of W_effective in second half of samples
+        Weff_samples = np.array([s.weight_model.W_effective for s in gibbs_ss_samples])
+        N_samples    = Weff_samples.shape[0]
+        offset       = N_samples // 2
+        Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
+
+        aucs['gibbs_ss'] = roc_auc_score(A_true, Weff_mean.ravel())
+
     if vb_models is not None:
         # Compute ROC based on E[A] under variational posterior
         aucs['vb'] = roc_auc_score(A_true,
@@ -629,6 +662,7 @@ def compute_auc_prc(true_model,
                     bfgs_model=None,
                     sgd_model=None,
                     gibbs_samples=None,
+                    gibbs_ss_samples=None,
                     vb_models=None,
                     svi_models=None,
                     average="macro"):
@@ -667,6 +701,16 @@ def compute_auc_prc(true_model,
 
         aucs['gibbs'] = average_precision_score(A_flat, Weff_mean.ravel(), average=average)
 
+    if gibbs_ss_samples is not None:
+        # Compute ROC based on mean value of W_effective in second half of samples
+        Weff_samples = np.array([s.weight_model.W_effective for s in gibbs_ss_samples])
+        N_samples    = Weff_samples.shape[0]
+        offset       = N_samples // 2
+        Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
+
+        aucs['gibbs_ss'] = average_precision_score(A_flat, Weff_mean.ravel(), average=average)
+
+
     if vb_models is not None:
         # Compute ROC based on E[A] under variational posterior
         aucs['vb'] = average_precision_score(A_flat,
@@ -686,6 +730,7 @@ def compute_predictive_ll(S_test, S_train,
                           bfgs_model=None,
                           sgd_models=None,
                           gibbs_samples=None,
+                          gibbs_ss_samples=None,
                           vb_models=None,
                           svi_models=None):
     """
@@ -730,6 +775,21 @@ def compute_predictive_ll(S_test, S_train,
 
         # Convert to numpy array
         plls['gibbs'] = np.array(plls['gibbs'])
+
+    if gibbs_ss_samples is not None:
+        print "Computing predictive log likelihood for spike and slab Gibbs samples"
+        # Compute log(E[pred likelihood]) on second half of samplese
+        offset       = 0
+        # Preconvolve with the Gibbs model's basis
+        F_test = gibbs_samples[0].basis.convolve_with_basis(S_test)
+
+        plls['gibbs_ss'] = []
+        for s in gibbs_ss_samples[offset:]:
+            plls['gibbs_ss'].append(s.heldout_log_likelihood(S_test, F=F_test))
+
+        # Convert to numpy array
+        plls['gibbs_ss'] = np.array(plls['gibbs_ss'])
+
 
     if vb_models is not None:
         print "Computing predictive log likelihood for VB iterations"
@@ -815,6 +875,12 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
         t_gibbs = t_bfgs + t_gibbs
         t_stop = max(t_stop, t_gibbs[-1])
         ax.plot(t_gibbs, (plls['gibbs'] - plls['homog'])/Z, color=col[2], label="Gibbs", lw=1.5)
+
+    if 'gibbs_ss' in plls and 'gibbs_ss' in timestamps:
+        t_gibbs = timestamps['gibbs_ss']
+        t_gibbs = t_bfgs + t_gibbs
+        t_stop = max(t_stop, t_gibbs[-1])
+        ax.plot(t_gibbs, (plls['gibbs_ss'] - plls['homog'])/Z, color=col[2], label="Gibbs-SS", lw=1.5)
 
     # Extend lines to t_st
     if 'svi' in plls and 'svi' in timestamps:
