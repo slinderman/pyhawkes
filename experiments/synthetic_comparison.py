@@ -24,8 +24,6 @@ from baselines.xcorr import infer_net_from_xcorr
 
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-from hips.plotting.layout import create_figure
-from hips.plotting.colormaps import harvard_colors
 
 def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     """
@@ -745,6 +743,9 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
     # import seaborn as sns
     # sns.set(style="whitegrid")
+
+    from hips.plotting.layout import create_figure
+    from hips.plotting.colormaps import harvard_colors
 
     # Make the ICML figure
     fig = create_figure((3,2))
