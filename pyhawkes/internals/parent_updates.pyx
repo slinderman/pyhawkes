@@ -12,9 +12,7 @@ cimport numpy as np
 from numpy.random import multinomial
 
 from cython.parallel import prange
-from cython.parallel cimport parallel
 
-cdef int NUM_THREADS = 4
 cpdef resample_Z(int[:,::1] Z0, int[:,:,:,::1] Z, long[:,::1] S,
                  double[::1] lambda0,
                  double[:,::1] W,
@@ -81,21 +79,20 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
                   double[:,:,::1] F):
 
     cdef int t, k1, k2, b, i
-    cdef double p
 
     cdef int T, K, B
     T = EZ.shape[0]
     K = EZ.shape[1]
     B = EZ.shape[3]
 
-    cdef double  Z
+    cdef double Z
 
     with nogil:
         # Iterate over each event count, t and k2, in parallel
         for t in prange(T):
-            for k2 in xrange(K):
+            for k2 in range(K):
                 # Zero out the Z buffer
-                Z = 0
+                Z = 0.0
 
                 # TODO: If S[t,k2] is zero then we should be able to skip this
                 if S[t,k2] == 0:
@@ -107,8 +104,8 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
                 Z = Z + exp_E_log_lambda0[k2]
 
                 # Compute the rate from each other proc and basis function
-                for k1 in xrange(K):
-                    for b in xrange(B):
+                for k1 in range(K):
+                    for b in range(B):
                         Z = Z + exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b]
 
 
@@ -116,7 +113,8 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
                 EZ0[t,k2] = exp_E_log_lambda0[k2] / Z * S[t,k2]
 
                 # TODO: Should we try to avoid recomputing the multiplications?
-                for k1 in xrange(K):
-                    for b in xrange(B):
+                for k1 in range(K):
+                    for b in range(B):
+                        # TODO: REMOVE THIS DEBUG!!!!
                         EZ[t,k1,k2,b] = exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b] / Z * S[t,k2]
 

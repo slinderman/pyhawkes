@@ -80,9 +80,9 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     #     cPickle.dump((standard_models, timestamps), f, protocol=-1)
 
     # Fit a network Hawkes model with Gibbs
-    gibbs_samples, gibbs_timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
-                                                         output_path=output_path,
-                                                         standard_model=bfgs_model)
+    # gibbs_samples, gibbs_timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
+    #                                                      output_path=output_path,
+    #                                                      standard_model=bfgs_model)
 
     # Fit a network Hawkes model with Batch VB
     vb_models, timestamps = fit_network_hawkes_vb(S, K, C, B, dt, dt_max,

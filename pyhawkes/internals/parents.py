@@ -226,6 +226,7 @@ class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
         exp_E_log_lambda0 = np.exp(bias_model.expected_log_lambda0())
         exp_E_log_W       = np.exp(weight_model.expected_log_W())
         exp_E_log_g       = np.exp(impulse_model.expected_log_g())
+
         mf_update_Z(self.EZ0, self.EZ, self.S,
                     exp_E_log_lambda0,
                     exp_E_log_W,
