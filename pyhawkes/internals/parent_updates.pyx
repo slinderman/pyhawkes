@@ -115,6 +115,5 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
                 # TODO: Should we try to avoid recomputing the multiplications?
                 for k1 in range(K):
                     for b in range(B):
-                        # TODO: REMOVE THIS DEBUG!!!!
                         EZ[t,k1,k2,b] = exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b] / Z * S[t,k2]
 
