@@ -232,7 +232,7 @@ class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
                     exp_E_log_g,
                     self.F)
 
-        # self._check_EZ()
+        self._check_EZ()
 
     def get_vlb(self, bias_model, weight_model, impulse_model):
         """

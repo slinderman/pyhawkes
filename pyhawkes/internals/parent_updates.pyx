@@ -16,6 +16,7 @@ from cython.parallel cimport parallel, threadid
 cimport openmp
 
 cdef int NUM_THREADS = 4
+from libc.stdlib cimport abort, malloc, free
 
 cpdef resample_Z(int[:,::1] Z0, int[:,:,:,::1] Z, long[:,::1] S,
                  double[::1] lambda0,
@@ -90,13 +91,18 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
     K = EZ.shape[1]
     B = EZ.shape[3]
 
-    # Initialize a Z buffer for each thread
-    cdef double[::1] Z = np.zeros(NUM_THREADS)
+    cdef double*  Z
 
-    with nogil:
+    with nogil, parallel( num_threads=NUM_THREADS):
+        # Initialize a Z buffer for each thread
+        # Z = np.zeros(NUM_THREADS)
+        Z = <double *> malloc(sizeof(double) * NUM_THREADS)
+        if Z==NULL:
+            abort()
+
         # Iterate over each event count, t and k2, in parallel
-        for t in prange(T, num_threads=NUM_THREADS):
-            for k2 in range(K):
+        for t in prange(T):
+            for k2 in xrange(K):
                 # Zero out the Z buffer
                 i = threadid()
                 Z[i] = 0.0
@@ -111,8 +117,8 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
                 Z[i] += exp_E_log_lambda0[k2]
 
                 # Compute the rate from each other proc and basis function
-                for k1 in range(K):
-                    for b in range(B):
+                for k1 in xrange(K):
+                    for b in xrange(B):
                         Z[i] += exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b]
 
 
@@ -120,7 +126,9 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
                 EZ0[t,k2] = exp_E_log_lambda0[k2] / Z[i] * S[t,k2]
 
                 # TODO: Should we try to avoid recomputing the multiplications?
-                for k1 in range(K):
-                    for b in range(B):
+                for k1 in xrange(K):
+                    for b in xrange(B):
                         EZ[t,k1,k2,b] = exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b] / Z[i] * S[t,k2]
+
+        free(Z)
 
