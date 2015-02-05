@@ -44,12 +44,12 @@ def run_comparison(data_path, output_path, seed=None):
         thresh = 0.1
         with gzip.open(data_path, 'r') as f:
             P, F, Cf, network, pos = cPickle.load(f)
-            # S_full = P > thresh
-            onespk = np.bitwise_and(P > thresh, Cf < 0.3)
-            twospk = np.bitwise_and(P > thresh, Cf >= 0.3)
-            S_full = np.zeros_like(P)
-            S_full[onespk] = 1
-            S_full[twospk] = 2
+            S_full = P > thresh
+            # onespk = np.bitwise_and(P > thresh, Cf < 0.3)
+            # twospk = np.bitwise_and(P > thresh, Cf >= 0.3)
+            # S_full = np.zeros_like(P)
+            # S_full[onespk] = 1
+            # S_full[twospk] = 2
 
     elif data_path.endswith(".gz"):
         with gzip.open(data_path, 'r') as f:
@@ -372,6 +372,14 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
         im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.5)
         plt.pause(0.001)
 
+        # Plot the block affiliations
+        plt.figure(2)
+        KC = np.zeros((K,C))
+        KC[np.arange(K), test_model.network.c] = 1.0
+        im_clus = plt.imshow(KC,
+                        interpolation="none", cmap="Greys",
+                        aspect=float(C)/K)
+
         # TODO: Add the data in minibatches
         minibatchsize = 1000
         test_model.add_data(S)
@@ -391,7 +399,13 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
             timestamps.append(time.clock())
 
             if itr % 1 == 0:
+                plt.figure(1)
                 im.set_data(test_model.weight_model.expected_W())
+                plt.pause(0.001)
+
+                plt.figure(2)
+                im_clus.set_data(test_model.network.mf_m)
+                plt.title("Iteration %d" % itr)
                 plt.pause(0.001)
 
             # Save this sample

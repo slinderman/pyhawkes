@@ -24,7 +24,10 @@ from baselines.xcorr import infer_net_from_xcorr
 
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-def run_comparison(data_path, test_path, output_path, seed=None):
+from hips.plotting.layout import create_figure
+from hips.plotting.colormaps import harvard_colors
+
+def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     """
     Run the comparison on the given data file
     :param data_path:
@@ -44,6 +47,10 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     else:
         with open(data_path, 'r') as f:
             S, true_model = cPickle.load(f)
+
+    # If T_train is given, only use a fraction of the dataset
+    if T_train is not None:
+        S = S[:T_train,:]
 
     if test_path.endswith(".gz"):
         with gzip.open(test_path, 'r') as f:
@@ -75,27 +82,33 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     #     cPickle.dump((standard_models, timestamps), f, protocol=-1)
 
     # Fit a network Hawkes model with Gibbs
-    gibbs_samples, timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
+    gibbs_samples, gibbs_timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
                                                          output_path=output_path,
                                                          standard_model=bfgs_model)
 
     # Fit a network Hawkes model with Batch VB
-    # vb_models, timestamps = fit_network_hawkes_vb(S, K, B, dt, dt_max,
-    #                                          standard_model=standard_models[-1])
-    #
-    # with open(output_path + ".vb.pkl", 'w') as f:
-    #     print "Saving VB results to ", (output_path + ".vb.pkl")
-    #     cPickle.dump((vb_models, timestamps), f, protocol=-1)
+    vb_models, timestamps = fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
+                                                  output_path=output_path,
+                                                  standard_model=bfgs_model)
 
     # Fit a network Hawkes model with SVI
-    svi_models, timestamps = fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
+    # svi_models = svi_timestamps = None
+    svi_models, svi_timestamps = fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
                                                     output_path,
                                                     standard_model=bfgs_model)
+
+    # Combine timestamps into a dict
+    timestamps = {}
+    timestamps['bfgs'] = bfgs_time
+    timestamps['gibbs'] = gibbs_timestamps
+    timestamps['svi'] = svi_timestamps
 
     auc_rocs = compute_auc(true_model,
                        W_xcorr=W_xcorr,
                        bfgs_model=bfgs_model,
-                       svi_models=svi_models)
+                       gibbs_samples=gibbs_samples,
+                       svi_models=svi_models,
+                       vb_models=vb_models)
     print "AUC-ROC"
     pprint.pprint(auc_rocs)
 
@@ -103,7 +116,9 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     auc_prcs = compute_auc_prc(true_model,
                                W_xcorr=W_xcorr,
                                bfgs_model=bfgs_model,
-                               svi_models=svi_models)
+                               gibbs_samples=gibbs_samples,
+                               svi_models=svi_models,
+                               vb_models=vb_models)
     print "AUC-PRC"
     pprint.pprint(auc_prcs)
 
@@ -111,45 +126,49 @@ def run_comparison(data_path, test_path, output_path, seed=None):
     plls = compute_predictive_ll(S_test, S,
                                  true_model=true_model,
                                  bfgs_model=bfgs_model,
-                                 svi_models=svi_models)
+                                 gibbs_samples=gibbs_samples,
+                                 svi_models=svi_models,
+                                 vb_models=vb_models)
     # print "Log Predictive Likelihoods: "
     # pprint.pprint(plls)
 
-    # Plot the predictive log likelihood
-    N_iters = plls['svi'].size
-    N_test  = S_test.size
-    plt.ioff()
-    fig1 =plt.figure()
-    plt.plot(np.arange(N_iters),
-             (plls['true'] - plls['homog'])/N_test * np.ones(N_iters),
-             '-k', label='True')
-    plt.plot(np.arange(N_iters),
-             (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters),
-             '-b', label='BFGS')
-    plt.plot(np.arange(N_iters),
-             (plls['svi'] - plls['homog'])/N_test,
-             '-r', label='SVI')
-    plt.xlabel('Iteration')
-    plt.ylabel('Log Predictive Likelihood')
-    plt.ylim(0, (plls['true'] - plls['homog'])/N_test + 0.01)
-    plt.legend()
-    fig1.savefig(output_path + "_predll.pdf")
-    plt.show()
+    # # Plot the predictive log likelihood
+    # N_iters = plls['svi'].size
+    # N_test  = S_test.size
+    # plt.ioff()
+    # fig1 =plt.figure()
+    # plt.plot(np.arange(N_iters),
+    #          (plls['true'] - plls['homog'])/N_test * np.ones(N_iters),
+    #          '-k', label='True')
+    # plt.plot(np.arange(N_iters),
+    #          (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters),
+    #          '-b', label='BFGS')
+    # plt.plot(np.arange(N_iters),
+    #          (plls['svi'] - plls['homog'])/N_test,
+    #          '-r', label='SVI')
+    # plt.xlabel('Iteration')
+    # plt.ylabel('Log Predictive Likelihood')
+    # plt.ylim(0, (plls['true'] - plls['homog'])/N_test + 0.01)
+    # plt.legend()
+    # fig1.savefig(output_path + "_predll.pdf")
+    # plt.show()
+    #
+    # fig2 = plt.figure()
+    # plt.subplot(1,2,1)
+    # plt.imshow(svi_models[0].network.mf_m,
+    #            interpolation="none", cmap="Greys", aspect=float(C)/K)
+    # plt.subplot(1,2,2)
+    # plt.imshow(svi_models[-1].network.mf_m,
+    #                 interpolation="none", cmap="Greys",
+    #                 aspect=float(C)/K)
+    # plt.show()
 
-    fig2 = plt.figure()
-    plt.subplot(1,2,1)
-    plt.imshow(svi_models[0].network.mf_m,
-               interpolation="none", cmap="Greys", aspect=float(C)/K)
-    plt.subplot(1,2,2)
-    plt.imshow(svi_models[-1].network.mf_m,
-                    interpolation="none", cmap="Greys",
-                    aspect=float(C)/K)
-    plt.show()
+    plot_pred_ll_vs_time(plls, timestamps, Z=float(S.size), T_train=T_train)
+    import pdb; pdb.set_trace()
 
 
-
-
-def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
+def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path,
+                                   init_len=10000, xv_len=1000):
     """
     Fit
     :param S:
@@ -168,10 +187,7 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path):
         # betas = np.concatenate(([0], betas))
 
         init_models = []
-        init_len    = 10000
         S_init      = S[:init_len,:]
-
-        xv_len      = 1000
         xv_ll       = np.zeros(len(betas))
         S_xv        = S[init_len:init_len+xv_len, :]
 
@@ -269,15 +285,49 @@ def fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max, init_model=None):
 
     return samples, timestamps
 
-def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
-                             output_path,
-                             standard_model=None):
+def load_partial_gibbs_results(output_path):
+    import glob
 
     # Check for existing Gibbs results
     if os.path.exists(output_path + ".gibbs.pkl"):
         with open(output_path + ".gibbs.pkl", 'r') as f:
             print "Loading Gibbs results from ", (output_path + ".gibbs.pkl")
             (samples, timestamps) = cPickle.load(f)
+            return samples, timestamps
+    else:
+        # Look for individual iteration files instead
+        files = glob.glob(output_path + ".gibbs.itr*.pkl")
+        if len(files) > 0:
+            full_samples = []
+            for file in files:
+                with open(file, 'r') as f:
+                    print "Loading Gibbs sample from ", file
+                    sample, timestamp = cPickle.load(f)
+                    full_samples.append((file, sample, timestamp))
+
+            # Sort the samples by iteration name
+            full_samples = sorted(full_samples, key=lambda x: x[0])
+            names      = [n for (n,s,t) in full_samples]
+            itrs       = np.array([int(n[-8:-4]) for n in names])     # Hack out the iteration number
+            samples    = [s for (n,s,t) in full_samples]
+            timestamps = np.array([t for (n,s,t) in full_samples])
+
+            assert np.all(np.diff(itrs) == 1), "Iterations are not sequential!"
+            return samples, timestamps
+
+def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
+                             output_path,
+                             standard_model=None):
+
+    samples_and_timestamps = load_partial_gibbs_results(output_path)
+    if samples_and_timestamps is not None:
+        samples, timestamps = samples_and_timestamps
+
+    # # Check for existing Gibbs results
+    # if os.path.exists(output_path + ".gibbs.pkl"):
+    #     with open(output_path + ".gibbs.pkl", 'r') as f:
+    #         print "Loading Gibbs results from ", (output_path + ".gibbs.pkl")
+    #         (samples, timestamps) = cPickle.load(f)
 
     else:
         print "Fitting the data with a network Hawkes model using Gibbs sampling"
@@ -301,8 +351,8 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
         lps = []
         timestamps = [time.clock()]
         for itr in xrange(N_samples):
-            # lps.append(test_model.log_probability())
-            lps.append(test_model.log_likelihood())
+            lps.append(test_model.log_probability())
+            # lps.append(test_model.log_likelihood())
             samples.append(test_model.resample_and_copy())
             timestamps.append(time.clock())
 
@@ -324,7 +374,7 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
         # Save the Gibbs samples
         with open(output_path + ".gibbs.pkl", 'w') as f:
             print "Saving Gibbs samples to ", (output_path + ".gibbs.pkl")
-            cPickle.dump((samples, timestamps), f, protocol=-1)
+            cPickle.dump((samples, timestamps[1:] - timestamps[0]), f, protocol=-1)
 
     # Remove the temporary sample files
     # print "Cleaning up temporary sample files"
@@ -365,6 +415,65 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
 
     return samples, timestamps
 
+def fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
+                           output_path,
+                           standard_model=None):
+
+    # Check for existing Gibbs results
+    if os.path.exists(output_path + ".vb.pkl.gz"):
+        with gzip.open(output_path + ".vb.pkl.gz", 'r') as f:
+            print "Loading vb results from ", (output_path + ".vb.pkl.gz")
+            (samples, timestamps) = cPickle.load(f)
+
+            if isinstance(timestamps, list):
+                timestamps = np.array(timestamps)
+
+    else:
+        print "Fitting the data with a network Hawkes model using Batch VB"
+
+        # Make a new model for inference
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                alpha=1.0, beta=1.0/20.0)
+        # Initialize with the standard model parameters
+        if standard_model is not None:
+            test_model.initialize_with_standard_model(standard_model)
+
+        plt.ion()
+        im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.5)
+        plt.pause(0.001)
+
+        # TODO: Add the data in minibatches
+        minibatchsize = 500
+        test_model.add_data(S)
+
+
+        # Stochastic variational inference
+        N_iters = 1000
+        vlbs = []
+        samples = []
+        start = time.clock()
+        timestamps = []
+        for itr in xrange(N_iters):
+            vlbs.append(test_model.meanfield_coordinate_descent_step())
+            print "Batch VB Iter: ", itr, "\tVLB: ", vlbs[-1]
+            samples.append(test_model.copy_sample())
+            timestamps.append(time.clock())
+
+            if itr % 1 == 0:
+                im.set_data(test_model.weight_model.expected_W())
+                plt.pause(0.001)
+
+            # Save this sample
+            with open(output_path + ".vb.itr%04d.pkl" % itr, 'w') as f:
+                cPickle.dump(samples[-1], f, protocol=-1)
+
+        # Save the Gibbs samples
+        with gzip.open(output_path + ".vb.pkl.gz", 'w') as f:
+            print "Saving VB samples to ", (output_path + ".vb.pkl.gz")
+            cPickle.dump((samples, timestamps - start), f, protocol=-1)
+
+    return samples, timestamps
+
 
 def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
                            output_path,
@@ -375,6 +484,9 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         with gzip.open(output_path + ".svi.pkl.gz", 'r') as f:
             print "Loading SVI results from ", (output_path + ".svi.pkl.gz")
             (samples, timestamps) = cPickle.load(f)
+
+            if isinstance(timestamps, list):
+                timestamps = np.array(timestamps)
 
     else:
         print "Fitting the data with a network Hawkes model using SVI"
@@ -401,6 +513,7 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         delay = 1.0
         forgetting_rate = 0.5
         stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
+        start = time.clock()
         timestamps = []
         for itr in xrange(N_iters):
             print "SVI Iter: ", itr, "\tStepsize: ", stepsize[itr]
@@ -420,7 +533,7 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         # Save the Gibbs samples
         with gzip.open(output_path + ".svi.pkl.gz", 'w') as f:
             print "Saving SVI samples to ", (output_path + ".svi.pkl.gz")
-            cPickle.dump((samples, timestamps), f, protocol=-1)
+            cPickle.dump((samples, timestamps - start), f, protocol=-1)
 
     return samples, timestamps
 
@@ -461,7 +574,7 @@ def compute_auc(true_model,
         offset       = N_samples // 2
         Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
 
-        aucs['gibbs'] = roc_auc_score(A_true, Weff_mean)
+        aucs['gibbs'] = roc_auc_score(A_true, Weff_mean.ravel())
 
     if vb_models is not None:
         # Compute ROC based on E[A] under variational posterior
@@ -517,7 +630,7 @@ def compute_auc_prc(true_model,
         offset       = N_samples // 2
         Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
 
-        aucs['gibbs'] = average_precision_score(A_flat, Weff_mean, average=average)
+        aucs['gibbs'] = average_precision_score(A_flat, Weff_mean.ravel(), average=average)
 
     if vb_models is not None:
         # Compute ROC based on E[A] under variational posterior
@@ -570,8 +683,9 @@ def compute_predictive_ll(S_test, S_train,
             plls['sgd'] = sgd_model.heldout_log_likelihood(S_test)
 
     if gibbs_samples is not None:
+        print "Computing predictive log likelihood for Gibbs samples"
         # Compute log(E[pred likelihood]) on second half of samplese
-        offset       = len(gibbs_samples) // 2
+        offset       = 0
         # Preconvolve with the Gibbs model's basis
         F_test = gibbs_samples[0].basis.convolve_with_basis(S_test)
 
@@ -601,6 +715,7 @@ def compute_predictive_ll(S_test, S_train,
         plls['vb'] = -np.log(N_samples) + logsumexp(vb_plls, axis=1)
 
     if svi_models is not None:
+        print "Computing predictive log likelihood for SVI iterations"
         # Compute predictive likelihood over samples from VB model
         N_models  = len(svi_models)
         N_samples = 1
@@ -626,14 +741,78 @@ def compute_clustering_score():
     # TODO: Implement simple clustering
     raise NotImplementedError()
 
+def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
+
+    # import seaborn as sns
+    # sns.set(style="whitegrid")
+
+    # Make the ICML figure
+    fig = create_figure((3,2))
+    ax = fig.add_subplot(111)
+    col = harvard_colors()
+    plt.grid()
+
+    # Compute the max and min time in seconds
+
+
+    assert "bfgs" in plls and "bfgs" in timestamps
+    t_bfgs = timestamps["bfgs"]
+
+    if 'gibbs' in plls and 'gibbs' in timestamps:
+        t_gibbs = timestamps['gibbs']
+        t_gibbs = t_bfgs + t_gibbs
+        ax.semilogx(t_gibbs, (plls['gibbs'] - plls['homog'])/Z, color=col[0], label="Gibbs")
+
+    if 'svi' in plls and 'svi' in timestamps:
+        t_svi = timestamps['svi']
+        t_svi = t_bfgs + t_svi[1:] - t_svi[0]
+        ax.semilogx(t_svi, (plls['svi'][1:] - plls['homog'])/Z, color=col[1], label="SVI")
+
+    if 'vb' in plls and 'vb' in timestamps:
+        t_vb = timestamps['vb']
+        t_vb = t_bfgs + t_vb[1:] - t_gibbs[0]
+        ax.semilogx(t_vb, (plls['vb'][1:] - plls['homog'])/Z, color=col[1], label="SVI")
+
+    t_start = t_bfgs
+    t_stop  = np.amax(t_gibbs)
+
+    ax.semilogx([t_bfgs, t_stop],
+                [(plls['bfgs'] - plls['homog'])/Z, (plls['bfgs'] - plls['homog'])/Z],
+                color='k', label="bfgs")
+
+    ax.set_xlim(t_start-120, t_stop)
+
+    # Format the ticks
+    plt.locator_params(nbins=nbins)
+
+    import matplotlib.ticker as ticker
+    logxscale = 3
+    xticks = ticker.FuncFormatter(lambda x, pos: '{0:.1f}'.format(x/10.**logxscale))
+    ax.xaxis.set_major_formatter(xticks)
+    ax.set_xlabel('Time ($10^{%d}$ s)' % logxscale)
+
+    logyscale = -2
+    yticks = ticker.FuncFormatter(lambda y, pos: '{0:.2f}'.format(y/10.**logyscale))
+    ax.yaxis.set_major_formatter(yticks)
+    ax.set_ylabel('PLL ($10^{%d}$ bps)' % logyscale)
+
+    ylim = ax.get_ylim()
+    ax.plot([t_bfgs, t_bfgs], ylim, '--k')
+    ax.set_ylim(ylim)
+    plt.tight_layout()
+    # plt.title("Predictive Log Likelihood ($T=%d$)" % T_train)
+    plt.show()
+
+
 # seed = 2650533028
 seed = None
-run = 2
+run = 1
 K = 50
 C = 5
 T = 100000
+T_train = 11000
 T_test = 1000
 data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
 test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl" % (K,C,T_test))
 out_path = os.path.join("data", "synthetic", "results_K%d_C%d_T%d" % (K,C,T), "run%03d" %run, "results" )
-run_comparison(data_path, test_path, out_path, seed=seed)
+run_comparison(data_path, test_path, out_path, T_train=T_train, seed=seed)

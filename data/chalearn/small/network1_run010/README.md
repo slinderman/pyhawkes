@@ -1,0 +1,1 @@
+Running SVI with C=5 clusters
