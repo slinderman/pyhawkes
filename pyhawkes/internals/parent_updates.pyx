@@ -12,6 +12,10 @@ cimport numpy as np
 from numpy.random import multinomial
 
 from cython.parallel import prange
+from cython.parallel cimport parallel, threadid
+cimport openmp
+
+cdef int NUM_THREADS = 4
 
 cpdef resample_Z(int[:,::1] Z0, int[:,:,:,::1] Z, long[:,::1] S,
                  double[::1] lambda0,
@@ -78,18 +82,24 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
                   double[:,:,::1] exp_E_log_g,
                   double[:,:,::1] F):
 
-    cdef int t, k1, k2, b
-    cdef double p, Z
+    cdef int t, k1, k2, b, i
+    cdef double p
 
     cdef int T, K, B
     T = EZ.shape[0]
     K = EZ.shape[1]
     B = EZ.shape[3]
 
+    # Initialize a Z buffer for each thread
+    cdef double[::1] Z = np.zeros(NUM_THREADS)
+
     with nogil:
         # Iterate over each event count, t and k2, in parallel
-        for t in prange(T):
-            for k2 in prange(K):
+        for t in prange(T, num_threads=NUM_THREADS):
+            for k2 in range(K):
+                # Zero out the Z buffer
+                i = threadid()
+                Z[i] = 0.0
 
                 # TODO: If S[t,k2] is zero then we should be able to skip this
                 if S[t,k2] == 0:
@@ -98,19 +108,19 @@ cpdef mf_update_Z(double[:,::1] EZ0, double[:,:,:,::1] EZ, long[:,::1] S,
                 # First compute the normalizer of the multinomial probability vector
                 # TODO: Check that we are not reusing p
                 # Compute the background rate
-                Z = exp_E_log_lambda0[k2]
+                Z[i] += exp_E_log_lambda0[k2]
 
                 # Compute the rate from each other proc and basis function
                 for k1 in range(K):
                     for b in range(B):
-                        Z = Z + exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b]
+                        Z[i] += exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b]
 
 
                 # Now compute the expected counts
-                EZ0[t,k2] = exp_E_log_lambda0[k2] / Z * S[t,k2]
+                EZ0[t,k2] = exp_E_log_lambda0[k2] / Z[i] * S[t,k2]
 
                 # TODO: Should we try to avoid recomputing the multiplications?
                 for k1 in range(K):
                     for b in range(B):
-                        EZ[t,k1,k2,b] = exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b] / Z * S[t,k2]
+                        EZ[t,k1,k2,b] = exp_E_log_W[k1, k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b] / Z[i] * S[t,k2]
 
