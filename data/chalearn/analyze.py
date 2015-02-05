@@ -20,7 +20,6 @@ from sklearn.metrics import roc_auc_score
 
 data_path = os.path.join("data", "chalearn", "small", "network1_oopsi.pkl.gz")
 
-import pdb; pdb.set_trace()
 with gzip.open(data_path, 'r') as f:
     P, F, Cf, network, pos = cPickle.load(f)
     S_full = (P > 0.1).astype(np.int)
@@ -38,7 +37,6 @@ C      = 1
 B      = 3
 dt     = 0.02
 dt_max = 0.08
-
 
 
 # Compute the cross correlation to estimate the connectivity
@@ -82,7 +80,7 @@ print "Estimating network via cross correlation"
 #     spks  = np.where(S[all_spiking[0]-5*window:all_spiking[0]+5*window, ind])
 #     plt.plot(spks, F[spks,ind], 'ro')
 #     plt.xlim(4*window, 6*window)
-# plt.show()1
+# plt.show()
 
 
 # Look at the fluorescence values at time of spike

@@ -66,7 +66,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     use_parse_results = True
     if use_parse_results and  os.path.exists(output_path + ".parsed_results.pkl"):
         with open(output_path + ".parsed_results.pkl") as f:
-            auc_rocs, auc_prcs, plls = cPickle.load(f)
+            auc_rocs, auc_prcs, plls, timestamps = cPickle.load(f)
 
     else:
         # Compute the cross correlation to estimate the connectivity
@@ -91,7 +91,6 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                                                              standard_model=bfgs_model)
 
         # Fit a network Hawkes model with Batch VB
-        import pdb; pdb.set_trace()
         vb_models, vb_timestamps = fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
                                                       output_path=output_path,
                                                       standard_model=bfgs_model)
@@ -138,7 +137,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
 
         with open(output_path + ".parsed_results.pkl", 'w') as f:
             print "Saving parsed results to ", output_path + ".parsed_results.pkl"
-            cPickle.dump((auc_rocs, auc_prcs, plls), f, protocol=-1)
+            cPickle.dump((auc_rocs, auc_prcs, plls, timestamps), f, protocol=-1)
 
 
     # print "Log Predictive Likelihoods: "
@@ -175,6 +174,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     #                 aspect=float(C)/K)
     # plt.show()
 
+    import pdb; pdb.set_trace()
     plot_pred_ll_vs_time(plls, timestamps, Z=float(S.size), T_train=T_train)
 
 
@@ -306,6 +306,12 @@ def load_partial_results(output_path, typ="gibbs"):
             (samples, timestamps) = cPickle.load(f)
             return samples, timestamps
     else:
+        if os.path.exists(os.path.join(os.path.dirname(output_path),
+                                       "%s_timestamps.pkl" % typ)):
+            with open(os.path.join(os.path.dirname(output_path),
+                                       "%s_timestamps.pkl" % typ), 'r') as f:
+                names_and_timestamps = dict(cPickle.load(f))
+
         # Look for individual iteration files instead
         files = glob.glob(output_path + ".%s.itr*.pkl" % typ)
         if len(files) > 0:
@@ -313,8 +319,18 @@ def load_partial_results(output_path, typ="gibbs"):
             for file in files:
                 with open(file, 'r') as f:
                     print "Loading sample from ", file
-                    sample, timestamp = cPickle.load(f)
-                    full_samples.append((file, sample, timestamp))
+                    try:
+                        res = cPickle.load(f)
+                        if isinstance(res, tuple):
+                            sample, timestamp = res
+                        else:
+                            sample = res
+                            timestamp = names_and_timestamps[os.path.basename(file)]
+                        full_samples.append((file, sample, timestamp))
+                    except:
+                        print "Failed to load file ", file
+
+
 
             # Sort the samples by iteration name
             full_samples = sorted(full_samples, key=lambda x: x[0])
@@ -322,6 +338,10 @@ def load_partial_results(output_path, typ="gibbs"):
             itrs       = np.array([int(n[-8:-4]) for n in names])     # Hack out the iteration number
             samples    = [s for (n,s,t) in full_samples]
             timestamps = np.array([t for (n,s,t) in full_samples])
+
+            if np.all(timestamps > 1e8):
+                timestamps = timestamps[1:] - timestamps[0]
+                samples = samples[1:]
 
             assert np.all(np.diff(itrs) == 1), "Iterations are not sequential!"
             return samples, timestamps
@@ -764,7 +784,7 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
     from hips.plotting.colormaps import harvard_colors
 
     # Make the ICML figure
-    fig = create_figure((3.25,2.5))
+    fig = create_figure((4,3))
     ax = fig.add_subplot(111)
     col = harvard_colors()
     plt.grid()
@@ -775,28 +795,51 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
     assert "bfgs" in plls and "bfgs" in timestamps
     # t_bfgs = timestamps["bfgs"]
     t_bfgs = 0.0
-
-    if 'gibbs' in plls and 'gibbs' in timestamps:
-        t_gibbs = timestamps['gibbs']
-        t_gibbs = t_bfgs + t_gibbs
-        ax.plot(t_gibbs, (plls['gibbs'] - plls['homog'])/Z, color=col[0], label="Gibbs", lw=1.5)
+    t_start = 0.0
+    t_stop = 0.0
 
     if 'svi' in plls and 'svi' in timestamps:
         t_svi = timestamps['svi']
         t_svi = t_bfgs + t_svi[1:] - t_svi[0]
-        ax.plot(t_svi, (plls['svi'][1:] - plls['homog'])/Z, color=col[1], label="SVI", lw=1.5)
+        t_stop = max(t_stop, t_svi[-1])
+        ax.plot(t_svi, (plls['svi'][1:] - plls['homog'])/Z, color=col[0], label="SVI", lw=1.5)
 
     if 'vb' in plls and 'vb' in timestamps:
         t_vb = timestamps['vb']
         t_vb = t_bfgs + t_vb
-        ax.plot(t_vb, (plls['vb'] - plls['homog'])/Z, color=col[2], label="VB", lw=1.5)
+        t_stop = max(t_stop, t_vb[-1])
+        ax.plot(t_vb, (plls['vb'] - plls['homog'])/Z, color=col[1], label="VB", lw=1.5)
 
-    t_start = t_bfgs
-    t_stop  = np.amax(t_gibbs)
+    if 'gibbs' in plls and 'gibbs' in timestamps:
+        t_gibbs = timestamps['gibbs']
+        t_gibbs = t_bfgs + t_gibbs
+        t_stop = max(t_stop, t_gibbs[-1])
+        ax.plot(t_gibbs, (plls['gibbs'] - plls['homog'])/Z, color=col[2], label="Gibbs", lw=1.5)
 
-    ax.plot([t_bfgs, t_stop],
+    # Extend lines to t_st
+    if 'svi' in plls and 'svi' in timestamps:
+        final_svi_pll = -np.log(10) + logsumexp(plls['svi'][-10:])
+        ax.plot([t_svi[-1], t_stop],
+                    [(final_svi_pll - plls['homog'])/Z,
+                     (final_svi_pll - plls['homog'])/Z],
+                    '--',
+                    color=col[0], lw=1.5)
+
+    if 'vb' in plls and 'vb' in timestamps:
+        ax.plot([t_vb[-1], t_stop],
+                    [(plls['vb'][-1] - plls['homog'])/Z,
+                     (plls['vb'][-1] - plls['homog'])/Z],
+                    '--',
+                    color=col[1], lw=1.5)
+
+    ax.plot([t_start, t_stop],
                 [(plls['bfgs'] - plls['homog'])/Z, (plls['bfgs'] - plls['homog'])/Z],
-                color='k', label="bfgs")
+                color=col[3], lw=1.5, label="Std." )
+
+    # Put a legend above
+    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+               ncol=4, mode="expand", borderaxespad=0.,
+               prop={'size':9})
 
     ax.set_xlim(t_start, t_stop)
 
@@ -812,12 +855,15 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
     logyscale = -2
     yticks = ticker.FuncFormatter(lambda y, pos: '{0:.3f}'.format(y/10.**logyscale))
     ax.yaxis.set_major_formatter(yticks)
-    ax.set_ylabel('PLL ($10^{%d}$ bps)' % logyscale)
+    ax.set_ylabel('Pred. LL ($10^{%d}$ bps)' % logyscale)
 
     ylim = ax.get_ylim()
     ax.plot([t_bfgs, t_bfgs], ylim, '--k')
     ax.set_ylim(ylim)
-    plt.tight_layout()
+
+
+    # plt.tight_layout()
+    plt.subplots_adjust(bottom=0.2, left=0.2)
     # plt.title("Predictive Log Likelihood ($T=%d$)" % T_train)
     plt.show()
     fig.savefig('fig2a.pdf')

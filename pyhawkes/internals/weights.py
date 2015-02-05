@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
@@ -51,8 +53,9 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             "W must be a KxK weight matrix"
 
         # LL of A
-        rho = self.network.P
+        rho = np.clip(self.network.P, 1e-16, 1-1e-16)
         ll = (A * np.log(rho) + (1-A) * np.log(1-rho)).sum()
+        ll = np.nan_to_num(ll)
 
         # Get the shape and scale parameters from the network model
         kappa = self.network.kappa
@@ -94,6 +97,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         # TODO: Write a Cython function to sample this more efficiently
         p = self.network.P
         for k1 in xrange(self.K):
+            sys.stdout.write('.')
+            sys.stdout.flush()
             for k2 in xrange(self.K):
                 if model is None:
                     ll0 = 0
@@ -116,6 +121,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 #           = lp1 - ln(exp(lp0) + exp(lp1))
                 #           = lp1 - Z
                 self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
+        sys.stdout.write('\n')
+        sys.stdout.flush()
 
     def _get_suff_statistics(self, N, Z):
         """

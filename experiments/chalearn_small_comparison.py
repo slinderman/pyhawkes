@@ -18,12 +18,13 @@ import matplotlib.pyplot as plt
 
 from pyhawkes.utils.basis import IdentityBasis
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
-    DiscreteTimeNetworkHawkesModelGammaMixture
+    DiscreteTimeNetworkHawkesModelGammaMixture, \
+    DiscreteTimeNetworkHawkesModelSpikeAndSlab
 from pyhawkes.plotting.plotting import plot_network
 
 from baselines.xcorr import infer_net_from_xcorr
 
-from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, average_precision_score
 
 def run_comparison(data_path, output_path, seed=None):
     """
@@ -62,8 +63,10 @@ def run_comparison(data_path, output_path, seed=None):
     S_full = S_full.astype(np.int)
 
     # Train on all but the last ten minutes (20ms time bins = 50Hz)
+    T_train = 5 * 60 * 50
     T_test = 10 * 60 * 50
-    S      = S_full[:-T_test, :]
+    # S      = S_full[:-T_test, :]
+    S      = S_full[:T_train, :]
     S_test = S_full[-T_test:, :]
 
     K      = S.shape[1]
@@ -93,12 +96,13 @@ def run_comparison(data_path, output_path, seed=None):
     #     cPickle.dump((standard_models, timestamps), f, protocol=-1)
 
     # Fit a network Hawkes model with Gibbs
-    # gibbs_samples, timestamps = fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
-    #                                          output_path=output_path,
-    #                                          standard_model=init_model)
+    gibbs_samples = gibbs_timestamps = None
+    gibbs_samples, gibbs_timestamps = fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
+                                             output_path=output_path,
+                                             standard_model=bfgs_model)
 
     # Fit a network Hawkes model with Batch VB
-    # vb_models, timestamps = fit_network_hawkes_vb(S, K, dt, dt_max,
+    # vb_models, vb_timestamps = fit_network_hawkes_vb(S, K, dt, dt_max,
     #                                          standard_model=standard_models[-1])
     #
     # with open(output_path + ".vb.pkl", 'w') as f:
@@ -111,24 +115,32 @@ def run_comparison(data_path, output_path, seed=None):
                                                     standard_model=bfgs_model)
 
     # Compute area under roc curve of inferred network
-    auc_rocs = compute_auc_roc(network,
+    auc_rocs, fprs, tprs = compute_auc_roc(network,
                                W_xcorr=W_xcorr,
                                bfgs_model=bfgs_model,
+                               gibbs_samples=gibbs_samples,
                                svi_models=svi_models)
     print "AUC-ROC"
     pprint.pprint(auc_rocs)
 
+    plot_roc_curves(fprs, tprs)
+
     # Compute area under precisino recall curve of inferred network
-    auc_prcs = compute_auc_prc(network,
+    auc_prcs, precs, recalls = compute_auc_prc(network,
                                W_xcorr=W_xcorr,
                                bfgs_model=bfgs_model,
+                               gibbs_samples=gibbs_samples,
                                svi_models=svi_models)
     print "AUC-PRC"
     pprint.pprint(auc_prcs)
 
+    plot_prc_curves(precs, recalls)
+
+
     # Compute the predictive log likelihoods
     plls = compute_predictive_ll(S_test, S,
                                  bfgs_model=bfgs_model,
+                                 gibbs_samples=gibbs_samples,
                                  svi_models=svi_models)
 
     print "Log Predictive Likelihoods: "
@@ -294,8 +306,14 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
         print "Fitting the data with a network Hawkes model using Gibbs sampling"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        # test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
+        #                                                         alpha=1.0, beta=1.0/20.0)
+        test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
+        test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, dt_max=dt_max,
+                                                                basis=test_basis,
+                                                                alpha=1.0, beta=1.0/10.0,
+                                                                tau1=1.0, tau0=10.0,
+                                                                allow_self_connections=False)
         test_model.add_data(S)
 
         # Initialize with the standard model parameters
@@ -307,21 +325,20 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
         plt.pause(0.001)
 
         # Gibbs sample
-        N_samples = 2
+        N_samples = 100
         samples = []
-        lps = []
+        lps = [test_model.log_probability()]
         timestamps = []
         for itr in xrange(N_samples):
+            if itr % 1 == 0:
+                print "Iteration ", itr, "\tLL: ", lps[-1]
+                im.set_data(test_model.weight_model.W_effective)
+                plt.pause(0.001)
+
             # lps.append(test_model.log_probability())
-            lps.append(test_model.log_likelihood())
+            lps.append(test_model.log_probability())
             samples.append(test_model.resample_and_copy())
             timestamps.append(time.clock())
-
-            if itr % 1 == 0:
-                print "Iteration ", itr, "\t LL: ", lps[-1]
-                im.set_data(test_model.weight_model.A * \
-                            test_model.weight_model.W)
-                plt.pause(0.001)
 
             # Save this sample
             with open(output_path + ".gibbs.itr%04d.pkl" % itr, 'w') as f:
@@ -432,10 +449,13 @@ def compute_auc_roc(A_true,
     """
     A_flat = A_true.ravel()
     aucs = {}
+    fprs = {}
+    tprs = {}
 
     if W_xcorr is not None:
         aucs['xcorr'] = roc_auc_score(A_flat,
                                       W_xcorr.ravel())
+        fprs['xcorr'], tprs['xcorr'], _ = roc_curve(A_flat, W_xcorr.ravel())
 
     if bfgs_model is not None:
         assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
@@ -443,6 +463,7 @@ def compute_auc_roc(A_true,
         W_bfgs -= np.diag(np.diag(W_bfgs))
         aucs['bfgs'] = roc_auc_score(A_flat,
                                      W_bfgs.ravel())
+        fprs['bfgs'], tprs['bfgs'], _ = roc_curve(A_flat, W_bfgs.ravel())
 
     if sgd_model is not None:
         assert isinstance(sgd_model, DiscreteTimeStandardHawkesModel)
@@ -465,10 +486,13 @@ def compute_auc_roc(A_true,
 
     if svi_models is not None:
         # Compute ROC based on E[A] under variational posterior
+        W_svi = svi_models[-1].weight_model.expected_A()
         aucs['svi'] = roc_auc_score(A_flat,
-                                    svi_models[-1].weight_model.expected_A().ravel())
+                                    W_svi.ravel())
+        fprs['svi'], tprs['svi'], _ = roc_curve(A_flat, W_svi.ravel())
 
-    return aucs
+
+    return aucs, fprs, tprs
 
 def compute_auc_prc(A_true,
                     W_xcorr=None,
@@ -484,11 +508,14 @@ def compute_auc_prc(A_true,
     """
     A_flat = A_true.ravel()
     aucs = {}
+    precs = {}
+    recalls = {}
 
     if W_xcorr is not None:
         aucs['xcorr'] = average_precision_score(A_flat,
                                                 W_xcorr.ravel(),
                                                 average=average)
+        precs['xcorr'], recalls['xcorr'], _ = precision_recall_curve(A_flat, W_xcorr.ravel())
 
     if bfgs_model is not None:
         assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
@@ -497,12 +524,14 @@ def compute_auc_prc(A_true,
         aucs['bfgs'] = average_precision_score(A_flat,
                                                W_bfgs.ravel(),
                                                average=average)
+        precs['bfgs'], recalls['bfgs'], _ = precision_recall_curve(A_flat, W_bfgs.ravel())
 
     if sgd_model is not None:
         assert isinstance(sgd_model, DiscreteTimeStandardHawkesModel)
         aucs['sgd'] = average_precision_score(A_flat,
                                               sgd_model.W.ravel(),
                                               average=average)
+        # precs['sgd'], recalls['sgd'], _ = precision_recall_curve(A_flat, W_sgd.ravel())
 
     if gibbs_samples is not None:
         # Compute ROC based on mean value of W_effective in second half of samples
@@ -521,11 +550,13 @@ def compute_auc_prc(A_true,
 
     if svi_models is not None:
         # Compute ROC based on E[A] under variational posterior
+        W_svi = svi_models[-1].weight_model.expected_W()
         aucs['svi'] = average_precision_score(A_flat,
-                                              svi_models[-1].weight_model.expected_A().ravel(),
+                                              W_svi.ravel(),
                                               average=average)
+        precs['svi'], recalls['svi'], _ = precision_recall_curve(A_flat, W_svi.ravel())
 
-    return aucs
+    return aucs, precs, recalls
 
 
 def compute_predictive_ll(S_test, S_train,
@@ -620,10 +651,47 @@ def compute_clustering_score():
     # TODO: Implement simple clustering
     raise NotImplementedError()
 
+def plot_roc_curves(fprs, tprs):
+    from hips.plotting.layout import create_figure
+    from hips.plotting.colormaps import harvard_colors
+    col = harvard_colors()
+
+    fig = create_figure((4,4))
+    ax = fig.add_subplot(111)
+    ax.plot(fprs['xcorr'], tprs['xcorr'], color=col[7], lw=1.5, label="xcorr")
+    ax.plot(fprs['bfgs'], tprs['bfgs'], color=col[3], lw=1.5, label="Std.")
+    ax.plot(fprs['svi'], tprs['svi'], color=col[0], lw=1.5, label="SVI")
+    ax.plot([0,1], [0,1], '-k', lw=0.5)
+    ax.set_xlabel("FPR")
+    ax.set_ylabel("TPR")
+
+    plt.legend(loc=4)
+    ax.set_title("Receiver Operator Characteristic")
+    plt.savefig("figure3c.pdf")
+    # plt.show()
+
+def plot_prc_curves(precs, recalls):
+    from hips.plotting.layout import create_figure
+    from hips.plotting.colormaps import harvard_colors
+    col = harvard_colors()
+
+    fig = create_figure((4,4))
+    ax = fig.add_subplot(111)
+    ax.plot(recalls['xcorr'], precs['xcorr'], color=col[7], lw=1.5, label="xcorr")
+    ax.plot(recalls['bfgs'], precs['bfgs'], color=col[3], lw=1.5, label="Std.")
+    ax.plot(recalls['svi'], precs['svi'], color=col[0], lw=1.5, label="SVI")
+    ax.set_xlabel("Recall")
+    ax.set_ylabel("Precision")
+
+    plt.legend(loc=1)
+    ax.set_title("Precision-Recall Curve")
+    plt.savefig("figure3d.pdf")
+    # plt.show()
+
 # seed = 2650533028
 seed = None
-net = 1
-run = 12
+net = 6
+run = 1
 data_path = os.path.join("data", "chalearn", "small", "network%d_oopsi.pkl.gz" % net)
 out_path  = os.path.join("data", "chalearn", "small", "network%d_run%03d" % (net,run), "results" )
 run_comparison(data_path, out_path, seed=seed)
