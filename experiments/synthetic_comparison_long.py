@@ -63,12 +63,11 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     dt     = true_model.dt
     dt_max = true_model.dt_max
 
-    use_parse_results = False
+    use_parse_results = True
     if use_parse_results and  os.path.exists(output_path + ".parsed_results.pkl"):
         with open(output_path + ".parsed_results.pkl") as f:
             auc_rocs, auc_prcs, plls, timestamps = cPickle.load(f)
             timestamps['svi'] = np.array(timestamps['svi'])
-        import pdb; pdb.set_trace()
 
     else:
         # Compute the cross correlation to estimate the connectivity
@@ -273,7 +272,6 @@ def fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max, init_model=None):
 
 def load_partial_results(output_path, typ="gibbs"):
     import glob
-    # import pdb; pdb.set_trace()
 
     # Check for existing Gibbs results
     if os.path.exists(output_path + ".%s.pkl" % typ):
@@ -316,8 +314,9 @@ def load_partial_results(output_path, typ="gibbs"):
             timestamps = np.array([t for (n,s,t) in full_samples])
 
             if np.all(timestamps > 1e8):
-                timestamps = timestamps - timestamps[0]
-                samples = samples
+                import pdb; pdb.set_trace()
+                timestamps = timestamps[1:] - timestamps[0]
+                samples = samples[1:]
 
             assert np.all(np.diff(itrs) == 1), "Iterations are not sequential!"
             return samples, timestamps
@@ -527,6 +526,7 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
 
         # TODO: Add the data in minibatches
         minibatchsize = 500
+        import pdb; pdb.set_trace()
         test_model.add_data(S)
 
 
@@ -821,7 +821,6 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
     # Compute the max and min time in seconds
     print "Homog PLL: ", plls['homog']
-
     # DEBUG
     plls['homog'] = 0.0
     Z = 1.0
@@ -833,7 +832,6 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
     t_stop = 0.0
 
     if 'svi' in plls and 'svi' in timestamps:
-        # import pdb; pdb.set_trace()
         isreal = ~np.isnan(plls['svi'])
         svis = plls['svi'][isreal]
         t_svi = timestamps['svi'][isreal]
@@ -861,7 +859,7 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
     # Extend lines to t_st
     if 'svi' in plls and 'svi' in timestamps:
-        final_svi_pll = -np.log(4) + logsumexp(svis[-4:])
+        final_svi_pll = -np.log(10) + logsumexp(plls['svi'][-10:])
         ax.semilogx([t_svi[-1], t_stop],
                     [(final_svi_pll - plls['homog'])/Z,
                      (final_svi_pll - plls['homog'])/Z],
@@ -895,10 +893,10 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
     ax.xaxis.set_major_formatter(xticks)
     ax.set_xlabel('Time ($10^{%d}$ s)' % logxscale)
 
-    logyscale = 4
-    yticks = ticker.FuncFormatter(lambda y, pos: '{0:.3f}'.format(y/10.**logyscale))
+    logyscale = 6
+    yticks = ticker.FuncFormatter(lambda y, pos: '{0:3f}'.format(y/10.**logyscale))
     ax.yaxis.set_major_formatter(yticks)
-    ax.set_ylabel('Pred. LL ($ \\times 10^{%d}$)' % logyscale)
+    ax.set_ylabel('Pred. LL ($10^{%d}$ bps)' % logyscale)
 
     # ylim = ax.get_ylim()
     # ax.plot([t_bfgs, t_bfgs], ylim, '--k')
@@ -909,20 +907,16 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
     plt.subplots_adjust(bottom=0.2, left=0.2)
     # plt.title("Predictive Log Likelihood ($T=%d$)" % T_train)
     plt.show()
-    fig.savefig('figure2a.pdf')
+    fig.savefig('figure2b.pdf')
 
 
 # seed = 2650533028
 seed = None
-<<<<<<< HEAD
 run = 4
-=======
-run = 3
->>>>>>> bea58c265e5831591cac3c2d239570a3960793fa
 K = 50
 C = 5
 T = 100000
-T_train = 100000
+T_train = 99000
 T_test = 1000
 data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
 test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl" % (K,C,T_test))

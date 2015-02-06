@@ -477,7 +477,7 @@ def compute_auc_roc(A_true,
         offset       = N_samples // 2
         Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
 
-        aucs['gibbs'] = roc_auc_score(A_flat, Weff_mean)
+        aucs['gibbs'] = roc_auc_score(A_flat, Weff_mean.ravel())
 
     if vb_models is not None:
         # Compute ROC based on E[A] under variational posterior
@@ -540,7 +540,8 @@ def compute_auc_prc(A_true,
         offset       = N_samples // 2
         Weff_mean    = Weff_samples[offset:,:,:].mean(axis=0)
 
-        aucs['gibbs'] = average_precision_score(A_flat, Weff_mean, average=average)
+        aucs['gibbs'] = average_precision_score(A_flat, Weff_mean.ravel(),
+                                                average=average)
 
     if vb_models is not None:
         # Compute ROC based on E[A] under variational posterior
