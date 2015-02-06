@@ -566,7 +566,7 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
 
 
         # Stochastic variational inference
-        N_iters = 1000
+        N_iters = 10000
         samples = []
         delay = 1.0
         forgetting_rate = 0.5
@@ -937,11 +937,11 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
 # seed = 2650533028
 seed = None
-run = 1
+run = 4
 K = 50
 C = 5
 T = 100000
-T_train = 11000
+T_train = 100000
 T_test = 1000
 data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
 test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl" % (K,C,T_test))
