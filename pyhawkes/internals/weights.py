@@ -53,7 +53,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             "W must be a KxK weight matrix"
 
         # LL of A
-        rho = np.clip(self.network.P, 1e-16, 1-1e-16)
+        rho = np.clip(self.network.P, 1e-32, 1-1e-32)
         ll = (A * np.log(rho) + (1-A) * np.log(1-rho)).sum()
         ll = np.nan_to_num(ll)
 
