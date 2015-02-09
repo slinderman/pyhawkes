@@ -14,9 +14,10 @@ def geweke_test():
     T = 50
     dt = 1.0
     dt_max = 3.0
+    network_hypers = {'c': np.array([0], dtype=np.int),
+                      'p': 0.5, 'kappa': 3.0, 'v': 15.0}
     model = DiscreteTimeNetworkHawkesModelGammaMixture(K=1, dt=dt, dt_max=dt_max,
-                                                       c=np.array([0], dtype=np.int),
-                                                       p=0.5, kappa=3.0, v=15.0)
+                                                       network_hypers=network_hypers)
     model.generate(T=T)
 
     # Gibbs sample and then generate new data

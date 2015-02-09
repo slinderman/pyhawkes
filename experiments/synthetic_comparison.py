@@ -63,6 +63,9 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     dt     = true_model.dt
     dt_max = true_model.dt_max
 
+    # Fix the sparsity for the spike and slab model
+    p      = 0.4 * np.eye(C) + 0.01 * (1-np.eye(C))
+
     use_parse_results = False
     if use_parse_results and  os.path.exists(output_path + ".parsed_results.pkl"):
         with open(output_path + ".parsed_results.pkl") as f:
@@ -88,13 +91,15 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
         #     cPickle.dump((standard_models, timestamps), f, protocol=-1)
 
         # Fit a network Hawkes model with Gibbs
-        gibbs_samples, gibbs_timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
-                                                             output_path=output_path,
-                                                             standard_model=bfgs_model)
+        gibbs_samples = gibbs_timestamps = None
+        # gibbs_samples, gibbs_timestamps = fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
+        #                                                      output_path=output_path,
+        #                                                      standard_model=bfgs_model)
 
         # Fit a spike and slab network Hawkes model with Gibbs
         gibbs_ss_samples, gibbs_ss_timestamps = fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
                                                                  output_path=output_path,
+                                                                 p=p,
                                                                  standard_model=bfgs_model)
 
         # Fit a network Hawkes model with Batch VB
@@ -340,8 +345,9 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
         print "Fitting the data with a network Hawkes model using Gibbs sampling"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                network_hypers=network_hypers)
         test_model.add_data(S)
 
         # Initialize with the standard model parameters
@@ -388,7 +394,7 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
 
 
 def fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
-                                output_path,
+                                output_path, p,
                                 standard_model=None):
 
     samples_and_timestamps = load_partial_results(output_path, typ="gibbs_ss")
@@ -397,11 +403,12 @@ def fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
 
 
     else:
-        print "Fitting the data with a spike adn slab network Hawkes model using Gibbs sampling"
+        print "Fitting the data with a spike and slab network Hawkes model using Gibbs sampling"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0, 'p': p}
+        test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                network_hypers=network_hypers)
         test_model.add_data(S)
 
         # Initialize with the standard model parameters
@@ -459,8 +466,9 @@ def fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
         print "Fitting the data with a network Hawkes model using Batch VB"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                network_hypers=network_hypers)
         # Initialize with the standard model parameters
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)
@@ -515,8 +523,9 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         print "Fitting the data with a network Hawkes model using SVI"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                network_hypers=network_hypers)
         # Initialize with the standard model parameters
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)
@@ -914,11 +923,7 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
 # seed = 2650533028
 seed = None
-<<<<<<< HEAD
-run = 4
-=======
 run = 3
->>>>>>> bea58c265e5831591cac3c2d239570a3960793fa
 K = 50
 C = 5
 T = 100000

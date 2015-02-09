@@ -309,11 +309,12 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
         # test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
         #                                                         alpha=1.0, beta=1.0/20.0)
         test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
-        test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, dt_max=dt_max,
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/10.0,
+                          'tau1': 1.0, 'tau0': 10.0,
+                          'allow_self_connections': False}
+        test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max,
                                                                 basis=test_basis,
-                                                                alpha=1.0, beta=1.0/10.0,
-                                                                tau1=1.0, tau0=10.0,
-                                                                allow_self_connections=False)
+                                                                network_hypers=network_hypers)
         test_model.add_data(S)
 
         # Initialize with the standard model parameters
@@ -376,11 +377,12 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
 
         # Make a new model for inference
         test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max,
-                                                                alpha=1.0, beta=0.1,
-                                                                tau0=10.0, tau1=1.0,
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/10.0,
+                          'tau1': 1.0, 'tau0': 10.0,
+                          'allow_self_connections': False}
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max,
                                                                 basis=test_basis,
-                                                                allow_self_connections=False)
+                                                                network_hypers=network_hypers)
         # Initialize with the standard model parameters
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)

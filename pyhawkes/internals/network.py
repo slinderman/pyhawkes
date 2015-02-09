@@ -99,7 +99,7 @@ class _StochasticBlockModelBase(BayesianDistribution):
             assert isinstance(c, np.ndarray) and c.shape == (K,) and c.dtype == np.int \
                    and np.amin(c) >= 0 and np.amax(c) <= self.C-1, \
                 "c must be a length K-vector of block assignments"
-            self.c = c
+            self.c = c.copy()
         else:
             self.c = np.random.choice(self.C, p=self.m, size=(self.K))
 
@@ -363,17 +363,17 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         :return:
         """
         if self.fixed:
-            return np.log(self.P)
+            E_ln_p = np.log(self.P)
+        else:
+            E_ln_p = np.zeros((self.K, self.K))
+            for c1 in xrange(self.C):
+                for c2 in xrange(self.C):
+                    # Get the KxK matrix of joint class assignment probabilities
+                    pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
-        E_ln_p = np.zeros((self.K, self.K))
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
-                # Get the KxK matrix of joint class assignment probabilities
-                pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
-
-                # Get the probability of a connection for this pair of classes
-                E_ln_p += pc1c2 * (psi(self.mf_tau1[c1,c2])
-                                   - psi(self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2]))
+                    # Get the probability of a connection for this pair of classes
+                    E_ln_p += pc1c2 * (psi(self.mf_tau1[c1,c2])
+                                       - psi(self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2]))
 
         if not self.allow_self_connections:
             np.fill_diagonal(E_ln_p, -np.inf)
@@ -386,17 +386,17 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         :return:
         """
         if self.fixed:
-            return np.log(1.0 - self.P)
+            E_ln_notp = np.log(1.0 - self.P)
+        else:
+            E_ln_notp = np.zeros((self.K, self.K))
+            for c1 in xrange(self.C):
+                for c2 in xrange(self.C):
+                    # Get the KxK matrix of joint class assignment probabilities
+                    pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
-        E_ln_notp = np.zeros((self.K, self.K))
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
-                # Get the KxK matrix of joint class assignment probabilities
-                pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
-
-                # Get the probability of a connection for this pair of classes
-                E_ln_notp += pc1c2 * (psi(self.mf_tau0[c1,c2])
-                                      - psi(self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2]))
+                    # Get the probability of a connection for this pair of classes
+                    E_ln_notp += pc1c2 * (psi(self.mf_tau0[c1,c2])
+                                          - psi(self.mf_tau0[c1,c2] + self.mf_tau1[c1,c2]))
 
         if not self.allow_self_connections:
             np.fill_diagonal(E_ln_notp, 0.0)
@@ -610,7 +610,11 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         pi_hat = self.pi + self.mf_m.sum(axis=0)
         self.mf_pi = (1.0 - stepsize) * self.mf_pi + stepsize * pi_hat
 
-    def meanfieldupdate(self, weight_model):
+    def meanfieldupdate(self, weight_model,
+                        update_p=True,
+                        update_v=True,
+                        update_m=True,
+                        update_c=True):
         # Get expectations from the weight model
         E_A = weight_model.expected_A()
         E_notA = 1.0 - E_A
@@ -618,17 +622,27 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         E_ln_W_given_A = weight_model.expected_log_W_given_A(1.0)
 
         # Update the remaining SBM parameters
-        self.mf_update_p(E_A=E_A, E_notA=E_notA)
-        self.mf_update_v(E_A=E_A, E_W_given_A=E_W_given_A)
-        self.mf_update_m()
+        if update_c:
+            self.mf_update_p(E_A=E_A, E_notA=E_notA)
+
+        if update_v:
+            self.mf_update_v(E_A=E_A, E_W_given_A=E_W_given_A)
+
+        if update_m:
+            self.mf_update_m()
 
         # Update the block assignments
-        self.mf_update_c(E_A=E_A,
-                         E_notA=E_notA,
-                         E_W_given_A=E_W_given_A,
-                         E_ln_W_given_A=E_ln_W_given_A)
+        if update_c:
+            self.mf_update_c(E_A=E_A,
+                             E_notA=E_notA,
+                             E_W_given_A=E_W_given_A,
+                             E_ln_W_given_A=E_ln_W_given_A)
 
-    def meanfield_sgdstep(self,weight_model,minibatchfrac,stepsize):
+    def meanfield_sgdstep(self,weight_model, minibatchfrac, stepsize,
+                          update_p=True,
+                          update_v=True,
+                          update_m=True,
+                          update_c=True):
         # Get expectations from the weight model
         E_A = weight_model.expected_A()
         E_notA = 1.0 - E_A
@@ -636,54 +650,68 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         E_ln_W_given_A = weight_model.expected_log_W_given_A(1.0)
 
         # Update the remaining SBM parameters
-        self.mf_update_p(E_A=E_A, E_notA=E_notA, stepsize=stepsize)
-        self.mf_update_v(E_A=E_A, E_W_given_A=E_W_given_A, stepsize=stepsize)
-        self.mf_update_m(stepsize=stepsize)
+        if update_p:
+            self.mf_update_p(E_A=E_A, E_notA=E_notA, stepsize=stepsize)
+
+        if update_v:
+            self.mf_update_v(E_A=E_A, E_W_given_A=E_W_given_A, stepsize=stepsize)
+
+        if update_m:
+            self.mf_update_m(stepsize=stepsize)
 
         # Update the block assignments
-        self.mf_update_c(E_A=E_A,
-                         E_notA=E_notA,
-                         E_W_given_A=E_W_given_A,
-                         E_ln_W_given_A=E_ln_W_given_A,
-                         stepsize=stepsize)
+        if update_c:
+            self.mf_update_c(E_A=E_A,
+                             E_notA=E_notA,
+                             E_W_given_A=E_W_given_A,
+                             E_ln_W_given_A=E_ln_W_given_A,
+                             stepsize=stepsize)
 
-    def get_vlb(self):
+    def get_vlb(self,
+                vlb_c=True,
+                vlb_p=True,
+                vlb_v=True,
+                vlb_m=True):
         # import pdb; pdb.set_trace()
         vlb = 0
 
         # Get the VLB of the expected class assignments
-        E_ln_m = self.expected_log_m()
-        for k in xrange(self.K):
-            # Add the cross entropy of p(c | m)
-            vlb += Discrete().negentropy(E_x=self.mf_m[k,:], E_ln_p=E_ln_m)
+        if vlb_c:
+            E_ln_m = self.expected_log_m()
+            for k in xrange(self.K):
+                # Add the cross entropy of p(c | m)
+                vlb += Discrete().negentropy(E_x=self.mf_m[k,:], E_ln_p=E_ln_m)
 
-            # Subtract the negative entropy of q(c)
-            vlb -= Discrete(self.mf_m[k,:]).negentropy()
+                # Subtract the negative entropy of q(c)
+                vlb -= Discrete(self.mf_m[k,:]).negentropy()
 
         # Get the VLB of the connection probability matrix
         # Add the cross entropy of p(p | tau1, tau0)
-        vlb += Beta(self.tau1, self.tau0).\
-            negentropy(E_ln_p=(psi(self.mf_tau1) - psi(self.mf_tau0 + self.mf_tau1)),
-                       E_ln_notp=(psi(self.mf_tau0) - psi(self.mf_tau0 + self.mf_tau1))).sum()
+        if vlb_p:
+            vlb += Beta(self.tau1, self.tau0).\
+                negentropy(E_ln_p=(psi(self.mf_tau1) - psi(self.mf_tau0 + self.mf_tau1)),
+                           E_ln_notp=(psi(self.mf_tau0) - psi(self.mf_tau0 + self.mf_tau1))).sum()
 
-        # Subtract the negative entropy of q(p)
-        vlb -= Beta(self.mf_tau1, self.mf_tau0).negentropy().sum()
+            # Subtract the negative entropy of q(p)
+            vlb -= Beta(self.mf_tau1, self.mf_tau0).negentropy().sum()
 
         # Get the VLB of the weight scale matrix, v
         # Add the cross entropy of p(v | alpha, beta)
-        vlb += Gamma(self.alpha, self.beta).\
-            negentropy(E_lambda=self.mf_alpha/self.mf_beta,
-                       E_ln_lambda=psi(self.mf_alpha) - np.log(self.mf_beta)).sum()
+        if vlb_v:
+            vlb += Gamma(self.alpha, self.beta).\
+                negentropy(E_lambda=self.mf_alpha/self.mf_beta,
+                           E_ln_lambda=psi(self.mf_alpha) - np.log(self.mf_beta)).sum()
 
-        # Subtract the negative entropy of q(v)
-        vlb -= Gamma(self.mf_alpha, self.mf_beta).negentropy().sum()
+            # Subtract the negative entropy of q(v)
+            vlb -= Gamma(self.mf_alpha, self.mf_beta).negentropy().sum()
 
         # Get the VLB of the block probability vector, m
         # Add the cross entropy of p(m | pi)
-        vlb += Dirichlet(self.pi).negentropy(E_ln_g=self.expected_log_m())
+        if vlb_m:
+            vlb += Dirichlet(self.pi).negentropy(E_ln_g=self.expected_log_m())
 
-        # Subtract the negative entropy of q(m)
-        vlb -= Dirichlet(self.mf_pi).negentropy()
+            # Subtract the negative entropy of q(m)
+            vlb -= Dirichlet(self.mf_pi).negentropy()
 
         return vlb
 
@@ -702,6 +730,129 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
 
 class StochasticBlockModel(GibbsSBM, MeanFieldSBM):
     pass
+
+
+class StochasticBlockModelFixedSparsity(StochasticBlockModel):
+
+    """
+    Special case of the SBM where the probability of connection, P,
+    is fixed. This is valuable for Gibbs sampling, where there is
+    a degenerate mode at the dense posterior.
+    """
+    def __init__(self, K, C=1,
+             p=None,
+             c=None, pi=1.0, m=None,
+             v=None, alpha=1.0, beta=1.0,
+             kappa=1.0,
+             allow_self_connections=True):
+
+        assert p is not None, "CxC probability matrix must be given at init!"
+
+        super(StochasticBlockModelFixedSparsity, self).\
+            __init__(K=K, C=C,
+                     p=p,
+                     c=c, pi=pi, m=m,
+                     v=v, alpha=alpha, beta=beta,
+                     kappa=kappa,
+                     allow_self_connections=allow_self_connections)
+
+        if np.isscalar(p):
+            assert p >= 0 and p <= 1, "p must be a probability"
+            self.p = p * np.ones((C,C))
+
+        else:
+            assert isinstance(p, np.ndarray) and p.shape == (C,C) \
+                   and np.amin(p) >= 0 and np.amax(p) <= 1.0, \
+                "p must be a CxC matrix of probabilities"
+            self.p = p
+
+    def log_likelihood(self, x):
+        """
+        Compute the log likelihood of a set of SBM parameters
+
+        :param x:    (m,p,v) tuple
+        :return:
+        """
+        m,p,v = x
+
+        lp = 0
+        lp += Dirichlet(self.pi).log_probability(m)
+        lp += Gamma(self.alpha, self.beta).log_probability(v).sum()
+        return lp
+
+    def resample(self, data=[]):
+        if self.fixed:
+            return
+
+        A,W = data
+        self.resample_v(A, W)
+        self.resample_c(A, W)
+        self.resample_m()
+
+    def expected_p(self):
+        """
+        Compute the expected probability of a connection, averaging over c
+        :return:
+        """
+        return self.P
+
+    def expected_log_p(self):
+        """
+        Compute the expected log probability of a connection, averaging over c
+        :return:
+        """
+        E_ln_p = np.log(self.P)
+        if not self.allow_self_connections:
+            np.fill_diagonal(E_ln_p, -np.inf)
+
+        return E_ln_p
+
+    def expected_log_notp(self):
+        """
+        Compute the expected log probability of NO connection, averaging over c
+        :return:
+        """
+        if self.fixed:
+            return np.log(1.0 - self.P)
+
+    def meanfieldupdate(self, weight_model,
+                        update_p=False,
+                        update_v=True,
+                        update_m=True,
+                        update_c=True):
+        assert update_p is False, "Cannot update p!"
+        super(StochasticBlockModelFixedSparsity, self).\
+            meanfieldupdate(weight_model,
+                            update_p=False,
+                            update_v=update_v,
+                            update_m=update_m,
+                            update_c=update_c)
+
+    def meanfield_sgdstep(self, weight_model, minibatchfrac, stepsize,
+                          update_p=False,
+                          update_v=True,
+                          update_m=True,
+                          update_c=True):
+        assert update_p is False, "Cannot update p!"
+        super(StochasticBlockModelFixedSparsity, self).\
+            meanfield_sgdstep(weight_model, minibatchfrac, stepsize,
+                              update_p=False,
+                              update_v=update_v,
+                              update_m=update_m,
+                              update_c=update_c)
+
+    def get_vlb(self,
+                vlb_c=True,
+                vlb_p=False,
+                vlb_v=True,
+                vlb_m=True):
+        assert vlb_p is False, "Cannot calculate vlb wrt p!"
+        super(StochasticBlockModelFixedSparsity, self).\
+            get_vlb(vlb_c=vlb_c,
+                    vlb_p=False,
+                    vlb_v=vlb_v,
+                    vlb_m=vlb_m)
+
 
 class ErdosRenyiModel(StochasticBlockModel):
     """

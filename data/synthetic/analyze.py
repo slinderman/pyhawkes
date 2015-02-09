@@ -1,13 +1,7 @@
 import gzip
-import numpy as np
 import cPickle
 import os
 
-import matplotlib.pyplot as plt
-
-from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
-    DiscreteTimeNetworkHawkesModelGammaMixture, DiscreteTimeNetworkHawkesModelSpikeAndSlab
-from pyhawkes.plotting.plotting import plot_network
 
 
 def analyze(data_path):

@@ -339,8 +339,9 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
         print "Fitting the data with a network Hawkes model using Gibbs sampling"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                network_hypers=network_hypers)
         test_model.add_data(S)
 
         # Initialize with the standard model parameters
@@ -399,8 +400,9 @@ def fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
         print "Fitting the data with a spike adn slab network Hawkes model using Gibbs sampling"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
+        test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                network_hypers=network_hypers)
         test_model.add_data(S)
 
         # Initialize with the standard model parameters
@@ -458,8 +460,9 @@ def fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
         print "Fitting the data with a network Hawkes model using Batch VB"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                network_hypers=network_hypers)
         # Initialize with the standard model parameters
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)
@@ -514,8 +517,9 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         print "Fitting the data with a network Hawkes model using SVI"
 
         # Make a new model for inference
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
-                                                                alpha=1.0, beta=1.0/20.0)
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                                network_hypers=network_hypers)
         # Initialize with the standard model parameters
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)

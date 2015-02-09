@@ -115,7 +115,7 @@ class SpikeAndSlabParents(_ParentsBase, GibbsSampling):
         F = self.F
         resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
 
-        self._check_Z()
+        # self._check_Z()
 
 class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
     """

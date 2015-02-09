@@ -26,15 +26,15 @@ def generate_synthetic_data(seed=None):
 
     # Small network:
     # Seed: 1957629166
-    # C = 4
-    # K = 20
-    # T = 100000
-    # dt = 1.0
-    # B = 3
-    # kappa = 3.0
-    # p = 0.9 * np.eye(C) + 0.05 * (1-np.eye(C))
-    # v = kappa * (5.0 * np.eye(C) + 25.0 * (1-np.eye(C)))
-    # c = np.arange(C).repeat((K // C))
+    C = 4
+    K = 20
+    T = 10000
+    dt = 1.0
+    B = 3
+    kappa = 3.0
+    p = 0.9 * np.eye(C) + 0.05 * (1-np.eye(C))
+    v = kappa * (5.0 * np.eye(C) + 25.0 * (1-np.eye(C)))
+    c = np.arange(C).repeat((K // C))
 
     # Medium network:
     # Seed: 2723361959
@@ -50,15 +50,15 @@ def generate_synthetic_data(seed=None):
 
     # Medium netowrk 2:
     # Seed = 3848328624
-    C = 5
-    K = 50
-    T = 100000
-    dt = 1.0
-    B = 3
-    kappa = 2.0
-    c = np.arange(C).repeat((K // C))
-    p = 0.4 * np.eye(C) + 0.01 * (1-np.eye(C))
-    v = kappa * (5 * np.eye(C) + 5.0 * (1-np.eye(C)))
+    # C = 5
+    # K = 50
+    # T = 100000
+    # dt = 1.0
+    # B = 3
+    # kappa = 2.0
+    # c = np.arange(C).repeat((K // C))
+    # p = 0.4 * np.eye(C) + 0.01 * (1-np.eye(C))
+    # v = kappa * (5 * np.eye(C) + 5.0 * (1-np.eye(C)))
 
 
     # Large network:
@@ -99,7 +99,9 @@ def generate_synthetic_data(seed=None):
 
 
     # Create the model with these parameters
-    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, kappa=kappa, c=c, p=p, v=v)
+    network_hypers = {'C': C, 'kappa': kappa, 'c': c, 'p': p, 'v': v}
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, B=B,
+                                                            network_hypers=network_hypers)
     assert true_model.check_stability()
 
     # Plot the true network

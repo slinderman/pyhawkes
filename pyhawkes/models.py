@@ -13,7 +13,7 @@ from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
 from pyhawkes.internals.parents import SpikeAndSlabParents, GammaMixtureParents
-from pyhawkes.internals.network import StochasticBlockModel
+from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockModelFixedSparsity
 from pyhawkes.utils.basis import CosineBasis
 
 # TODO: Add a simple HomogeneousPoissonProcessModel
@@ -503,56 +503,104 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
     """
 
     __metaclass__ = abc.ABCMeta
-    _weight_class = None
-    _parent_class = None
 
-    def __init__(self, K, dt=1.0, dt_max=10.0,
-                 B=5, basis=None,
-                 alpha0=1.0, beta0=1.0,
-                 C=1, c=None,
-                 kappa=1.0,
-                 v=None, alpha=1, beta=1,
-                 p=None, tau1=0.5, tau0=0.5,
-                 allow_self_connections=True,
-                 gamma=1.0):
+    # Define the model components and their default hyperparameters
+    _basis_class            = CosineBasis
+    _default_basis_hypers   = {'norm': True, 'allow_instantaneous': False}
+
+    _bkgd_class             = GammaBias
+    _default_bkgd_hypers    = {'alpha': 1.0, 'beta': 1.0}
+
+    _impulse_class          = DirichletImpulseResponses
+    _default_impulse_hypers = {'gamma' : 1.0}
+
+    # Weight, parent, and network class must be specified by subclasses
+    _weight_class           = None
+    _default_weight_hypers  = {}
+
+    _parent_class           = None
+
+    _network_class          = None
+    _default_network_hypers = {}
+
+    def __init__(self, K, dt=1.0, dt_max=10.0, B=5,
+                 basis=None, basis_hypers={},
+                 bkgd=None, bkgd_hypers={},
+                 impulse=None, impulse_hypers={},
+                 weights=None, weight_hypers={},
+                 network=None, network_hypers={}):
         """
         Initialize a discrete time network Hawkes model with K processes.
 
         :param K:  Number of processes
         """
-        self.K = K
-        self.dt = dt
+        self.K      = K
+        self.dt     = dt
         self.dt_max = dt_max
+        self.B      = B
 
         # Initialize the basis
-        if basis is None:
-            self.B = B
-            # self.allow_instantaneous = allow_instantaneous
-            self.basis = CosineBasis(self.B, self.dt, self.dt_max, norm=True,
-                                     allow_instantaneous=False)
-        else:
+        if basis is not None:
+            # assert basis.B == B
             self.basis = basis
-            self.B = basis.B
-            # self.allow_instantaneous = allow_instantaneous
+            self.B     = basis.B
+        else:
+            # Use the given basis hyperparameters
+            self.basis_hypers = copy.deepcopy(self._default_basis_hypers)
+            self.basis_hypers.update(basis_hypers)
+            self.basis = self._basis_class(self.B, self.dt, self.dt_max,
+                                           **self.basis_hypers)
 
-        # Initialize the model components
-        self.bias_model = GammaBias(self.K, self.dt, alpha0, beta0)
-        self.impulse_model = DirichletImpulseResponses(self.K, self.B, gamma=gamma)
+        # Initialize the bias
+        if bkgd is not None:
+            self.bias_model = bkgd
+        else:
+            # Use the given basis hyperparameters
+            self.bkgd_hypers = copy.deepcopy(self._default_bkgd_hypers)
+            self.bkgd_hypers.update(bkgd_hypers)
+            self.bias_model = self._bkgd_class(self.K, self.dt, **self.bkgd_hypers)
+
+        # Initialize the impulse response model
+        if impulse is not None:
+            assert impulse.B == self.B
+            assert impulse.K == self.K
+            self.impulse_model = impulse
+        else:
+            # Use the given basis hyperparameters
+            self.impulse_hypers = copy.deepcopy(self._default_impulse_hypers)
+            self.impulse_hypers.update(impulse_hypers)
+            self.impulse_model = self._impulse_class(self.K, self.B,
+                                                     **self.impulse_hypers)
+
 
         # Initialize the network model
-        # self.network = ErdosRenyiModel(self.K, p=p, kappa=kappa, v=v)
-        self.C = C
-        # self.network = StochasticBlockModel(C=self.C, K=self.K, p=p, kappa=kappa, v=v)
-        self.network = StochasticBlockModel(C=self.C, K=self.K,
-                                            c=c,
-                                            p=p, tau1=tau1, tau0=tau0,
-                                            allow_self_connections=allow_self_connections,
-                                            kappa=kappa,
-                                            v=v, alpha=alpha, beta=beta,
-                                            pi=1.0)
+        if network is not None:
+            assert network.K == self.K
+            self.network = network
+        else:
+            # Use the given network hyperparameters
+            self.network_hypers = copy.deepcopy(self._default_network_hypers)
+            self.network_hypers.update(network_hypers)
+            self.network = self._network_class(K=self.K,
+                                               **self.network_hypers)
 
-        # The weight model is dictated by whether this is for Gibbs or MF
-        self.weight_model = self._weight_class(self.K, self.network)
+        # TODO: Remove this hack. Should C be a model parameter?
+        self.C = self.network.C
+
+        # Check that the model doesn't allow instantaneous self connections
+        assert not (self.basis.allow_instantaneous and
+                    self.network.allow_self_connections), \
+            "Cannot allow instantaneous self connections"
+
+        # Initialize the weight model
+        if weights is not None:
+            assert weights.K == self.K
+            self.weight_model = weights
+        else:
+            self.weight_hypers = copy.deepcopy(self._default_weight_hypers)
+            self.weight_hypers.update(weight_hypers)
+            self.weight_model = self._weight_class(self.K, self.network,
+                                                   **self.weight_hypers)
 
         # Initialize the data list to empty
         self.data_list = []
@@ -988,8 +1036,17 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
 
 class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
-    _weight_class = SpikeAndSlabGammaWeights
-    _parent_class = SpikeAndSlabParents
+    _weight_class           = SpikeAndSlabGammaWeights
+    _default_weight_hypers  = {}
+    _parent_class           = SpikeAndSlabParents
+
+    _network_class          = StochasticBlockModelFixedSparsity
+    _default_network_hypers = {'C': 1, 'c': None,
+                               'p': 0.5,
+                               'allow_self_connections': True,
+                               'kappa': 1.0,
+                               'v': None, 'alpha': 1.0, 'beta': 1.0,
+                               'pi': 1.0}
 
     def resample_model(self):
         """
@@ -1029,8 +1086,19 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
 
 class DiscreteTimeNetworkHawkesModelGammaMixture(
     _DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling, ModelMeanField):
-    _weight_class = GammaMixtureWeights
-    _parent_class = GammaMixtureParents
+    _weight_class           = GammaMixtureWeights
+    _default_weight_hypers  = {'kappa_0': 0.1, 'nu_0': 10.0}
+
+    _parent_class           = GammaMixtureParents
+
+    # This model uses an SBM with beta-distributed sparsity levels
+    _network_class          = StochasticBlockModel
+    _default_network_hypers = {'C': 1, 'c': None,
+                               'p': None, 'tau1': 1.0, 'tau0': 1.0,
+                               'allow_self_connections': True,
+                               'kappa': 1.0,
+                               'v': None, 'alpha': 1.0, 'beta': 1.0,
+                               'pi': 1.0}
 
     def resample_model(self, resample_network=True):
         """

@@ -26,9 +26,12 @@ def test_sbm_mf(seed=None):
     T = 1000
     dt = 1.0
     B = 3
+    p = 0.4 * np.eye(C) + (0.05) * (1-np.eye(C))
 
     # Generate from a true model
-    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, B=B, tau1=0.5, tau0=0.5, beta=1.0/K)
+    network_hypers = {'C': C, 'beta': 1.0/K, 'p': p}
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K, dt=dt, B=B,
+                                                            network_hypers=network_hypers)
     c = true_model.network.c
     perm = np.argsort(c)
     #
@@ -39,7 +42,9 @@ def test_sbm_mf(seed=None):
     plt.pause(0.001)
 
     # Make a new model for inference
-    test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, B=B, tau1=0.5, tau0=0.5, beta=1.0/K)
+    test_network_hypers = {'C': C, 'beta': 1.0/K, 'tau0': 0.5, 'tau1': 0.5}
+    test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, B=B,
+                                                            network_hypers=test_network_hypers)
     test_model.weight_model.initialize_from_gibbs(true_model.weight_model.A,
                                                   true_model.weight_model.W)
 
