@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy.stats import gamma, beta
+from scipy.stats import gamma, beta, betaprime
 
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
 
@@ -14,10 +14,9 @@ def geweke_test():
     T = 50
     dt = 1.0
     dt_max = 3.0
-    network_hypers = {'c': np.array([0], dtype=np.int),
-                      'p': 0.5, 'kappa': 3.0, 'v': 15.0}
+    network_hypers = {'C': 1, 'p': 0.5, 'kappa': 3.0, 'alpha': 3.0, 'beta': 1.0/20.0}
     model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=1, dt=dt, dt_max=dt_max,
-                                                       networkhypers=network_hypers)
+                                                       network_hypers=network_hypers)
     model.generate(T=T)
 
     # Gibbs sample and then generate new data
@@ -81,7 +80,12 @@ def geweke_test():
     # Plot the histogram of weight samples
     plt.figure()
     Aeq1 = A_samples[:,0,0] == 1
-    p_W1 = gamma(model.network.kappa, scale=1./model.network.v[0,0])
+    # p_W1 = gamma(model.network.kappa, scale=1./model.network.v[0,0])
+
+    # The marginal distribution of W under a gamma prior on the scale
+    # is a beta prime distribution
+    p_W1 = betaprime(model.network.kappa, model.network.alpha, scale=model.network.beta)
+
     _, bins, _ = plt.hist(W_samples[Aeq1,0,0], bins=20, alpha=0.5, normed=True)
     bincenters = 0.5*(bins[1:]+bins[:-1])
     plt.plot(bincenters, p_W1.pdf(bincenters), 'r--', linewidth=1)
@@ -101,6 +105,19 @@ def geweke_test():
         plt.plot(bincenters, p_beta11b.pdf(bincenters), 'r--', linewidth=1)
         plt.xlabel('g_%d' % b)
         plt.ylabel('p(g_%d)' % b)
+
+    # Plot the histogram of weight scale
+    plt.figure()
+    for c1 in range(model.C):
+        for c2 in range(model.C):
+            plt.subplot(model.C, model.C, 1 + c1*model.C + c2)
+            p_v = gamma(model.network.alpha, scale=1./model.network.beta)
+
+            _, bins, _ = plt.hist(v_samples[:,c1,c2], bins=20, alpha=0.5, normed=True)
+            bincenters = 0.5*(bins[1:]+bins[:-1])
+            plt.plot(bincenters, p_v.pdf(bincenters), 'r--', linewidth=1)
+            plt.xlabel('v_{%d,%d}' % (c1,c2))
+            plt.ylabel('p(v)')
 
     plt.show()
 

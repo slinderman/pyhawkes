@@ -406,7 +406,8 @@ def fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
         print "Fitting the data with a spike and slab network Hawkes model using Gibbs sampling"
 
         # Make a new model for inference
-        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0, 'p': p}
+        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0, 'p': p,
+                          'v': 5.0,'c': np.arange(C).repeat((K // C))}
         test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max, B=B,
                                                                 network_hypers=network_hypers)
         test_model.add_data(S)
@@ -425,8 +426,10 @@ def fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
             samples.append(test_model.resample_and_copy())
             timestamps.append(time.clock())
 
+            print test_model.network.v
+
             if itr % 1 == 0:
-                print "Iteration ", itr, "\t LL: ", lps[-1]
+                print "Iteration ", itr, "\t LP: ", lps[-1]
 
             # Save this sample
             with open(output_path + ".gibbs_ss.itr%04d.pkl" % itr, 'w') as f:
@@ -927,7 +930,7 @@ run = 3
 K = 50
 C = 5
 T = 100000
-T_train = 100000
+T_train = 11000
 T_test = 1000
 data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
 test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl" % (K,C,T_test))

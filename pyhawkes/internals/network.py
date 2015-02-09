@@ -166,17 +166,18 @@ class _StochasticBlockModelBase(BayesianDistribution):
         :param x:    (m,p,v) tuple
         :return:
         """
-        m,p,v = x
+        m,p,v,c = x
 
         lp = 0
         lp += Dirichlet(self.pi).log_probability(m)
         lp += Beta(self.tau1 * np.ones((self.C, self.C)),
                    self.tau0 * np.ones((self.C, self.C))).log_probability(p).sum()
         lp += Gamma(self.alpha, self.beta).log_probability(v).sum()
+        lp += (np.log(m)[c]).sum()
         return lp
 
     def log_probability(self):
-        return self.log_likelihood((self.m, self.p, self.v))
+        return self.log_likelihood((self.m, self.p, self.v, self.c))
 
     def rvs(self,size=[]):
         raise NotImplementedError()

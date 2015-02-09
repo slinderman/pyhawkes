@@ -66,6 +66,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                (kappa-1) * np.log(W) - v * W
         ll += (A*lp_W).sum()
 
+        print "LL(AW):\t", ll
+
         return ll
 
     def log_probability(self):
