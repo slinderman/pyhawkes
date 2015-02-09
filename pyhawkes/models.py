@@ -26,7 +26,6 @@ class DiscreteTimeStandardHawkesModel(object):
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
                  alpha=1.0, beta=1.0,
-                 l2_penalty=0.0, l1_penalty=0.0,
                  allow_instantaneous=False,
                  allow_self_connections=True):
         """
@@ -55,9 +54,6 @@ class DiscreteTimeStandardHawkesModel(object):
         assert not (self.allow_instantaneous and self.allow_self_connections), \
             "Cannot allow instantaneous self connections"
 
-        # Randomly initialize parameters (bias and weights)
-        # self.weights = abs((1.0/(1+self.K*self.B)) * np.random.randn(self.K, 1 + self.K * self.B))
-
         # Save the gamma prior
         assert alpha >= 1.0, "Alpha must be greater than 1.0 to ensure log concavity"
         self.alpha = alpha
@@ -69,10 +65,6 @@ class DiscreteTimeStandardHawkesModel(object):
         self.weights = 1e-3 * np.ones((self.K, 1 + self.K*self.B))
         if not self.allow_self_connections:
             self._remove_self_weights()
-
-        # Save the regularization penalties
-        self.l2_penalty = l2_penalty
-        self.l1_penalty = l1_penalty
 
         # Initialize the data list to empty
         self.data_list = []
@@ -130,17 +122,6 @@ class DiscreteTimeStandardHawkesModel(object):
         # Then we transpose so that the weight matrix is (outgoing x incoming)
         W = WT.T
 
-        # DEBUG
-        Wmanual = np.zeros((self.K, self.K))
-        for kin in xrange(self.K):
-            for kout in xrange(self.K):
-                start = 1+kout*self.B
-                end = 1+(kout+1)*self.B
-                Wmanual[kout,kin] = self.weights[kin,start:end].sum()
-
-        if not np.allclose(W, Wmanual):
-            import pdb; pdb.set_trace()
-
         return W
 
     @property
@@ -177,10 +158,6 @@ class DiscreteTimeStandardHawkesModel(object):
 
             # Prepend a column of ones
             F = np.concatenate((np.ones((T,1)), F), axis=1)
-
-            # # Check that \sum_t F[t,k,b] ~= Nk / dt
-            # Fsum = F.sum(axis=0)
-            # print "F_err:  ", Fsum - N/self.dt
 
         # If minibatchsize is not None, add minibatches of data
         if minibatchsize is not None:
@@ -331,11 +308,6 @@ class DiscreteTimeStandardHawkesModel(object):
 
             grad += d_ll_d_log_W
 
-        # Subtract the regularization penalty
-        # import pdb; pdb.set_trace()
-        # d_reg_d_W = self._d_reg_d_W(k)
-        # grad += d_reg_d_W.dot(d_W_d_log_W)
-
         # Add the prior
         # d_log_prior_d_log_W = self._d_log_prior_d_log_W(k)
         # grad += d_log_prior_d_log_W
@@ -372,21 +344,6 @@ class DiscreteTimeStandardHawkesModel(object):
                   = W
         """
         return np.diag(self.weights[k,:])
-
-    # def _d_reg_d_W(self, k):
-    #     """
-    #     Compute gradient of regularization
-    #     d/dW  -1/2 * L2 * W^2 -L1 * |W|
-    #         = -2*L2*W -L1
-    #
-    #     since W >= 0
-    #     """
-    #     d_reg_d_W = -self.l2_penalty*self.weights[k,:] -self.l1_penalty
-    #
-    #     # Don't penalize the bias
-    #     d_reg_d_W[0] = 0
-    #
-    #     return d_reg_d_W
 
     def _d_log_prior_d_log_W(self, k):
         """

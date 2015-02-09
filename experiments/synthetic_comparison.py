@@ -232,8 +232,7 @@ def fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max, init_model=None):
     print "Fitting the data with a standard Hawkes model using SGD"
 
     # Make a new model for inference
-    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B,
-                                                 l2_penalty=0, l1_penalty=0)
+    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B)
     test_model.add_data(S, minibatchsize=256)
 
     # Initialize the test model with the init model weights

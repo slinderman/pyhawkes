@@ -52,16 +52,14 @@ def demo(seed=None):
 
     # Make a model to initialize the parameters
     init_len   = 256
-    init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B,
-                                                 l2_penalty=0, l1_penalty=0)
+    init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, beta=1.0)
     init_model.add_data(S[:init_len, :])
 
     print "Initializing with BFGS on first ", init_len, " time bins."
     init_model.fit_with_bfgs()
 
     # Make another model for inference
-    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B,
-                                                 l2_penalty=0, l1_penalty=0)
+    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, beta=1.0)
     # Initialize with the BFGS parameters
     test_model.weights = init_model.weights
     # Add the data in minibatches

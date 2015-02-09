@@ -41,16 +41,8 @@ def demo(seed=None):
 
 
     # Make a new model for inference
-    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B,
-                                                 l2_penalty=0,
-                                                 l1_penalty=0)
+    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, beta=1.0)
     test_model.add_data(S)
-
-    # DEBUG: Initialize with the true parameters of the network Hawkes model
-    # test_model.initialize_with_gibbs(true_model.bias_model.lambda0,
-    #                                  true_model.weight_model.A,
-    #                                  true_model.weight_model.W,
-    #                                  true_model.impulse_model.g)
 
     # Plot the true and inferred firing rate
     kplt = 0
