@@ -21,7 +21,7 @@ def make_figure_a(S, F, C):
 
     ks = [0,1]
     nk = len(ks)
-    fig = create_figure((4,3))
+    fig = create_figure((3,3))
     for ind,k in enumerate(ks):
         ax = fig.add_subplot(nk,1,ind+1)
         ax.plot(t, F[T_start:T_stop, k], color=col[1], label="$F$")    # Plot the raw flourescence in blue

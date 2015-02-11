@@ -138,35 +138,35 @@ def run_comparison(data_path, output_path, seed=None):
 
 
     # Compute the predictive log likelihoods
-    plls = compute_predictive_ll(S_test, S,
-                                 bfgs_model=bfgs_model,
-                                 gibbs_samples=gibbs_samples,
-                                 svi_models=svi_models)
-
-    print "Log Predictive Likelihoods: "
-    pprint.pprint(plls)
-
-    # Plot the predictive log likelihood
-    # N_iters = plls['svi'].size
-    N_iters = 100
-    N_test  = S_test.size
-    plt.ioff()
-    plt.figure()
-    plt.plot(np.arange(N_iters),
-             (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters),
-             '-b', label='BFGS')
-    import pdb; pdb.set_trace()
-    plt.plot(np.arange(N_iters),
-             (plls['svi'] - plls['homog'])/N_test * np.ones(N_iters),
-             '-g', label='SVI')
-
+    # plls = compute_predictive_ll(S_test, S,
+    #                              bfgs_model=bfgs_model,
+    #                              gibbs_samples=gibbs_samples,
+    #                              svi_models=svi_models)
+    #
+    # print "Log Predictive Likelihoods: "
+    # pprint.pprint(plls)
+    #
+    # # Plot the predictive log likelihood
+    # # N_iters = plls['svi'].size
+    # N_iters = 100
+    # N_test  = S_test.size
+    # plt.ioff()
+    # plt.figure()
     # plt.plot(np.arange(N_iters),
-    #          (plls['svi'] - plls['homog'])/N_test,
-    #          '-r', label='SVI')
-    plt.xlabel('Iteration')
-    plt.ylabel('Log Predictive Likelihood')
-    plt.legend()
-    plt.show()
+    #          (plls['bfgs'] - plls['homog'])/N_test * np.ones(N_iters),
+    #          '-b', label='BFGS')
+    # import pdb; pdb.set_trace()
+    # plt.plot(np.arange(N_iters),
+    #          (plls['svi'] - plls['homog'])/N_test * np.ones(N_iters),
+    #          '-g', label='SVI')
+    #
+    # # plt.plot(np.arange(N_iters),
+    # #          (plls['svi'] - plls['homog'])/N_test,
+    # #          '-r', label='SVI')
+    # plt.xlabel('Iteration')
+    # plt.ylabel('Log Predictive Likelihood')
+    # plt.legend()
+    # plt.show()
 
 
 
@@ -598,6 +598,7 @@ def compute_predictive_ll(S_test, S_train,
             plls['sgd'] = sgd_model.heldout_log_likelihood(S_test)
 
     if gibbs_samples is not None:
+        print "Computing pred ll for Gibbs"
         # Compute log(E[pred likelihood]) on second half of samplese
         offset       = len(gibbs_samples) // 2
         # Preconvolve with the Gibbs model's basis
@@ -611,6 +612,7 @@ def compute_predictive_ll(S_test, S_train,
         plls['gibbs'] = np.array(plls['gibbs'])
 
     if vb_models is not None:
+        print "Computing pred ll for VB"
         # Compute predictive likelihood over samples from VB model
         N_models  = len(vb_models)
         N_samples = 100
@@ -658,37 +660,52 @@ def plot_roc_curves(fprs, tprs):
     from hips.plotting.colormaps import harvard_colors
     col = harvard_colors()
 
-    fig = create_figure((4,4))
+    fig = create_figure((3,3))
     ax = fig.add_subplot(111)
     ax.plot(fprs['xcorr'], tprs['xcorr'], color=col[7], lw=1.5, label="xcorr")
     ax.plot(fprs['bfgs'], tprs['bfgs'], color=col[3], lw=1.5, label="Std.")
-    ax.plot(fprs['svi'], tprs['svi'], color=col[0], lw=1.5, label="SVI")
+    ax.plot(fprs['svi'], tprs['svi'], color=col[0], lw=1.5, label="MAP")
     ax.plot([0,1], [0,1], '-k', lw=0.5)
     ax.set_xlabel("FPR")
     ax.set_ylabel("TPR")
 
+    # this is another inset axes over the main axes
+    parchment = np.array([243,243,241])/255.
+    inset = plt.axes([0.55, 0.275, .265, .265], axisbg=parchment)
+    inset.plot(fprs['xcorr'], tprs['xcorr'], color=col[7], lw=1.5,)
+    inset.plot(fprs['bfgs'], tprs['bfgs'], color=col[3], lw=1.5,)
+    inset.plot(fprs['svi'], tprs['svi'], color=col[0], lw=1.5, )
+    inset.plot([0,1], [0,1], '-k', lw=0.5)
+    plt.setp(inset, xlim=(0,.2), ylim=(0,.2), xticks=[0, 0.2], yticks=[0,0.2], aspect=1.0)
+    inset.yaxis.tick_right()
+
     plt.legend(loc=4)
-    ax.set_title("Receiver Operator Characteristic")
+    ax.set_title("ROC Curve")
+
+    plt.subplots_adjust(bottom=0.2, left=0.2)
+
     plt.savefig("figure3c.pdf")
-    # plt.show()
+    plt.show()
 
 def plot_prc_curves(precs, recalls):
     from hips.plotting.layout import create_figure
     from hips.plotting.colormaps import harvard_colors
     col = harvard_colors()
 
-    fig = create_figure((4,4))
+    fig = create_figure((3,3))
     ax = fig.add_subplot(111)
     ax.plot(recalls['xcorr'], precs['xcorr'], color=col[7], lw=1.5, label="xcorr")
-    ax.plot(recalls['bfgs'], precs['bfgs'], color=col[3], lw=1.5, label="Std.")
+    ax.plot(recalls['bfgs'], precs['bfgs'], color=col[3], lw=1.5, label="MAP")
     ax.plot(recalls['svi'], precs['svi'], color=col[0], lw=1.5, label="SVI")
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
 
     plt.legend(loc=1)
     ax.set_title("Precision-Recall Curve")
+    plt.subplots_adjust(bottom=0.25, left=0.25)
+
     plt.savefig("figure3d.pdf")
-    # plt.show()
+    plt.show()
 
 # seed = 2650533028
 seed = None

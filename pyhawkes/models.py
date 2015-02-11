@@ -714,7 +714,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         # Shallow copy the data
         data_list = copy.copy(self.data_list)
-        self.data_list = None
+        self.data_list = []
 
         # Make a deep copy without the data
         model_copy = copy.deepcopy(self)

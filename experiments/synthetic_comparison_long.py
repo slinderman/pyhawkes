@@ -92,9 +92,10 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                                                              standard_model=bfgs_model)
 
         # Fit a spike and slab network Hawkes model with Gibbs
-        gibbs_ss_samples, gibbs_ss_timestamps = fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
-                                                                 output_path=output_path,
-                                                                 standard_model=bfgs_model)
+        gibbs_ss_samples = gibbs_ss_timestamps = None
+        # gibbs_ss_samples, gibbs_ss_timestamps = fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
+        #                                                          output_path=output_path,
+        #                                                          standard_model=bfgs_model)
 
         # Fit a network Hawkes model with Batch VB
         vb_models, vb_timestamps = fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
@@ -114,6 +115,15 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
         timestamps['gibbs_ss'] = gibbs_ss_timestamps
         timestamps['svi'] = svi_timestamps
         timestamps['vb'] = vb_timestamps
+
+        amis = compute_clustering_score(true_model,
+                           bfgs_model=bfgs_model,
+                           gibbs_samples=gibbs_samples,
+                           gibbs_ss_samples=gibbs_ss_samples,
+                           svi_models=svi_models,
+                           vb_models=vb_models)
+        print "AMIS"
+        pprint.pprint(amis)
 
         auc_rocs = compute_auc(true_model,
                            W_xcorr=W_xcorr,
@@ -508,7 +518,7 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
                            output_path,
                            standard_model=None):
 
-    samples_and_timestamps = load_partial_results(output_path, typ="svi")
+    samples_and_timestamps = load_partial_results(output_path, typ="svi2")
     if samples_and_timestamps is not None:
         samples, timestamps = samples_and_timestamps
 
@@ -800,13 +810,83 @@ def compute_predictive_ll(S_test, S_train,
 
     return plls
 
-def compute_clustering_score():
+def compute_clustering_score(true_model=None,
+                             bfgs_model=None,
+                             sgd_models=None,
+                             gibbs_samples=None,
+                             gibbs_ss_samples=None,
+                             vb_models=None,
+                             svi_models=None):
     """
     Compute a few clustering scores.
     :return:
     """
-    # TODO: Implement simple clustering
-    raise NotImplementedError()
+    # Compute the adjusted mutual info score of the clusterings
+    amis = {}
+    arss = {}
+
+    true_c = true_model.network.c
+    N_samples = 100
+
+    from sklearn.metrics import adjusted_mutual_info_score
+    from sklearn.metrics import adjusted_rand_score
+
+    if bfgs_model is not None:
+        from sklearn.cluster import KMeans
+        assert isinstance(bfgs_model, DiscreteTimeStandardHawkesModel)
+
+        # Extract features
+        features = []
+        for k in xrange(true_model.K):
+            features.append(np.concatenate((bfgs_model.W[:,k], bfgs_model.W[k,:])))
+
+        bfgs_amis = []
+        for s in xrange(N_samples):
+            c = KMeans(n_clusters=true_model.C).fit(np.array(features)).labels_
+            bfgs_amis.append(adjusted_mutual_info_score(true_c, c))
+        bfgs_amis = np.array(bfgs_amis)
+
+        amis['bfgs'] = (bfgs_amis.mean(), bfgs_amis.std())
+
+    if gibbs_samples is not None:
+        print "Computing predictive log likelihood for Gibbs samples"
+        # Compute log(E[pred likelihood]) on second half of samplese
+        offset       = len(gibbs_samples) // 2
+
+        gibbs_amis = []
+        for s in gibbs_samples[offset:]:
+            gibbs_amis.append(adjusted_mutual_info_score(true_c, s.network.c))
+
+        # Convert to numpy array
+        gibbs_amis = np.array(gibbs_amis)
+        amis['gibbs'] = (gibbs_amis.mean(), gibbs_amis.std())
+
+    if vb_models is not None:
+        print "Computing predictive log likelihood for VB samples"
+        # Compute log(E[pred likelihood]) on second half of samplese
+        vb_model = vb_models[-1]
+        vb_amis = []
+        for s in xrange(N_samples):
+            vb_model.resample_from_mf()
+            vb_amis.append(adjusted_mutual_info_score(true_c, vb_model.network.c))
+
+        # Convert to numpy array
+        vb_amis = np.array(vb_amis)
+        amis['vb'] = (vb_amis.mean(), vb_amis.std())
+
+    if svi_models is not None:
+        print "Computing predictive log likelihood for SVI samples"
+        svi_model = svi_models[-1]
+        svi_amis = []
+        for s in xrange(N_samples):
+            svi_model.resample_from_mf()
+            svi_amis.append(adjusted_mutual_info_score(true_c, svi_model.network.c))
+
+        # Convert to numpy array
+        svi_amis = np.array(svi_amis)
+        amis['svi'] = (svi_amis.mean(), svi_amis.std())
+
+    return amis
 
 def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
@@ -862,7 +942,7 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
     # Extend lines to t_st
     if 'svi' in plls and 'svi' in timestamps:
-        final_svi_pll = -np.log(10) + logsumexp(plls['svi'][-10:])
+        final_svi_pll = -np.log(4) + logsumexp(svis[-4:])
         ax.semilogx([t_svi[-1], t_stop],
                     [(final_svi_pll - plls['homog'])/Z,
                      (final_svi_pll - plls['homog'])/Z],
@@ -878,7 +958,7 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
     ax.semilogx([t_start, t_stop],
                 [(plls['bfgs'] - plls['homog'])/Z, (plls['bfgs'] - plls['homog'])/Z],
-                color=col[3], lw=1.5, label="Std." )
+                color=col[3], lw=1.5, label="MAP" )
 
     # Put a legend above
     plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
@@ -892,18 +972,20 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
 
     import matplotlib.ticker as ticker
     logxscale = 3
-    xticks = ticker.FuncFormatter(lambda x, pos: '{0:.1f}'.format(x/10.**logxscale))
+    xticks = ticker.FuncFormatter(lambda x, pos: '{0:.2f}'.format(x/10.**logxscale))
     ax.xaxis.set_major_formatter(xticks)
     ax.set_xlabel('Time ($10^{%d}$ s)' % logxscale)
 
-    logyscale = 6
-    yticks = ticker.FuncFormatter(lambda y, pos: '{0:3f}'.format(y/10.**logyscale))
+    logyscale = 4
+    yticks = ticker.FuncFormatter(lambda y, pos: '{0:.3f}'.format(y/10.**logyscale))
     ax.yaxis.set_major_formatter(yticks)
-    ax.set_ylabel('Pred. LL ($10^{%d}$ bps)' % logyscale)
+    ax.set_ylabel('Pred. LL ($ \\times 10^{%d}$)' % logyscale)
 
     # ylim = ax.get_ylim()
     # ax.plot([t_bfgs, t_bfgs], ylim, '--k')
     # ax.set_ylim(ylim)
+    ylim = (-129980, -129840)
+    ax.set_ylim(ylim)
 
 
     # plt.tight_layout()

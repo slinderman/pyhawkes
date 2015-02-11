@@ -38,6 +38,9 @@ B      = 3
 dt     = 0.02
 dt_max = 0.08
 
+print "Num conns: ", network.sum()
+print "Sparsity: ", float(network.sum()) / network.size
+
 
 # Compute the cross correlation to estimate the connectivity
 print "Estimating network via cross correlation"
