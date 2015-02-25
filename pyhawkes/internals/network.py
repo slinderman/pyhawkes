@@ -529,7 +529,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
                                                         E_beta=E_v_ck_to_cnotk,
                                                         E_ln_beta=E_ln_v_ck_to_cnotk)).sum()
 
-                lp[ck] += (E_A[k, notk] *
+                lp[ck] += (E_A[notk, k] *
                            Gamma(self.kappa).negentropy(E_ln_lambda=E_ln_W_given_A[notk, k],
                                                         E_lambda=E_W_given_A[notk,k],
                                                         E_beta=E_v_cnotk_to_ck,
