@@ -22,7 +22,7 @@ def test_sbm_mf(seed=None):
     np.random.seed(seed)
 
     C = 5
-    K = 50
+    K = 100
     T = 1000
     dt = 1.0
     B = 3
@@ -59,7 +59,7 @@ def test_sbm_mf(seed=None):
     plt.pause(0.001)
 
     # Run mean field updates for the SBM given a fixed network
-    N_iters = 50
+    N_iters = 20
     c_samples = []
     vlbs = []
     for itr in xrange(N_iters):
@@ -82,7 +82,7 @@ def test_sbm_mf(seed=None):
                 print "VLBS are not increasing"
                 print np.array(vlbs)
                 # import pdb; pdb.set_trace()
-                # raise Exception("VLBS are not increasing!")
+                raise Exception("VLBS are not increasing!")
 
 
         # Take a mean field step
@@ -119,4 +119,4 @@ def test_sbm_mf(seed=None):
     #
     # plt.close('all')
 
-test_sbm_mf(3055650126)
+test_sbm_mf()

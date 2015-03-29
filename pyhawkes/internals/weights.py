@@ -6,7 +6,7 @@ from scipy.misc import logsumexp
 
 from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Bernoulli, Gamma
-from pyhawkes.utils.utils import logistic
+from pyhawkes.utils.utils import logistic, logit
 
 class SpikeAndSlabGammaWeights(GibbsSampling):
     """
@@ -344,17 +344,22 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         logit_p += gammaln(self.kappa_0) - self.kappa_0 * np.log(self.nu_0)
         logit_p += self.mf_kappa_0 * np.log(self.mf_v_0) - gammaln(self.mf_kappa_0)
 
-        p_hat = logistic(logit_p)
-        self.mf_p = (1.0 - stepsize) * self.mf_p + stepsize * p_hat
+        # p_hat = logistic(logit_p)
+        # self.mf_p = (1.0 - stepsize) * self.mf_p + stepsize * p_hat
+
+        logit_p_hat = (1-stepsize) * logit(self.mf_p) + \
+                       stepsize * logit_p
+        self.mf_p = logistic(logit_p_hat)
 
     def meanfieldupdate_kappa_v(self, EZ, N, minibatchfrac=1.0, stepsize=1.0):
         """
         Update the variational weight distributions
         :return:
         """
+        EZ_sum = EZ.sum(axis=(0,3))
         # kappa' = kappa + \sum_t \sum_b z[t,k,k',b]
-        kappa0_hat = self.kappa_0 + EZ.sum(axis=(0,3)) / minibatchfrac
-        kappa1_hat = self.network.kappa + EZ.sum(axis=(0,3)) / minibatchfrac
+        kappa0_hat = self.kappa_0 + EZ_sum / minibatchfrac
+        kappa1_hat = self.network.kappa + EZ_sum / minibatchfrac
         self.mf_kappa_0 = (1.0 - stepsize) * self.mf_kappa_0 + stepsize * kappa0_hat
         self.mf_kappa_1 = (1.0 - stepsize) * self.mf_kappa_1 + stepsize * kappa1_hat
 

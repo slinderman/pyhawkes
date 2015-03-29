@@ -44,7 +44,7 @@ def demo(seed=None):
     ###########################################################
     # Initialize with MAP estimation on a standard Hawkes model
     ###########################################################
-    init_with_map = True
+    init_with_map = False
     if init_with_map:
         init_len   = T
         print "Initializing with BFGS on first ", init_len, " time bins."
@@ -92,7 +92,7 @@ def demo(seed=None):
     samples = []
     for itr in xrange(N_iters):
         vlbs.append(test_model.meanfield_coordinate_descent_step())
-        print "VB Iter: ", itr, "\tStepsize: ", vlbs[-1]
+        print "VB Iter: ", itr, "\tVLB: ", vlbs[-1]
         if itr > 0:
             if (vlbs[-2] - vlbs[-1]) > 1e-1:
                 print "WARNING: VLB is not increasing!"

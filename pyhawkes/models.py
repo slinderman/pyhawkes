@@ -27,6 +27,7 @@ class DiscreteTimeStandardHawkesModel(object):
                  B=5, basis=None,
                  alpha=1.0, beta=1.0,
                  allow_instantaneous=False,
+                 W_max=None,
                  allow_self_connections=True):
         """
         Initialize a discrete time network Hawkes model with K processes.
@@ -39,6 +40,7 @@ class DiscreteTimeStandardHawkesModel(object):
         self.dt = dt
         self.dt_max = dt_max
         self.allow_self_connections = allow_self_connections
+        self.W_max = W_max
 
         # Initialize the basis
         if basis is None:
@@ -299,14 +301,16 @@ class DiscreteTimeStandardHawkesModel(object):
         if indices is None:
             indices = np.arange(len(self.data_list))
 
-        d_W_d_log_W = self._d_W_d_logW(k)
+        # d_W_d_log_W = self._d_W_d_logW(k)
         for index in indices:
             d_rate_d_W = self._d_rate_d_W(index, k)
-            d_rate_d_log_W = d_rate_d_W.dot(d_W_d_log_W)
+            # d_rate_d_log_W = d_rate_d_W.dot(d_W_d_log_W)
             d_ll_d_rate = self._d_ll_d_rate(index, k)
-            d_ll_d_log_W = d_ll_d_rate.dot(d_rate_d_log_W)
+            # d_ll_d_log_W = d_ll_d_rate.dot(d_rate_d_log_W)
+            d_ll_d_W = d_ll_d_rate.dot(d_rate_d_W)
 
-            grad += d_ll_d_log_W
+            # grad += d_ll_d_log_W
+            grad += d_ll_d_W
 
         # Add the prior
         # d_log_prior_d_log_W = self._d_log_prior_d_log_W(k)
@@ -314,7 +318,8 @@ class DiscreteTimeStandardHawkesModel(object):
 
         d_log_prior_d_W = self._d_log_prior_d_W(k)
         assert np.allclose(d_log_prior_d_W[0], 0.0)
-        grad += d_log_prior_d_W.dot(d_W_d_log_W)
+        # grad += d_log_prior_d_W.dot(d_W_d_log_W)
+        grad += d_log_prior_d_W
 
         # Zero out the gradient if
         if not self.allow_self_connections:
@@ -380,10 +385,16 @@ class DiscreteTimeStandardHawkesModel(object):
         d_log_prior_d_W[1:] += -self.beta
         return d_log_prior_d_W
 
-    def fit_with_bfgs(self):
+    def fit_with_bfgs_logspace(self):
         """
         Fit the model with BFGS
         """
+        # If W_max is specified, set this as a bound
+        if self.W_max is not None:
+            bnds = [(None, None)] + [(None, np.log(self.W_max))] * (self.K * self.B)
+        else:
+            bnds = None
+
         def objective(x, k):
             self.weights[k,:] = np.exp(x)
             self.weights[k,:] = np.nan_to_num(self.weights[k,:])
@@ -392,7 +403,9 @@ class DiscreteTimeStandardHawkesModel(object):
         def gradient(x, k):
             self.weights[k,:] = np.exp(x)
             self.weights[k,:] = np.nan_to_num(self.weights[k,:])
-            return np.nan_to_num(-self.compute_gradient(k))
+            dll_dW =  -self.compute_gradient(k)
+            d_W_d_log_W = self._d_W_d_logW(k)
+            return np.nan_to_num(dll_dW.dot(d_W_d_log_W))
 
         itr = [0]
         def callback(x):
@@ -404,15 +417,57 @@ class DiscreteTimeStandardHawkesModel(object):
             print "Optimizing process ", k
             itr[0] = 0
             x0 = np.log(self.weights[k,:])
-            res = minimize(objective, x0, args=(k,), jac=gradient, callback=callback)
+            res = minimize(objective,           # Objective function
+                           x0,                  # Initial value
+                           jac=gradient,        # Gradient of the objective
+                           args=(k,),           # Arguments to the objective and gradient fns
+                           bounds=bnds,         # Bounds on x
+                           callback=callback)
             self.weights[k,:] = np.exp(res.x)
+
+    def fit_with_bfgs(self):
+        """
+        Fit the model with BFGS
+        """
+        # If W_max is specified, set this as a bound
+        if self.W_max is not None:
+            bnds = [(1e-16, None)] + [(1e-16, self.W_max)] * (self.K * self.B)
+        else:
+            bnds = [(1e-16, None)] * (1 + self.K * self.B)
+
+        def objective(x, k):
+            self.weights[k,:] = x
+            return np.nan_to_num(-self.log_posterior(ks=np.array([k])))
+
+        def gradient(x, k):
+            self.weights[k,:] = x
+            return np.nan_to_num(-self.compute_gradient(k))
+
+        itr = [0]
+        def callback(x):
+            if itr[0] % 10 == 0:
+                print "Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior())
+            itr[0] = itr[0] + 1
+
+        for k in xrange(self.K):
+            print "Optimizing process ", k
+            itr[0] = 0
+            x0 = self.weights[k,:]
+            res = minimize(objective,           # Objective function
+                           x0,                  # Initial value
+                           jac=gradient,        # Gradient of the objective
+                           args=(k,),           # Arguments to the objective and gradient fns
+                           bounds=bnds,         # Bounds on x
+                           callback=callback)
+            self.weights[k,:] = res.x
 
     def gradient_descent_step(self, stepsz=0.01):
         grad = np.zeros((self.K, 1+self.K*self.B))
 
         # Compute gradient and take a step for each process
         for k in xrange(self.K):
-            grad[k,:] = self.compute_gradient(k)
+            d_W_d_log_W = self._d_W_d_logW(k)
+            grad[k,:] = self.compute_gradient(k).dot(d_W_d_log_W)
             self.weights[k,:] = np.exp(np.log(self.weights[k,:]) + stepsz * grad[k,:])
 
         # Compute the current objective
@@ -437,7 +492,8 @@ class DiscreteTimeStandardHawkesModel(object):
 
         # Compute gradient and take a step for each process
         for k in xrange(self.K):
-            grad[k,:] = self.compute_gradient(k, indices=[mb]) / T
+            d_W_d_log_W = self._d_W_d_logW(k)
+            grad[k,:] = self.compute_gradient(k, indices=[mb]).dot(d_W_d_log_W) / T
             velocity[k,:] = momentum * prev_velocity[k,:] + learning_rate * grad[k,:]
 
             # Gradient steps are taken in log weight space
@@ -997,9 +1053,9 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
     _default_weight_hypers  = {}
     _parent_class           = SpikeAndSlabParents
 
-    _network_class          = StochasticBlockModelFixedSparsity
+    _network_class          = StochasticBlockModel
     _default_network_hypers = {'C': 1, 'c': None,
-                               'p': 0.5,
+                               'p': None, 'tau1': 1.0, 'tau0': 1.0,
                                'allow_self_connections': True,
                                'kappa': 1.0,
                                'v': None, 'alpha': 1.0, 'beta': 1.0,
@@ -1041,10 +1097,19 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
             p.resample(self.bias_model, self.weight_model, self.impulse_model)
 
 
+class DiscreteTimeNetworkHawkesModelSpikeAndSlabFixedSparsity(DiscreteTimeNetworkHawkesModelSpikeAndSlab):
+    _network_class          = StochasticBlockModelFixedSparsity
+    _default_network_hypers = {'C': 1, 'c': None,
+                               'p': 0.5,
+                               'allow_self_connections': True,
+                               'kappa': 1.0,
+                               'v': None, 'alpha': 1.0, 'beta': 1.0,
+                               'pi': 1.0}
+
 class DiscreteTimeNetworkHawkesModelGammaMixture(
     _DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling, ModelMeanField):
     _weight_class           = GammaMixtureWeights
-    _default_weight_hypers  = {'kappa_0': 0.1, 'nu_0': 10.0}
+    _default_weight_hypers  = {'kappa_0': 0.1, 'nu_0': 1000.0}
 
     _parent_class           = GammaMixtureParents
 
@@ -1202,8 +1267,21 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
                                        minibatchfrac=minibatchfrac,
                                        stepsize=stepsize)
 
+        # Clear the parent buffer for this minibatch
+        del p
+
     def resample_from_mf(self):
         self.bias_model.resample_from_mf()
         self.weight_model.resample_from_mf()
         self.impulse_model.resample_from_mf()
         self.network.resample_from_mf()
+
+
+class DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(DiscreteTimeNetworkHawkesModelGammaMixture):
+    _network_class          = StochasticBlockModelFixedSparsity
+    _default_network_hypers = {'C': 1, 'c': None,
+                               'p': 0.5,
+                               'allow_self_connections': True,
+                               'kappa': 1.0,
+                               'v': None, 'alpha': 1.0, 'beta': 1.0,
+                               'pi': 1.0}

@@ -134,8 +134,8 @@ class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
 
         # Initialize parent arrays for Gibbs sampling
         # Attribute all events to the background.
-        self.Z  = np.zeros((T,K,K,B), dtype=np.int32)
-        self.Z0 = np.copy(self.S).astype(np.int32)
+        # self.Z  = np.zeros((T,K,K,B), dtype=np.int32)
+        # self.Z0 = np.copy(self.S).astype(np.int32)
 
     def _check_Z(self):
         """

@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from pyhawkes.utils.basis import IdentityBasis
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
     DiscreteTimeNetworkHawkesModelGammaMixture, \
+    DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity, \
     DiscreteTimeNetworkHawkesModelSpikeAndSlab
 from pyhawkes.plotting.plotting import plot_network
 
@@ -42,7 +43,7 @@ def run_comparison(data_path, output_path, seed=None):
 
     if data_path.endswith("_oopsi.pkl.gz"):
         # The oopsi data has a probability of spike
-        thresh = 0.1
+        thresh = 0.6
         with gzip.open(data_path, 'r') as f:
             P, F, Cf, network, pos = cPickle.load(f)
             S_full = P > thresh
@@ -63,43 +64,53 @@ def run_comparison(data_path, output_path, seed=None):
     S_full = S_full.astype(np.int)
 
     # Train on all but the last ten minutes (20ms time bins = 50Hz)
-    T_train = 5 * 60 * 50
+    T_train = 10 * 60 * 50
     T_test = 10 * 60 * 50
     # S      = S_full[:-T_test, :]
     S      = S_full[:T_train, :]
     S_test = S_full[-T_test:, :]
 
     K      = S.shape[1]
-    C      = 5
+    C      = 1
     dt     = 0.02
     dt_max = 0.08
 
     # Compute the cross correlation to estimate the connectivity
     print "Estimating network via cross correlation"
-    F_xcorr = infer_net_from_xcorr(F[:10000,:], dtmax=3)
+    W_xcorr = infer_net_from_xcorr(S, dtmax=dt_max // dt)
 
-    # Compute the cross correlation to estimate the connectivity
+    # # HACK! Select the threshold by looking at the data
     # print "Estimating network via cross correlation"
-    W_xcorr = infer_net_from_xcorr(S[:10000], dtmax=dt_max // dt)
+    # F_xcorr = infer_net_from_xcorr(F, dtmax=3)
+    # aucs, _, _ = compute_auc_roc(network, W_xcorr=F_xcorr)
+    # print "AUC F: ", aucs["xcorr"]
+    # try:
+    #     for thresh in np.linspace(0.5, 0.7, 10):
+    #         S_thr = (P > thresh).astype(np.int)
+    #         S_train = S_thr[:T_train, :]
+    #
+    #         W_tmp = infer_net_from_xcorr(S_train, dtmax=dt_max // dt)
+    #         aucs, _, _ = compute_auc_roc(network, W_xcorr=W_tmp)
+    #         print "AUC (", thresh, "): ", aucs["xcorr"]
+    # except:
+    #     import pdb; pdb.set_trace()
+
 
     # Fit a standard Hawkes model on subset of data with BFGS
-    bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, dt, dt_max,
-                                                           output_path=output_path)
-
-    # Fit a standard Hawkes model with SGD
-    # standard_models, timestamps = fit_standard_hawkes_model_sgd(S, K, dt, dt_max,
-    #                                                         init_model=init_model)
-    #
-    # # Save the models
-    # with open(output_path + ".sgd.pkl", 'w') as f:
-    #     print "Saving SGD results to ", (output_path + ".sgd.pkl")
-    #     cPickle.dump((standard_models, timestamps), f, protocol=-1)
+    # bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, dt, dt_max,
+    #                                                        output_path=output_path,
+    #                                                        W_max=None)
+    bfgs_model, bfgs_time = \
+        fit_standard_hawkes_model_bfgs_noxv(S, K, dt, dt_max,
+                                            output_path=output_path,
+                                            W_max=None)
 
     # Fit a network Hawkes model with Gibbs
     gibbs_samples = gibbs_timestamps = None
-    gibbs_samples, gibbs_timestamps = fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
-                                             output_path=output_path,
-                                             standard_model=bfgs_model)
+    # gibbs_samples, gibbs_timestamps = \
+    #     fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
+    #                              output_path=output_path,
+    #                              standard_model=bfgs_model)
 
     # Fit a network Hawkes model with Batch VB
     # vb_models, vb_timestamps = fit_network_hawkes_vb(S, K, dt, dt_max,
@@ -110,9 +121,27 @@ def run_comparison(data_path, output_path, seed=None):
     #     cPickle.dump((vb_models, timestamps), f, protocol=-1)
 
     # Fit a network Hawkes model with SVI
+    # svi_models = None
     svi_models, timestamps = fit_network_hawkes_svi(S, K, C, dt, dt_max,
                                                     output_path,
-                                                    standard_model=bfgs_model)
+                                                    standard_model=bfgs_model,
+                                                    true_network=network)
+
+    # Plot a few of the network
+    plt.figure()
+    plt.subplot(131)
+    plt.imshow(W_xcorr, vmin=0, interpolation="none", cmap="Reds")
+    plt.colorbar()
+    plt.subplot(132)
+    plt.title("xcorr")
+    plt.imshow(bfgs_model.W, vmin=0, interpolation="none", cmap="Reds")
+    plt.colorbar()
+    plt.title("bfgs")
+    plt.subplot(133)
+    plt.imshow(network, vmin=0, interpolation="none", cmap="Reds")
+    plt.colorbar()
+    plt.title("true")
+    plt.show()
 
     # Compute area under roc curve of inferred network
     auc_rocs, fprs, tprs = compute_auc_roc(network,
@@ -158,7 +187,7 @@ def run_comparison(data_path, output_path, seed=None):
     # import pdb; pdb.set_trace()
     # plt.plot(np.arange(N_iters),
     #          (plls['svi'] - plls['homog'])/N_test * np.ones(N_iters),
-    #          '-g', label='SVI')
+    #          '-g', label='SVI')c
     #
     # # plt.plot(np.arange(N_iters),
     # #          (plls['svi'] - plls['homog'])/N_test,
@@ -170,7 +199,8 @@ def run_comparison(data_path, output_path, seed=None):
 
 
 
-def fit_standard_hawkes_model_bfgs(S, K, dt, dt_max, output_path):
+def fit_standard_hawkes_model_bfgs(S, K, dt, dt_max, output_path,
+                                   W_max=None):
     """
     Fit
     :param S:
@@ -185,29 +215,36 @@ def fit_standard_hawkes_model_bfgs(S, K, dt, dt_max, output_path):
     else:
         print "Fitting the data with a standard Hawkes model"
         # betas = np.logspace(-1,1.3,num=1)
-        betas = [ 0.0 ]
+        # betas = [ 0.0 ]
+
+        # We want the max W ~ -.025 and the mean to be around 0.01
+        # W ~ Gamma(alpha, beta) => E[W] = alpha/beta, so beta ~100 * alpha
+        alpha = 1.1
+        betas =  [ alpha * 1.0 / 0.01 ]
 
         init_models = []
-        init_len    = 10000
+        xv_len      = 10000
+        init_len    = S.shape[0] - 10000
         S_init      = S[:init_len,:]
 
-        xv_len      = 10000
         xv_ll       = np.zeros(len(betas))
         S_xv        = S[init_len:init_len+xv_len, :]
 
         # Make a model to initialize the parameters
         test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
-        init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, beta=0.0,
+        init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max,
+                                                     alpha=alpha, beta=0.0,
                                                      basis=test_basis,
-                                                     allow_self_connections=False)
+                                                     allow_self_connections=False,
+                                                     W_max=W_max)
         init_model.add_data(S_init)
         # Initialize the background rates to their mean
         init_model.initialize_to_background_rate()
 
-
         start = time.clock()
         for i,beta in enumerate(betas):
-            print "Fitting with BFGS on first ", init_len, " time bins, beta = ", beta
+            print "Fitting with BFGS on first ", init_len, " time bins, ", \
+                "beta = ", beta, "W_max = ", W_max
             init_model.beta = beta
             init_model.fit_with_bfgs()
             init_models.append(init_model.copy_sample())
@@ -239,57 +276,48 @@ def fit_standard_hawkes_model_bfgs(S, K, dt, dt_max, output_path):
 
     return init_model, init_time
 
-def fit_standard_hawkes_model_sgd(S, K, dt, dt_max, init_model=None):
+def fit_standard_hawkes_model_bfgs_noxv(S, K, dt, dt_max, output_path,
+                                        W_max=None):
     """
     Fit
     :param S:
     :return:
     """
-    print "Fitting the data with a standard Hawkes model using SGD"
+    # Check for existing results
+    if os.path.exists(out_path + ".bfgs.pkl"):
+        print "Existing BFGS results found. Loading from file."
+        with open(output_path + ".bfgs.pkl", 'r') as f:
+            init_model, init_time = cPickle.load(f)
 
-    # Make a new model for inference
-    test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B)
-    test_model.add_data(S, minibatchsize=256)
+    else:
+        print "Fitting the data with a standard Hawkes model"
+        # We want the max W ~ -.025 and the mean to be around 0.01
+        # W ~ Gamma(alpha, beta) => E[W] = alpha/beta, so beta ~100 * alpha
+        alpha = 1.1
+        beta = alpha * 1.0 / 0.01
 
-    # Initialize the test model with the init model weights
-    if init_model is not None:
-        test_model.weights = init_model.weights
+        # Make a model to initialize the parameters
+        test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
+        init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max,
+                                                     alpha=alpha, beta=beta,
+                                                     basis=test_basis,
+                                                     allow_self_connections=False,
+                                                     W_max=W_max)
+        init_model.add_data(S)
 
-    plt.ion()
-    im = plot_network(np.ones((K,K)), test_model.W, vmax=0.5)
-    plt.pause(0.001)
+        # Initialize the background rates to their mean
+        init_model.initialize_to_background_rate()
 
-    # Gradient descent
-    N_steps = 1000
-    samples = []
-    lls = []
-    timestamps = []
+        start = time.clock()
+        init_model.fit_with_bfgs()
+        init_time = time.clock() - start
 
-    learning_rate = 0.01 * np.ones(N_steps)
-    momentum = 0.8 * np.ones(N_steps)
-    prev_velocity = None
-    for itr in xrange(N_steps):
-        # W,ll,grad = test_model.gradient_descent_step(stepsz=0.001)
-        W,ll,prev_velocity = test_model.sgd_step(prev_velocity, learning_rate[itr], momentum[itr])
-        samples.append(test_model.copy_sample())
-        lls.append(ll)
-        timestamps.append(time.clock())
+        # Save the model (sans data)
+        with open(output_path + ".bfgs.pkl", 'w') as f:
+            print "Saving BFGS results to ", (output_path + ".bfgs.pkl")
+            cPickle.dump((init_model, init_time), f, protocol=-1)
 
-        if itr % 1 == 0:
-            print "Iteration ", itr, "\t LL: ", ll
-            im.set_data(np.ones((K,K)) * test_model.W)
-            plt.pause(0.001)
-
-    plt.ioff()
-    plt.figure()
-    plt.plot(np.arange(N_steps), lls)
-    plt.xlabel("Iteration")
-    plt.ylabel("Log likelihood")
-
-    plot_network(np.ones((K,K)), test_model.W)
-    plt.show()
-
-    return samples, timestamps
+    return init_model, init_time
 
 def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
                              output_path,
@@ -308,7 +336,18 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
         # test_model = DiscreteTimeNetworkHawkesModelGammaMixture(C=C, K=K, dt=dt, dt_max=dt_max, B=B,
         #                                                         alpha=1.0, beta=1.0/20.0)
         test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
-        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/10.0,
+
+        # Set the network prior such that E[W] ~= 0.01
+        # W ~ Gamma(kappa, v) for kappa = 1.25 => v ~ 125
+        # v ~ Gamma(alpha, beta) for alpha = 10, beta = 10 / 125
+        import pdb; pdb.set_trace()
+        E_W = 0.01
+        kappa = 1.25
+        E_v = kappa / E_W
+        alpha = 10.
+        beta = alpha / E_v
+        network_hypers = {'C': C,
+                          'kappa': kappa, 'alpha': alpha, 'beta': beta,
                           'tau1': 1.0, 'tau0': 10.0,
                           'allow_self_connections': False}
         test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max,
@@ -355,7 +394,8 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
 def fit_network_hawkes_svi(S, K, C, dt, dt_max,
                            output_path,
                            standard_model=None,
-                            N_iters=500):
+                           N_iters=500,
+                           true_network=None):
 
 
     # Check for existing Gibbs results
@@ -364,22 +404,36 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
     #         print "Loading SVI results from ", (output_path + ".svi.pkl.gz")
     #         (samples, timestamps) = cPickle.load(f)
     if os.path.exists(output_path + ".svi.itr%04d.pkl" % (N_iters-1)):
-            with open(output_path + ".svi.itr%04d.pkl" % (N_iters-1), 'r') as f:
-                print "Loading SVI results from ", (output_path + ".svi.itr%04d.pkl" % (N_iters-1))
-                sample = cPickle.load(f)
-                samples = [sample]
-                timestamps = None
-                # (samples, timestamps) = cPickle.load(f)
+        with open(output_path + ".svi.itr%04d.pkl" % (N_iters-1), 'r') as f:
+            print "Loading SVI results from ", (output_path + ".svi.itr%04d.pkl" % (N_iters-1))
+            sample = cPickle.load(f)
+            samples = [sample]
+            timestamps = None
+            # (samples, timestamps) = cPickle.load(f)
 
     else:
         print "Fitting the data with a network Hawkes model using SVI"
 
         # Make a new model for inference
         test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=True)
-        network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/10.0,
-                          'tau1': 1.0, 'tau0': 10.0,
+        E_W = 0.01
+        kappa = 10.
+        E_v = kappa / E_W
+        alpha = 10.
+        beta = alpha / E_v
+        # network_hypers = {'C': 2,
+        #                   'kappa': kappa, 'alpha': alpha, 'beta': beta,
+        #                   'p': 0.1, 'tau1': 1.0, 'tau0': 1.0,
+        #                   'allow_self_connections': False}
+        # test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max,
+        #                                                         basis=test_basis,
+        #                                                         network_hypers=network_hypers)
+
+        network_hypers = {'C': 2,
+                          'kappa': kappa, 'alpha': alpha, 'beta': beta,
+                          'p': 0.8,
                           'allow_self_connections': False}
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max,
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(K=K, dt=dt, dt_max=dt_max,
                                                                 basis=test_basis,
                                                                 network_hypers=network_hypers)
         # Initialize with the standard model parameters
@@ -387,29 +441,30 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
             test_model.initialize_with_standard_model(standard_model)
 
         plt.ion()
-        im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.5)
+        im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.03)
         plt.pause(0.001)
 
-        # Plot the block affiliations
-        plt.figure(2)
-        KC = np.zeros((K,C))
-        KC[np.arange(K), test_model.network.c] = 1.0
-        im_clus = plt.imshow(KC,
-                        interpolation="none", cmap="Greys",
-                        aspect=float(C)/K)
-
         # TODO: Add the data in minibatches
-        minibatchsize = 1000
+        minibatchsize = 3000
         test_model.add_data(S)
-
 
         # Stochastic variational inference
         samples = []
-        delay = 1.0
+        delay = 10.0
         forgetting_rate = 0.5
         stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
         timestamps = []
         for itr in xrange(N_iters):
+            if true_network is not None:
+                # W_score = test_model.weight_model.expected_A()
+                W_score = test_model.weight_model.expected_W()
+                print "AUC: ", roc_auc_score(true_network.ravel(),
+                                            W_score.ravel())
+
+            print "Max W:  ", np.amax(test_model.weight_model.expected_W())
+            print "#[W>t]: ", np.sum(test_model.weight_model.expected_W() > 0.1)
+            print "E[|A|]: ", np.sum(test_model.weight_model.expected_A())
+
             print "SVI Iter: ", itr, "\tStepsize: ", stepsize[itr]
             test_model.sgd_step(minibatchsize=minibatchsize, stepsize=stepsize[itr])
             test_model.resample_from_mf()
@@ -421,19 +476,14 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
                 im.set_data(test_model.weight_model.expected_W())
                 plt.pause(0.001)
 
-                plt.figure(2)
-                im_clus.set_data(test_model.network.mf_m)
-                plt.title("Iteration %d" % itr)
-                plt.pause(0.001)
-
             # Save this sample
             with open(output_path + ".svi.itr%04d.pkl" % itr, 'w') as f:
                 cPickle.dump(samples[-1], f, protocol=-1)
 
         # Save the Gibbs samples
-        # with gzip.open(output_path + ".svi.pkl.gz", 'w') as f:
-        #     print "Saving SVI samples to ", (output_path + ".svi.pkl.gz")
-        #     cPickle.dump((samples, timestamps), f, protocol=-1)
+        with gzip.open(output_path + ".svi.pkl.gz", 'w') as f:
+            print "Saving SVI samples to ", (output_path + ".svi.pkl.gz")
+            cPickle.dump((samples, timestamps), f, protocol=-1)
 
     return samples, timestamps
 
@@ -487,7 +537,7 @@ def compute_auc_roc(A_true,
 
     if svi_models is not None:
         # Compute ROC based on E[A] under variational posterior
-        W_svi = svi_models[-1].weight_model.expected_A()
+        W_svi = svi_models[-1].weight_model.expected_W()
         aucs['svi'] = roc_auc_score(A_flat,
                                     W_svi.ravel())
         fprs['svi'], tprs['svi'], _ = roc_curve(A_flat, W_svi.ravel())
@@ -662,22 +712,29 @@ def plot_roc_curves(fprs, tprs):
 
     fig = create_figure((3,3))
     ax = fig.add_subplot(111)
-    ax.plot(fprs['xcorr'], tprs['xcorr'], color=col[7], lw=1.5, label="xcorr")
-    ax.plot(fprs['bfgs'], tprs['bfgs'], color=col[3], lw=1.5, label="Std.")
-    ax.plot(fprs['svi'], tprs['svi'], color=col[0], lw=1.5, label="MAP")
+
+    # Plot the ROC curves
+    if "xcorr" in fprs:
+        ax.plot(fprs['xcorr'], tprs['xcorr'], color=col[7], lw=1.5, label="xcorr")
+    if "bfgs" in fprs:
+        ax.plot(fprs['bfgs'], tprs['bfgs'], color=col[3], lw=1.5, label="MAP")
+    if "svi" in fprs:
+        ax.plot(fprs['svi'], tprs['svi'], color=col[0], lw=1.5, label="SVI")
+
+    # Plot the diagonal
     ax.plot([0,1], [0,1], '-k', lw=0.5)
     ax.set_xlabel("FPR")
     ax.set_ylabel("TPR")
 
     # this is another inset axes over the main axes
-    parchment = np.array([243,243,241])/255.
-    inset = plt.axes([0.55, 0.275, .265, .265], axisbg=parchment)
-    inset.plot(fprs['xcorr'], tprs['xcorr'], color=col[7], lw=1.5,)
-    inset.plot(fprs['bfgs'], tprs['bfgs'], color=col[3], lw=1.5,)
-    inset.plot(fprs['svi'], tprs['svi'], color=col[0], lw=1.5, )
-    inset.plot([0,1], [0,1], '-k', lw=0.5)
-    plt.setp(inset, xlim=(0,.2), ylim=(0,.2), xticks=[0, 0.2], yticks=[0,0.2], aspect=1.0)
-    inset.yaxis.tick_right()
+    # parchment = np.array([243,243,241])/255.
+    # inset = plt.axes([0.55, 0.275, .265, .265], axisbg=parchment)
+    # inset.plot(fprs['xcorr'], tprs['xcorr'], color=col[7], lw=1.5,)
+    # inset.plot(fprs['bfgs'], tprs['bfgs'], color=col[3], lw=1.5,)
+    # inset.plot(fprs['svi'], tprs['svi'], color=col[0], lw=1.5, )
+    # inset.plot([0,1], [0,1], '-k', lw=0.5)
+    # plt.setp(inset, xlim=(0,.2), ylim=(0,.2), xticks=[0, 0.2], yticks=[0,0.2], aspect=1.0)
+    # inset.yaxis.tick_right()
 
     plt.legend(loc=4)
     ax.set_title("ROC Curve")
@@ -694,9 +751,12 @@ def plot_prc_curves(precs, recalls):
 
     fig = create_figure((3,3))
     ax = fig.add_subplot(111)
-    ax.plot(recalls['xcorr'], precs['xcorr'], color=col[7], lw=1.5, label="xcorr")
-    ax.plot(recalls['bfgs'], precs['bfgs'], color=col[3], lw=1.5, label="MAP")
-    ax.plot(recalls['svi'], precs['svi'], color=col[0], lw=1.5, label="SVI")
+    if "xcorr" in recalls:
+        ax.plot(recalls['xcorr'], precs['xcorr'], color=col[7], lw=1.5, label="xcorr")
+    if "bfgs" in recalls:
+        ax.plot(recalls['bfgs'], precs['bfgs'], color=col[3], lw=1.5, label="MAP")
+    if "svi" in recalls:
+        ax.plot(recalls['svi'], precs['svi'], color=col[0], lw=1.5, label="SVI")
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
 
@@ -710,7 +770,7 @@ def plot_prc_curves(precs, recalls):
 # seed = 2650533028
 seed = None
 net = 6
-run = 1
+run = 2
 data_path = os.path.join("data", "chalearn", "small", "network%d_oopsi.pkl.gz" % net)
 out_path  = os.path.join("data", "chalearn", "small", "network%d_run%03d" % (net,run), "results" )
 run_comparison(data_path, out_path, seed=seed)

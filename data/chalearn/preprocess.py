@@ -276,7 +276,7 @@ def remove_double_spikes(D):
 
     return Dhat
 
-for i in xrange(2,7):
+for i in [1,4]:
     print "Processing network ", i
     process_dataset(suffix="_iNet1_Size100_CC0%dinh.txt" % i,
                     outfile="network%d_oopsi.pkl" % i)

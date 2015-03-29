@@ -790,6 +790,9 @@ class StochasticBlockModelFixedSparsity(StochasticBlockModel):
         self.resample_c(A, W)
         self.resample_m()
 
+    def resample_p(self, A):
+        pass
+
     def expected_p(self):
         """
         Compute the expected probability of a connection, averaging over c
@@ -813,8 +816,10 @@ class StochasticBlockModelFixedSparsity(StochasticBlockModel):
         Compute the expected log probability of NO connection, averaging over c
         :return:
         """
-        if self.fixed:
-            return np.log(1.0 - self.P)
+        E_ln_notp = np.log(1-self.P)
+        if not self.allow_self_connections:
+            np.fill_diagonal(E_ln_notp, np.inf)
+        return E_ln_notp
 
     def meanfieldupdate(self, weight_model,
                         update_p=False,
@@ -853,6 +858,19 @@ class StochasticBlockModelFixedSparsity(StochasticBlockModel):
                     vlb_p=False,
                     vlb_v=vlb_v,
                     vlb_m=vlb_m)
+
+    def resample_from_mf(self):
+        """
+        Resample from the mean field distribution
+        :return:
+        """
+        self.m = np.random.dirichlet(self.mf_pi)
+        self.v = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)
+
+        self.c = np.zeros(self.K, dtype=np.int)
+        for k in xrange(self.K):
+            self.c[k] = int(np.random.choice(self.C, p=self.mf_m[k,:]))
+
 
 
 class ErdosRenyiModel(StochasticBlockModel):
