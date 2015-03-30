@@ -43,7 +43,7 @@ def run_comparison(data_path, output_path, seed=None):
 
     if data_path.endswith("_oopsi.pkl.gz"):
         # The oopsi data has a probability of spike
-        thresh = 0.6
+        thresh = 0.1
         with gzip.open(data_path, 'r') as f:
             P, F, Cf, network, pos = cPickle.load(f)
             S_full = P > thresh
@@ -769,7 +769,7 @@ def plot_prc_curves(precs, recalls):
 
 # seed = 2650533028
 seed = None
-net = 6
+net = 1
 run = 2
 data_path = os.path.join("data", "chalearn", "small", "network%d_oopsi.pkl.gz" % net)
 out_path  = os.path.join("data", "chalearn", "small", "network%d_run%03d" % (net,run), "results" )
