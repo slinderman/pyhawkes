@@ -525,3 +525,10 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
 
         self.mf_kappa_1 = scale * W
         self.mf_v_1     = scale
+
+
+class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
+    """
+    Implementation of spike and slab gamma weights from L&A 2014
+    """
+    raise NotImplementedError

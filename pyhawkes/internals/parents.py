@@ -63,6 +63,7 @@ class SpikeAndSlabParents(_ParentsBase, GibbsSampling):
         """
         Resample the parents in python.
         """
+        # TODO: This can all be done with multinomial_par!
         for t in xrange(self.T):
             for k2 in xrange(self.K):
                 # If there are no events then there's nothing to do
@@ -308,3 +309,148 @@ class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
         resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
 
         self._check_Z()
+
+
+class SpikeAndSlabContinuousTimeParents(GibbsSampling):
+    """
+    Implementation of spike and slab categorical parents
+    (one for each event). We only need to keep track of
+    which process the parent spike comes from and the time
+    elapsed between parent. For completeness, we also
+    keep track of the index of the parent.
+    """
+    def __init__(self, S, C, K, dt_max):
+        """
+        :param S: Length N array of event times
+        :param C: Length N array of process indices
+        :param K: The number of processes
+        """
+        assert S.ndim == 1 and S.shape == C.shape
+        self.S = S
+        self.N = S.shape[0]
+        self.C = C
+        self.K = K
+        self.dt_max = dt_max
+        assert C.dtype == np.int and C.min() >= 0 and C.max() < K
+
+        # Initialize parent arrays for Gibbs sampling
+        self.Z = -1 * np.ones((self.N,), dtype=np.int)      # Parent index
+        # self.Cp =  -1 * np.ones((self.N,), dtype=np.int)    # Parent process
+        # self.dt = 0 * np.ones((self.N,), dtype=np.float)    # Parent offset
+
+    def log_likelihood(self, x):
+        pass
+
+    def rvs(self, data=[]):
+        raise NotImplementedError("No prior for parents to sample from.")
+
+    # raise NotImplementedError
+
+    def resample(self, bias_model, weight_model, impulse_model):
+        """
+        Resample the parents given the bias_model, weight_model, and impulse_model.
+
+        :param bias_model:
+        :param weight_model:
+        :param impulse_model:
+        :return:
+        """
+        # If necessary, initialize parent arrays for Gibbs sampling
+        # Attribute all events to the background.
+        if self.Z is None:
+            self.Z  = np.zeros((self.T,self.K,self.K,self.B),
+                               dtype=np.int32)
+        if self.Z0 is None:
+            self.Z0 = np.copy(self.S).astype(np.int32)
+
+        # Resample the parents in python
+        # self._resample_Z_python(bias_model, weight_model, impulse_model)
+
+        # Call cython function to resample parents
+        self.resample_Z_python(bias_model, weight_model, impulse_model)
+
+        self._check_Z()
+
+
+    def resample_Z_python(self, bias_model, weight_model, impulse_model):
+        from pybasicbayes.util.stats import sample_discrete
+
+        # TODO: Call cython function to resample parents
+        S, C, Z, dt_max = self.S, self.C, self.Z, self.dt_max
+        lambda0 = bias_model.lambda0
+        W = weight_model.W
+
+        # Also compute number of parents assigned to background rate and
+        # to specific connections
+        self.bkgd_ss = np.zeros(self.K)
+        self.weight_ss = np.zeros((self.K, self.K))
+        self.imp_ss = np.zeros((self.K, self.K))
+
+        # Resample parents
+        for n in xrange(self.N):
+
+            # Compute the probability of each parent spike
+            p_par = np.zeros(n-1)
+            denom = 0
+
+            # First parent is just the background rate of this process
+            p_bkgd = lambda0[C[n]]
+            denom += p_bkgd
+
+            # Iterate backward from the most recent to compute probabilities of each parent spike
+            for par in xrange(n-1, -1, -1):
+                dt = S[n] - S[par]
+
+                # Since the spikes are sorted, we can stop if we reach a potential
+                # parent that occurred greater than dt_max in the past
+                if dt > dt_max:
+                    p_par[par] = 0
+                    break
+
+                p_par[par] = W[C[par], C[n]] * impulse_model.impulse(dt, C[par], C[n])
+                denom += p_par[par]
+
+            # Now sample forward, starting from the minimum viable parent
+            min_par = par
+            p_par = np.concatenate([[p_bkgd], p_par[min_par:n]])
+
+            # Sample from the discrete distribution p_par
+            i_par = sample_discrete(p_par)
+
+            if i_par == 0:
+                # Sampled the background rate
+                Z[n] = -1
+                self.bkgd_ss[C[n]] += 1
+
+            else:
+                # Sampled one of the preceding spikes
+                Z[n] = (i_par - 1) + min_par
+                Cp = C[Z[n]]
+                dt = S[n] - S[Z[n]]
+
+                self.weight_ss[Cp, C[n]] += 1
+                self.imp_ss[Cp, C[n]] += np.log(dt) - np.log(dt_max - dt)
+
+    def compute_imp_suff_stats(self):
+        S, C, Z, dt_max = self.S, self.C, self.Z, self.dt_max
+
+        # 0: count, # 1: Sum of scaled dt, #2: Sum of sq scaled dt
+        imp_ss = np.zeros((3, self.K, self.K))
+        for n in xrange(self.N):
+            par = Z[n]
+            if par > -1:
+                dt = S[n] - S[par]
+                imp_ss[0, C[par], C[n]] += 1
+                imp_ss[1, C[par], C[n]] += np.log(dt) - np.log(dt_max - dt)
+
+        # In a second pass, compute the sum of squares
+        mu = imp_ss[1] / imp_ss[0]
+        for n in xrange(self.N):
+            par = Z[n]
+            if par > -1:
+                dt = S[n] - S[par]
+                sdt = np.log(dt) - np.log(dt_max - dt)
+                imp_ss[2, C[par], C[n]] += (sdt - mu[C[par], C[n]])**2
+
+        assert np.isfinite(imp_ss).all()
+        return imp_ss

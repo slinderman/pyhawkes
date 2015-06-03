@@ -27,7 +27,7 @@ from baselines.xcorr import infer_net_from_xcorr
 
 from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, average_precision_score
 
-def run_comparison(data_path, output_path, seed=None):
+def run_comparison(data_path, output_path, seed=None, thresh=0.5):
     """
     Run the comparison on the given data file
     :param data_path:
@@ -43,7 +43,6 @@ def run_comparison(data_path, output_path, seed=None):
 
     if data_path.endswith("_oopsi.pkl.gz"):
         # The oopsi data has a probability of spike
-        thresh = 0.1
         with gzip.open(data_path, 'r') as f:
             P, F, Cf, network, pos = cPickle.load(f)
             S_full = P > thresh
@@ -79,27 +78,24 @@ def run_comparison(data_path, output_path, seed=None):
     print "Estimating network via cross correlation"
     W_xcorr = infer_net_from_xcorr(S, dtmax=dt_max // dt)
 
-    # # HACK! Select the threshold by looking at the data
-    # print "Estimating network via cross correlation"
-    # F_xcorr = infer_net_from_xcorr(F, dtmax=3)
-    # aucs, _, _ = compute_auc_roc(network, W_xcorr=F_xcorr)
-    # print "AUC F: ", aucs["xcorr"]
-    # try:
-    #     for thresh in np.linspace(0.5, 0.7, 10):
-    #         S_thr = (P > thresh).astype(np.int)
-    #         S_train = S_thr[:T_train, :]
-    #
-    #         W_tmp = infer_net_from_xcorr(S_train, dtmax=dt_max // dt)
-    #         aucs, _, _ = compute_auc_roc(network, W_xcorr=W_tmp)
-    #         print "AUC (", thresh, "): ", aucs["xcorr"]
-    # except:
-    #     import pdb; pdb.set_trace()
+    # HACK! Select the threshold by looking at the data
+    test_thresholds = False
+    if test_thresholds:
+        print "Estimating network via cross correlation"
+        F_xcorr = infer_net_from_xcorr(F, dtmax=3)
+        aucs, _, _ = compute_auc_roc(network, W_xcorr=F_xcorr)
+        print "AUC F: ", aucs["xcorr"]
+        for thresh in np.linspace(0.1, 0.95, 20):
+            S_thr = (P > thresh).astype(np.int)
+            S_train = S_thr[:T_train, :]
 
+            W_tmp = infer_net_from_xcorr(S_train, dtmax=dt_max // dt)
+            aucs, _, _ = compute_auc_roc(network, W_xcorr=W_tmp)
+            print "AUC (", thresh, "): ", aucs["xcorr"]
+
+        import pdb; pdb.set_trace()
 
     # Fit a standard Hawkes model on subset of data with BFGS
-    # bfgs_model, bfgs_time = fit_standard_hawkes_model_bfgs(S, K, dt, dt_max,
-    #                                                        output_path=output_path,
-    #                                                        W_max=None)
     bfgs_model, bfgs_time = \
         fit_standard_hawkes_model_bfgs_noxv(S, K, dt, dt_max,
                                             output_path=output_path,
@@ -127,22 +123,6 @@ def run_comparison(data_path, output_path, seed=None):
                                                     standard_model=bfgs_model,
                                                     true_network=network)
 
-    # Plot a few of the network
-    plt.figure()
-    plt.subplot(131)
-    plt.imshow(W_xcorr, vmin=0, interpolation="none", cmap="Reds")
-    plt.colorbar()
-    plt.subplot(132)
-    plt.title("xcorr")
-    plt.imshow(bfgs_model.W, vmin=0, interpolation="none", cmap="Reds")
-    plt.colorbar()
-    plt.title("bfgs")
-    plt.subplot(133)
-    plt.imshow(network, vmin=0, interpolation="none", cmap="Reds")
-    plt.colorbar()
-    plt.title("true")
-    plt.show()
-
     # Compute area under roc curve of inferred network
     auc_rocs, fprs, tprs = compute_auc_roc(network,
                                W_xcorr=W_xcorr,
@@ -152,7 +132,7 @@ def run_comparison(data_path, output_path, seed=None):
     print "AUC-ROC"
     pprint.pprint(auc_rocs)
 
-    plot_roc_curves(fprs, tprs)
+    plot_roc_curves(fprs, tprs, fig_path=output_path)
 
     # Compute area under precisino recall curve of inferred network
     auc_prcs, precs, recalls = compute_auc_prc(network,
@@ -163,7 +143,7 @@ def run_comparison(data_path, output_path, seed=None):
     print "AUC-PRC"
     pprint.pprint(auc_prcs)
 
-    plot_prc_curves(precs, recalls)
+    plot_prc_curves(precs, recalls, fig_path=output_path)
 
 
     # Compute the predictive log likelihoods
@@ -399,11 +379,11 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
 
 
     # Check for existing Gibbs results
-    # if os.path.exists(output_path + ".svi.pkl.gz"):
-    #     with gzip.open(output_path + ".svi.pkl.gz", 'r') as f:
-    #         print "Loading SVI results from ", (output_path + ".svi.pkl.gz")
-    #         (samples, timestamps) = cPickle.load(f)
-    if os.path.exists(output_path + ".svi.itr%04d.pkl" % (N_iters-1)):
+    if os.path.exists(output_path + ".svi.pkl.gz"):
+        with gzip.open(output_path + ".svi.pkl.gz", 'r') as f:
+            print "Loading SVI results from ", (output_path + ".svi.pkl.gz")
+            (samples, timestamps) = cPickle.load(f)
+    elif os.path.exists(output_path + ".svi.itr%04d.pkl" % (N_iters-1)):
         with open(output_path + ".svi.itr%04d.pkl" % (N_iters-1), 'r') as f:
             print "Loading SVI results from ", (output_path + ".svi.itr%04d.pkl" % (N_iters-1))
             sample = cPickle.load(f)
@@ -439,10 +419,10 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
         # Initialize with the standard model parameters
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)
-
-        plt.ion()
-        im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.03)
-        plt.pause(0.001)
+        #
+        # plt.ion()
+        # im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.03)
+        # plt.pause(0.001)
 
         # TODO: Add the data in minibatches
         minibatchsize = 3000
@@ -459,22 +439,18 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
                 # W_score = test_model.weight_model.expected_A()
                 W_score = test_model.weight_model.expected_W()
                 print "AUC: ", roc_auc_score(true_network.ravel(),
-                                            W_score.ravel())
-
-            print "Max W:  ", np.amax(test_model.weight_model.expected_W())
-            print "#[W>t]: ", np.sum(test_model.weight_model.expected_W() > 0.1)
-            print "E[|A|]: ", np.sum(test_model.weight_model.expected_A())
+                                             W_score.ravel())
 
             print "SVI Iter: ", itr, "\tStepsize: ", stepsize[itr]
             test_model.sgd_step(minibatchsize=minibatchsize, stepsize=stepsize[itr])
             test_model.resample_from_mf()
             samples.append(test_model.copy_sample())
             timestamps.append(time.clock())
-
-            if itr % 1 == 0:
-                plt.figure(1)
-                im.set_data(test_model.weight_model.expected_W())
-                plt.pause(0.001)
+            #
+            # if itr % 1 == 0:
+            #     plt.figure(1)
+            #     im.set_data(test_model.weight_model.expected_W())
+            #     plt.pause(0.001)
 
             # Save this sample
             with open(output_path + ".svi.itr%04d.pkl" % itr, 'w') as f:
@@ -705,7 +681,7 @@ def compute_clustering_score():
     # TODO: Implement simple clustering
     raise NotImplementedError()
 
-def plot_roc_curves(fprs, tprs):
+def plot_roc_curves(fprs, tprs, fig_path="./"):
     from hips.plotting.layout import create_figure
     from hips.plotting.colormaps import harvard_colors
     col = harvard_colors()
@@ -741,10 +717,10 @@ def plot_roc_curves(fprs, tprs):
 
     plt.subplots_adjust(bottom=0.2, left=0.2)
 
-    plt.savefig("figure3c.pdf")
+    plt.savefig(os.path.join(os.path.dirname(fig_path), "figure3c.pdf"))
     plt.show()
 
-def plot_prc_curves(precs, recalls):
+def plot_prc_curves(precs, recalls, fig_path="./"):
     from hips.plotting.layout import create_figure
     from hips.plotting.colormaps import harvard_colors
     col = harvard_colors()
@@ -764,13 +740,32 @@ def plot_prc_curves(precs, recalls):
     ax.set_title("Precision-Recall Curve")
     plt.subplots_adjust(bottom=0.25, left=0.25)
 
-    plt.savefig("figure3d.pdf")
+    plt.savefig(os.path.join(os.path.dirname(fig_path), "figure3d.pdf"))
     plt.show()
 
+def plot_networks(W_xcorr, bfgs_model, network):
+    # Plot a few of the network
+    plt.figure()
+    plt.subplot(131)
+    plt.imshow(W_xcorr, vmin=0, interpolation="none", cmap="Reds")
+    plt.colorbar()
+    plt.subplot(132)
+    plt.title("xcorr")
+    plt.imshow(bfgs_model.W, vmin=0, interpolation="none", cmap="Reds")
+    plt.colorbar()
+    plt.title("bfgs")
+    plt.subplot(133)
+    plt.imshow(network, vmin=0, interpolation="none", cmap="Reds")
+    plt.colorbar()
+    plt.title("true")
+    plt.show()
+
+
 # seed = 2650533028
-seed = None
-net = 1
-run = 2
+seed = 11223344
+net = 5
+run = 1
+thresh = 0.68
 data_path = os.path.join("data", "chalearn", "small", "network%d_oopsi.pkl.gz" % net)
 out_path  = os.path.join("data", "chalearn", "small", "network%d_run%03d" % (net,run), "results" )
-run_comparison(data_path, out_path, seed=seed)
+run_comparison(data_path, out_path, seed=seed, thresh=thresh)
