@@ -4,7 +4,7 @@ import numpy as np
 from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
 
-from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
+from pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Bernoulli, Gamma
 from pyhawkes.utils.utils import logistic, logit
 
@@ -541,6 +541,12 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         self.W = np.zeros((self.K, self.K))
         self.resample()
 
+    def log_likelihood(self,x):
+        raise NotImplementedError
+
+    def rvs(self,size=[]):
+        raise NotImplementedError
+
     @property
     def W_effective(self):
         return self.A * self.W
@@ -550,7 +556,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         # Sum over potential parents.
 
         # TODO: Call cython function to evaluate instantaneous rate
-        N, S, C, Z, dt_max = data["N"], data["S"], data["C"], data["Z"], self.dt_max
+        N, S, C, Z, dt_max = data.N, data.S, data.C, data.Z, self.model.dt_max
         W = self.W
 
         # Initialize matrix of weighted impulses from each process
@@ -570,7 +576,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
                 if dt >= dt_max:
                     break
 
-                lmbda[C[par], n] += W[C[par], C[n]] * self.impulse_model.impulse(dt, C[par], C[n])
+                lmbda[C[par], n] += W[C[par], C[n]] * self.model.impulse_model.impulse(dt, C[par], C[n])
 
         return lmbda
 
@@ -581,13 +587,13 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         :return:
         """
         # Precompute weightedi impulse responses for each event
-        lmbda_irs = [self._compute_weighted_impulses_at_events(data) for data in data]
+        lmbda_irs = [self._compute_weighted_impulses_at_events(d) for d in data]
         lmbda0 = self.model.lambda0
 
         def _log_likelihood_single_process(k):
             ll = 0
             for lmbda_ir, d in zip(lmbda_irs, data):
-                Ns, C, T = d["Ns"], d["C"], d["T"]
+                Ns, C, T = d.Ns, d.C, d.T
 
                 # - \int lambda_k(t) dt
                 ll -= lmbda0[k] * T
@@ -603,6 +609,15 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
             sys.stdout.write('.')
             sys.stdout.flush()
             for k2 in xrange(self.K):
+                # Handle deterministic cases
+                if p[k1,k2] == 0:
+                    self.A[k1,k2] = 0
+                    continue
+
+                if p[k1,k2] == 1.0:
+                    self.A[k1,k2] = 1
+                    continue
+
                 # Compute the log likelihood of the events given W and A=0
                 self.A[k1,k2] = 0
                 ll0 = _log_likelihood_single_process(k2)
@@ -637,12 +652,13 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
                     on each of the K processes
         :param Z:   A TxKxKxB array of parent assignment counts
         """
+        assert isinstance(data, list)
 
         # Compute sufficient statistics
         N = np.zeros((self.K,))
         Zsum = np.zeros((self.K, self.K))
         for d in data:
-            Zsum += d.parents.weight_ss
+            Zsum += d.weight_ss
             N += d.N
 
         # Resample W | A, Z

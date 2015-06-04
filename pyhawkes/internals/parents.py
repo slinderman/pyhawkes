@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyhawkes.deps.pybasicbayes.distributions import BayesianDistribution, GibbsSampling, MeanField
+from pybasicbayes.distributions import BayesianDistribution, GibbsSampling, MeanField
 from pyhawkes.internals.parent_updates import mf_update_Z, resample_Z
 
 class _ParentsBase(BayesianDistribution):
@@ -333,7 +333,7 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
         self.C = C
         self.T = T
         self.K = K
-        self.N = S.shape[0]
+        self.N = S.size
         self.Ns = np.bincount(C, minlength=self.K)
         self.dt_max = dt_max
 
@@ -355,7 +355,7 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
         # TODO: Call cython function to resample parents
         self.resample_Z_python()
 
-    def resample_Z_python(self, bias_model, weight_model, impulse_model):
+    def resample_Z_python(self):
         from pybasicbayes.util.stats import sample_discrete
 
         # TODO: Call cython function to resample parents
@@ -373,8 +373,13 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
         # Resample parents
         for n in xrange(self.N):
 
+            if n == 0:
+                Z[n] = -1
+                self.bkgd_ss[C[n]] += 1
+                continue
+
             # Compute the probability of each parent spike
-            p_par = np.zeros(n-1)
+            p_par = np.zeros(n)
             denom = 0
 
             # First parent is just the background rate of this process
@@ -428,7 +433,7 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
                 imp_ss[1, C[par], C[n]] += np.log(dt) - np.log(dt_max - dt)
 
         # In a second pass, compute the sum of squares
-        mu = imp_ss[1] / imp_ss[0]
+        mu = imp_ss[1] / (imp_ss[0] + 1e-64)
         for n in xrange(self.N):
             par = Z[n]
             if par > -1:

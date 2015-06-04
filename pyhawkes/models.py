@@ -8,7 +8,8 @@ import numpy as np
 from scipy.special import gammaln
 from scipy.optimize import minimize
 
-from pyhawkes.deps.pybasicbayes.models import ModelGibbsSampling, ModelMeanField
+from pybasicbayes.models import ModelGibbsSampling, ModelMeanField
+
 from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
@@ -973,7 +974,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         :param R:   Rate matrix
         :return:    log likelihood
         """
-        return (-gammaln(S+1) + S * np.log(R) - R*self.dt).sum()
+        return (S * np.log(R) - R*self.dt).sum()
 
     def heldout_log_likelihood(self, S, F=None):
         """
@@ -1289,7 +1290,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(DiscreteTimeNetwor
 
 class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     _default_bkgd_hypers = {"alpha" : 1.0, "beta" : 1.0}
-    _default_impulse_hypers = {"mu_0": 1., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0" : 1.0}
+    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 10.0, "alpha_0": 1.0, "beta_0" : 0.1}
     _default_weight_hypers = {}
     _default_network_hypers = {'C': 1, 'c': None,
                                'p': 0.5,
@@ -1298,7 +1299,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
                                'v': None, 'alpha': 1.0, 'beta': 1.0,
                                'pi': 1.0}
 
-    def __init__(self, K, dt=1.0, dt_max=10.0, B=5,
+    def __init__(self, K, dt_max=10.0, B=5,
                  bkgd_hypers={},
                  impulse_hypers={},
                  weight_hypers={},
@@ -1309,7 +1310,6 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         :param K:  Number of processes
         """
         self.K      = K
-        self.dt     = dt
         self.dt_max = dt_max
         self.B      = B
 
@@ -1317,10 +1317,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         # Use the given basis hyperparameters
         self.bkgd_hypers = copy.deepcopy(self._default_bkgd_hypers)
         self.bkgd_hypers.update(bkgd_hypers)
-        # TODO: Make a continuous time background model
-
         from pyhawkes.internals.bias import ContinuousTimeGammaBias
-        self.bias_model = ContinuousTimeGammaBias(self.K, **self.bkgd_hypers)
+        self.bias_model = ContinuousTimeGammaBias(self, self.K, **self.bkgd_hypers)
 
         # Initialize the impulse response model
         self.impulse_hypers = copy.deepcopy(self._default_impulse_hypers)
@@ -1344,6 +1342,15 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Initialize the data list to empty
         self.data_list = []
+
+
+    @property
+    def lambda0(self):
+        return self.bias_model.lambda0
+
+    @property
+    def W_effective(self):
+        return self.weight_model.W_effective
 
     def initialize_with_standard_model(self, standard_model):
         """
@@ -1391,15 +1398,19 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         :param C: length N array of process id's for each event
         :param T: max time of
         """
+        assert isinstance(T, float), "T must be a float"
         assert isinstance(S, np.ndarray) and S.ndim == 1 \
                and S.min() >= 0 and S.max() < T and \
                S.dtype == np.float, \
-               "Data must be a N array of event times"
+               "S must be a N array of event times"
+
+        # Make sure S is sorted
+        assert (np.diff(S) >= 0).all(), "S must be sorted!"
 
         assert isinstance(C, np.ndarray) and C.shape == S.shape \
-               and S.min() >= 0 and S.max() < self.K and \
-               S.dtype == np.int, \
-               "Data must be a N array of parent indices"
+               and C.min() >= 0 and C.max() < self.K and \
+               C.dtype == np.int, \
+               "C must be a N array of parent indices"
 
         # Instantiate corresponding parent object
         from pyhawkes.internals.parents import SpikeAndSlabContinuousTimeParents
@@ -1407,6 +1418,9 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Add to the data list
         self.data_list.append(parents)
+
+    def generate(self,keep=True,**kwargs):
+        raise NotImplementedError
 
     def check_stability(self):
         """
@@ -1521,8 +1535,12 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         if data is None:
             data = self.data_list
 
+        if not isinstance(data, list):
+            data = [data]
+
         # Get the likelihood of the datasets
         for d in data:
+            # ll += -gammaln(d.N+1)
             ll -= self.compute_integrated_rate(d).sum()
             ll += np.log(self.compute_rate_at_events(d)).sum()
 
@@ -1543,6 +1561,41 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         data = self.data_list.pop()
         return self.log_likelihood(data)
 
+    def compute_rate(self, S, C, T, dt=1.0):
+        # Compute rate for each process at intervals of dt
+        t = np.concatenate([np.arange(0, T, step=dt), [T]])
+        rate = np.zeros((t.size, self.K))
+        for k in xrange(self.K):
+            rate[:,k] += self.bias_model.lambda0[k]
+
+            # Get the deltas between the time points and the spikes
+            # Warning: this can be huge!
+            deltas = t[:,None]-S[None,:]
+            t_deltas, n_deltas = np.where((deltas>0) & (deltas < self.dt_max))
+            N_deltas = t_deltas.size
+
+            # Find the process the impulse came from
+            senders = C[n_deltas]
+
+            # Compute the impulse responses onto process k for each delta
+            imps = self.impulse_model.impulse(deltas[t_deltas, n_deltas],
+                                              senders,
+                                              k
+                                              )
+            rate[t_deltas, k] += imps
+
+        return rate, t
+
+    def compute_impulses(self, dt=1.0):
+        dt = np.concatenate([np.arange(0, self.dt_max, step=dt), [self.dt_max]])
+        ir = np.zeros((dt.size, self.K, self.K))
+        for k1 in xrange(self.K):
+            for k2 in xrange(self.K):
+                ir[:,k1,k2] = self.impulse_model.impulse(dt, k1, k2)
+        return ir, dt
+
+
+    ### Inference
     def resample_model(self):
         """
         Perform one iteration of the Gibbs sampling algorithm.

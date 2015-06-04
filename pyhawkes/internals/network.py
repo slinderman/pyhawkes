@@ -7,9 +7,9 @@ import numpy as np
 from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
 
-from pyhawkes.deps.pybasicbayes.abstractions import \
+from pybasicbayes.abstractions import \
     BayesianDistribution, GibbsSampling, MeanField, MeanFieldSVI
-from pyhawkes.deps.pybasicbayes.util.stats import sample_discrete_from_log
+from pybasicbayes.util.stats import sample_discrete_from_log
 
 from pyhawkes.internals.distributions import Discrete, Bernoulli, \
                                              Gamma, Dirichlet, Beta

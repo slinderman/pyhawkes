@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.special import gammaln, psi
 
-from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
+from pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Gamma
 
 class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
@@ -141,7 +141,7 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
 
 
 
-class ContinuousTimeGammaBias(GibbsSampling, MeanField, MeanFieldSVI):
+class ContinuousTimeGammaBias(GibbsSampling):
     """
     Encapsulates the vector of K gamma-distributed bias variables.
     """
@@ -177,7 +177,7 @@ class ContinuousTimeGammaBias(GibbsSampling, MeanField, MeanFieldSVI):
         return np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K,))
 
     ### Gibbs Sampling
-    def _get_suff_statistics(self, Z0):
+    def _get_suff_statistics(self, data):
         """
         Compute the sufficient statistics from the data set.
         :param Z0: a TxK array of event counts assigned to the background process
@@ -185,11 +185,11 @@ class ContinuousTimeGammaBias(GibbsSampling, MeanField, MeanFieldSVI):
         """
         ss = np.zeros((2, self.K))
 
-        for data in self.model.data_list:
+        for d in data:
             # ss[0,k] = sum_t Z0[t,k]
-            ss[0,:] = data.parents.bkgd_ss
+            ss[0,:] = d.bkgd_ss
             # ss[1,k] = T
-            ss[1,:] = data.T
+            ss[1,:] = d.T
 
         return ss
 
@@ -199,11 +199,11 @@ class ContinuousTimeGammaBias(GibbsSampling, MeanField, MeanFieldSVI):
 
         :param data: Z0, a TxK matrix of events assigned to the background.
         """
-
-        assert len(data) == 0 or (isinstance(data, np.ndarray)
-                                  and data.ndim == 2
-                                  and data.shape[1] == self.K), \
-            "Data must be a TxK array of event counts assigned to the background"
+        assert isinstance(data, list)
+        # assert len(data) == 0 or (isinstance(data, np.ndarray)
+        #                           and data.ndim == 2
+        #                           and data.shape[1] == self.K), \
+        #     "Data must be a TxK array of event counts assigned to the background"
 
         ss = self._get_suff_statistics(data)
         alpha_post = self.alpha + ss[0,:]

@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.special import gammaln, psi
 
-from pyhawkes.deps.pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
+from pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Dirichlet
 
 class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
@@ -407,7 +407,7 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
         # 0: count, # 1: Sum of scaled dt, #2: Sum of sq scaled dt
         ss = np.zeros((3, self.K, self.K))
         for d in data:
-            ss += d.parents.compute_imp_suff_stats()
+            ss += d.compute_imp_suff_stats()
 
         n = ss[0]
         xbar = ss[1] / ss[0]
