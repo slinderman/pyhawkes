@@ -531,4 +531,122 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
     """
     Implementation of spike and slab gamma weights from L&A 2014
     """
-    raise NotImplementedError
+    def __init__(self, model):
+        self.model = model
+        self.network = model.network
+        self.K = self.model.K
+
+        # Initialize parameters A and W
+        self.A = np.ones((self.K, self.K))
+        self.W = np.zeros((self.K, self.K))
+        self.resample()
+
+    @property
+    def W_effective(self):
+        return self.A * self.W
+
+    def _compute_weighted_impulses_at_events(self, data):
+        # Compute the instantaneous rate at the individual events
+        # Sum over potential parents.
+
+        # TODO: Call cython function to evaluate instantaneous rate
+        N, S, C, Z, dt_max = data["N"], data["S"], data["C"], data["Z"], self.dt_max
+        W = self.W
+
+        # Initialize matrix of weighted impulses from each process
+        lmbda = np.zeros((self.K, N))
+        for n in xrange(N):
+            # First parent is just the background rate of this process
+            # lmbda[self.K, n] += lambda0[C[n]]
+
+            # Iterate backward from the most recent to compute probabilities of each parent spike
+            for par in xrange(n-1, -1, -1):
+                dt = S[n] - S[par]
+                if dt == 0:
+                    continue
+
+                # Since the spikes are sorted, we can stop if we reach a potential
+                # parent that occurred greater than dt_max in the past
+                if dt >= dt_max:
+                    break
+
+                lmbda[C[par], n] += W[C[par], C[n]] * self.impulse_model.impulse(dt, C[par], C[n])
+
+        return lmbda
+
+    def _resample_A_given_W(self, data):
+        """
+        Resample A given W. This must be immediately followed by an
+        update of z | A, W.
+        :return:
+        """
+        # Precompute weightedi impulse responses for each event
+        lmbda_irs = [self._compute_weighted_impulses_at_events(data) for data in data]
+        lmbda0 = self.model.lambda0
+
+        def _log_likelihood_single_process(k):
+            ll = 0
+            for lmbda_ir, d in zip(lmbda_irs, data):
+                Ns, C, T = d["Ns"], d["C"], d["T"]
+
+                # - \int lambda_k(t) dt
+                ll -= lmbda0[k] * T
+                ll -= self.W_effective[:,k].dot(Ns)
+
+                # + \sum_n log(lambda(s_n))
+                ll += np.log(lmbda0[k] + np.sum(self.A[:,k][:,None] * lmbda_ir[:,C==k], axis=0)).sum()
+            return ll
+
+        # TODO: Write a Cython function to sample this more efficiently
+        p = self.network.P
+        for k1 in xrange(self.K):
+            sys.stdout.write('.')
+            sys.stdout.flush()
+            for k2 in xrange(self.K):
+                # Compute the log likelihood of the events given W and A=0
+                self.A[k1,k2] = 0
+                ll0 = _log_likelihood_single_process(k2)
+
+                # Compute the log likelihood of the events given W and A=1
+                self.A[k1,k2] = 1
+                ll1 = _log_likelihood_single_process(k2)
+
+                # Sample A given conditional probability
+                lp0 = ll0 + np.log(1.0 - p[k1,k2])
+                lp1 = ll1 + np.log(p[k1,k2])
+                Z   = logsumexp([lp0, lp1])
+
+                self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+
+    def resample_W_given_A_and_z(self, N, Zsum):
+        """
+        Resample the weights given A and z.
+        :return:
+        """
+        kappa_post = self.network.kappa + Zsum
+        v_post  = self.network.V + N[:,None] * self.A
+
+        self.W = np.array(np.random.gamma(kappa_post, 1.0/v_post)).reshape((self.K, self.K))
+
+    def resample(self, data=[]):
+        """
+        Resample A and W given the parents
+        :param N:   A length-K vector specifying how many events occurred
+                    on each of the K processes
+        :param Z:   A TxKxKxB array of parent assignment counts
+        """
+
+        # Compute sufficient statistics
+        N = np.zeros((self.K,))
+        Zsum = np.zeros((self.K, self.K))
+        for d in data:
+            Zsum += d.parents.weight_ss
+            N += d.N
+
+        # Resample W | A, Z
+        self.resample_W_given_A_and_z(N, Zsum)
+
+        # Resample A | W
+        self._resample_A_given_W(data)

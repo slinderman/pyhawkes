@@ -973,7 +973,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         :param R:   Rate matrix
         :return:    log likelihood
         """
-        return (-gammaln(S+1) + S * np.log(R*self.dt) - R*self.dt).sum()
+        return (-gammaln(S+1) + S * np.log(R) - R*self.dt).sum()
 
     def heldout_log_likelihood(self, S, F=None):
         """
@@ -1285,3 +1285,284 @@ class DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(DiscreteTimeNetwor
                                'kappa': 1.0,
                                'v': None, 'alpha': 1.0, 'beta': 1.0,
                                'pi': 1.0}
+
+
+class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
+    _default_bkgd_hypers = {"alpha" : 1.0, "beta" : 1.0}
+    _default_impulse_hypers = {"mu_0": 1., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0" : 1.0}
+    _default_weight_hypers = {}
+    _default_network_hypers = {'C': 1, 'c': None,
+                               'p': 0.5,
+                               'allow_self_connections': True,
+                               'kappa': 1.0,
+                               'v': None, 'alpha': 1.0, 'beta': 1.0,
+                               'pi': 1.0}
+
+    def __init__(self, K, dt=1.0, dt_max=10.0, B=5,
+                 bkgd_hypers={},
+                 impulse_hypers={},
+                 weight_hypers={},
+                 network_hypers={}):
+        """
+        Initialize a discrete time network Hawkes model with K processes.
+
+        :param K:  Number of processes
+        """
+        self.K      = K
+        self.dt     = dt
+        self.dt_max = dt_max
+        self.B      = B
+
+        # Initialize the bias
+        # Use the given basis hyperparameters
+        self.bkgd_hypers = copy.deepcopy(self._default_bkgd_hypers)
+        self.bkgd_hypers.update(bkgd_hypers)
+        # TODO: Make a continuous time background model
+
+        from pyhawkes.internals.bias import ContinuousTimeGammaBias
+        self.bias_model = ContinuousTimeGammaBias(self.K, **self.bkgd_hypers)
+
+        # Initialize the impulse response model
+        self.impulse_hypers = copy.deepcopy(self._default_impulse_hypers)
+        self.impulse_hypers.update(impulse_hypers)
+        from pyhawkes.internals.impulses import ContinuousTimeImpulseResponses
+        self.impulse_model = \
+            ContinuousTimeImpulseResponses(self, **self.impulse_hypers)
+
+        # Initialize the network model
+        self.network_hypers = copy.deepcopy(self._default_network_hypers)
+        self.network_hypers.update(network_hypers)
+        self.network = \
+            StochasticBlockModelFixedSparsity(K=self.K, **self.network_hypers)
+
+        # Initialize the weight model
+        from pyhawkes.internals.weights import SpikeAndSlabContinuousTimeGammaWeights
+        self.weight_hypers = copy.deepcopy(self._default_weight_hypers)
+        self.weight_hypers.update(weight_hypers)
+        self.weight_model = \
+            SpikeAndSlabContinuousTimeGammaWeights(self,  **self.weight_hypers)
+
+        # Initialize the data list to empty
+        self.data_list = []
+
+    def initialize_with_standard_model(self, standard_model):
+        """
+        Initialize with a standard Hawkes model. Typically this will have
+        been fit by gradient descent or BFGS, and we just want to copy
+        over the parameters to get a good starting point for MCMC or VB.
+        :param W:
+        :param g:
+        :return:
+        """
+        assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
+        assert standard_model.K == self.K
+        assert standard_model.B == self.B
+
+        lambda0 = standard_model.weights[:,0]
+
+        # Get the connection weights
+        Wg = standard_model.weights[:,1:].reshape((self.K, self.K, self.B))
+        # Permute to out x in x basis
+        Wg = np.transpose(Wg, [1,0,2])
+        # Sum to get the total weight
+        W = Wg.sum(axis=2) + 1e-6
+
+        # We need to decide how to set A.
+        # The simplest is to initialize it to all ones, but
+        # A = np.ones((self.K, self.K))
+        # Alternatively, we can start with a sparse matrix
+        # of only strong connections. What sparsity? How about the
+        # mean under the network model
+        sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
+        A = W > np.percentile(W, (1.0 - sparsity) * 100)
+
+        # Set the model parameters
+        self.bias_model.lambda0 = lambda0.copy('C')
+        self.weight_model.A     = A.copy('C')
+        self.weight_model.W     = W.copy('C')
+
+    def add_data(self, S, C, T):
+        """
+        Add a data set to the list of observations.
+        First, filter the data with the impulse response basis,
+        then instantiate a set of parents for this data set.
+
+        :param S: length N array of event times
+        :param C: length N array of process id's for each event
+        :param T: max time of
+        """
+        assert isinstance(S, np.ndarray) and S.ndim == 1 \
+               and S.min() >= 0 and S.max() < T and \
+               S.dtype == np.float, \
+               "Data must be a N array of event times"
+
+        assert isinstance(C, np.ndarray) and C.shape == S.shape \
+               and S.min() >= 0 and S.max() < self.K and \
+               S.dtype == np.int, \
+               "Data must be a N array of parent indices"
+
+        # Instantiate corresponding parent object
+        from pyhawkes.internals.parents import SpikeAndSlabContinuousTimeParents
+        parents = SpikeAndSlabContinuousTimeParents(self, S, C, T, self.K, self.dt_max)
+
+        # Add to the data list
+        self.data_list.append(parents)
+
+    def check_stability(self):
+        """
+        Check that the weight matrix is stable
+
+        :return:
+        """
+        if self.K < 100:
+            eigs = np.linalg.eigvals(self.weight_model.W_effective)
+            maxeig = np.amax(np.real(eigs))
+        else:
+            from scipy.sparse.linalg import eigs
+            maxeig = eigs(self.weight_model.W_effective, k=1)[0]
+
+        print "Max eigenvalue: ", maxeig
+        if maxeig < 1.0:
+            return True
+        else:
+            return False
+
+    def copy_sample(self):
+        """
+        Return a copy of the parameters of the model
+        :return: The parameters of the model (A,W,\lambda_0, \beta)
+        """
+        # return copy.deepcopy(self.get_parameters())
+
+        # Shallow copy the data
+        data_list = copy.copy(self.data_list)
+        self.data_list = []
+
+        # Make a deep copy without the data
+        model_copy = copy.deepcopy(self)
+
+        # Reset the data and return the data-less copy
+        self.data_list = data_list
+        return model_copy
+
+    def compute_rate_at_events(self, data):
+        # Compute the instantaneous rate at the individual events
+        # Sum over potential parents.
+
+        # TODO: Call cython function to evaluate instantaneous rate
+        S, C, dt_max = data.S, data.C, self.dt_max
+        N = S.shape[0]
+        lambda0 = self.bias_model.lambda0
+        W = self.weight_model.W_effective
+        impulse = self.impulse_model.impulse
+
+        lmbda = np.zeros(N)
+        # Resample parents
+        for n in xrange(N):
+            # First parent is just the background rate of this process
+            lmbda[n] += lambda0[C[n]]
+
+            # Iterate backward from the most recent to compute probabilities of each parent spike
+            for par in xrange(n-1, -1, -1):
+                dt = S[n] - S[par]
+
+                # Since the spikes are sorted, we can stop if we reach a potential
+                # parent that occurred greater than dt_max in the past
+                if dt > dt_max:
+                    break
+
+                Wparn = W[C[par], C[n]]
+                if Wparn > 0:
+                    lmbda[n] += Wparn * impulse(dt, C[par], C[n])
+
+        return lmbda
+
+    def compute_integrated_rate(self, data, proc=None):
+        """
+        We can approximate this by ignoring events within dt_max of the end.
+        Since each event induces an impulse response with area W, we
+        simply need to count events
+        :param index:
+        :param proc:
+        :return:
+        """
+        T, Ns = data.T, data.Ns
+        W = self.weight_model.W_effective
+        lmbda0 = self.bias_model.lambda0
+
+        # Compute the integral (W is send x recv)
+        int_lmbda = lmbda0 * T
+        int_lmbda += W.T.dot(Ns)
+        assert int_lmbda.shape == (self.K,)
+
+        # TODO: Only compute for proc (probably negligible savings)
+        if proc is None:
+            return int_lmbda
+        else:
+            return int_lmbda[proc]
+
+    def log_prior(self):
+        # Get the parameter priors
+        lp  = 0
+        lp += self.bias_model.log_probability()
+        lp += self.weight_model.log_probability()
+        lp += self.impulse_model.log_probability()
+        lp += self.network.log_probability()
+
+        return lp
+
+    def log_likelihood(self, data=None):
+        """
+        Compute the joint log probability of the data and the parameters
+        :return:
+        """
+        ll = 0
+
+        if data is None:
+            data = self.data_list
+
+        # Get the likelihood of the datasets
+        for d in data:
+            ll -= self.compute_integrated_rate(d).sum()
+            ll += np.log(self.compute_rate_at_events(d)).sum()
+
+        return ll
+
+    def log_probability(self):
+        """
+        Compute the joint log probability of the data and the parameters
+        :return:
+        """
+        lp = self.log_likelihood()
+        lp += self.log_prior()
+
+        return lp
+
+    def heldout_log_likelihood(self, S, C, T):
+        self.add_data(S, C, T)
+        data = self.data_list.pop()
+        return self.log_likelihood(data)
+
+    def resample_model(self):
+        """
+        Perform one iteration of the Gibbs sampling algorithm.
+        :return:
+        """
+        # Update the parents.
+        # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
+        for p in self.data_list:
+            p.resample()
+
+        # Update the bias model given the parents assigned to the background
+        self.bias_model.resample(self.data_list)
+
+        # Update the impulse model given the parents assignments
+        self.impulse_model.resample(self.data_list)
+
+        # Update the network model
+        self.network.resample(data=(self.weight_model.A, self.weight_model.W))
+
+        # Update the weight model given the parents assignments
+        self.weight_model.resample(self.data_list)
+
+

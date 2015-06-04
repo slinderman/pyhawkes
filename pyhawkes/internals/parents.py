@@ -319,24 +319,29 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
     elapsed between parent. For completeness, we also
     keep track of the index of the parent.
     """
-    def __init__(self, S, C, K, dt_max):
+    def __init__(self, model, S, C, T, K, dt_max):
         """
         :param S: Length N array of event times
         :param C: Length N array of process indices
         :param K: The number of processes
         """
+        self.model = model
+
         assert S.ndim == 1 and S.shape == C.shape
-        self.S = S
-        self.N = S.shape[0]
-        self.C = C
-        self.K = K
-        self.dt_max = dt_max
         assert C.dtype == np.int and C.min() >= 0 and C.max() < K
+        self.S = S
+        self.C = C
+        self.T = T
+        self.K = K
+        self.N = S.shape[0]
+        self.Ns = np.bincount(C, minlength=self.K)
+        self.dt_max = dt_max
 
         # Initialize parent arrays for Gibbs sampling
-        self.Z = -1 * np.ones((self.N,), dtype=np.int)      # Parent index
-        # self.Cp =  -1 * np.ones((self.N,), dtype=np.int)    # Parent process
-        # self.dt = 0 * np.ones((self.N,), dtype=np.float)    # Parent offset
+        self.Z = -1 * np.ones((self.N,), dtype=np.int)
+        self.bkgd_ss = self.Ns.copy()
+        self.weight_ss = np.zeros((self.K, self.K))
+        self.imp_ss = np.zeros((self.K, self.K))
 
     def log_likelihood(self, x):
         pass
@@ -346,39 +351,18 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
 
     # raise NotImplementedError
 
-    def resample(self, bias_model, weight_model, impulse_model):
-        """
-        Resample the parents given the bias_model, weight_model, and impulse_model.
-
-        :param bias_model:
-        :param weight_model:
-        :param impulse_model:
-        :return:
-        """
-        # If necessary, initialize parent arrays for Gibbs sampling
-        # Attribute all events to the background.
-        if self.Z is None:
-            self.Z  = np.zeros((self.T,self.K,self.K,self.B),
-                               dtype=np.int32)
-        if self.Z0 is None:
-            self.Z0 = np.copy(self.S).astype(np.int32)
-
-        # Resample the parents in python
-        # self._resample_Z_python(bias_model, weight_model, impulse_model)
-
-        # Call cython function to resample parents
-        self.resample_Z_python(bias_model, weight_model, impulse_model)
-
-        self._check_Z()
-
+    def resample(self):
+        # TODO: Call cython function to resample parents
+        self.resample_Z_python()
 
     def resample_Z_python(self, bias_model, weight_model, impulse_model):
         from pybasicbayes.util.stats import sample_discrete
 
         # TODO: Call cython function to resample parents
         S, C, Z, dt_max = self.S, self.C, self.Z, self.dt_max
-        lambda0 = bias_model.lambda0
-        W = weight_model.W
+        lambda0 = self.model.bias_model.lambda0
+        W = self.model.weight_model.W
+        impulse = self.model.impulse_model.impulse
 
         # Also compute number of parents assigned to background rate and
         # to specific connections
@@ -407,7 +391,7 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
                     p_par[par] = 0
                     break
 
-                p_par[par] = W[C[par], C[n]] * impulse_model.impulse(dt, C[par], C[n])
+                p_par[par] = W[C[par], C[n]] * impulse(dt, C[par], C[n])
                 denom += p_par[par]
 
             # Now sample forward, starting from the minimum viable parent

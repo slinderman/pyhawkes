@@ -343,3 +343,83 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         for k1 in xrange(self.K):
             for k2 in xrange(self.K):
                 self.g[k1,k2,:] = np.random.dirichlet(self.mf_gamma[k1,k2,:])
+
+
+class ContinuousTimeImpulseResponses(GibbsSampling):
+    """
+    Continuous time impulse response model with logistic normal
+    impulse response functions.
+    """
+    def __init__(self, model, mu_0=0., lmbda_0=1., alpha_0=1., beta_0=1.):
+        self.model = model
+        self.K = model.K
+        self.dt_max = model.dt_max
+
+        self.mu_0 = mu_0
+        self.lmbda_0 = lmbda_0
+        self.alpha_0 = alpha_0
+        self.beta_0 = beta_0
+
+        from pyhawkes.utils.utils import sample_nig
+        self.mu, self.tau = \
+            sample_nig(self.mu_0 * np.ones((self.K, self.K)),
+                       self.lmbda_0 * np.ones((self.K, self.K)),
+                       self.alpha_0 * np.ones((self.K, self.K)),
+                       self.beta_0 * np.ones((self.K, self.K)))
+
+    def impulse(self, dt, k1, k2):
+        """
+        Impulse response induced by an event on process k1 on
+        the rate of process k2 at lag dt
+        """
+        from pyhawkes.utils.utils import logit
+        mu, tau, dt_max = self.mu[k1,k2], self.tau[k1,k2], self.dt_max
+        Z = dt * (dt_max - dt)/dt_max * np.sqrt(2*np.pi/tau)
+        return 1./Z * np.exp(-tau/2. * (logit(dt/dt_max) - mu)**2)
+
+    def rvs(self, size=[]):
+        """
+        Sample random variables from the Dirichlet impulse response distribution.
+        :param size:
+        :return:
+        """
+        pass
+
+    def log_likelihood(self, x):
+        '''
+        log likelihood (either log probability mass function or log probability
+        density function) of x, which has the same type as the output of rvs()
+        '''
+        return 0
+
+    def log_probability(self):
+        return self.log_likelihood()
+
+    def resample(self, data=[]):
+        """
+        Resample the
+        :param data: a TxKxKxB array of parents. T time bins, K processes,
+                     K parent processes, and B bases for each parent process.
+        """
+        mu_0, lmbda_0, alpha_0, beta_0 = self.mu_0, self.lmbda_0, self.alpha_0, self.beta_0
+        assert data is None or isinstance(data, list)
+
+        # 0: count, # 1: Sum of scaled dt, #2: Sum of sq scaled dt
+        ss = np.zeros((3, self.K, self.K))
+        for d in data:
+            ss += d.parents.compute_imp_suff_stats()
+
+        n = ss[0]
+        xbar = ss[1] / ss[0]
+        xvar = ss[2]
+
+        alpha_post = alpha_0 + n / 2.
+        beta_post = beta_0 + 0.5 * xvar
+        beta_post += 0.5 * lmbda_0 * n / (lmbda_0 + n) * (xbar-mu_0)**2
+
+        lmbda_post = lmbda_0 + n
+        mu_post = (lmbda_0 * mu_0 + n * xbar) / (lmbda_0*n)
+
+        from pyhawkes.utils.utils import sample_nig
+        self.mu, self.tau = \
+            sample_nig(mu_post, lmbda_post, alpha_post, beta_post)
