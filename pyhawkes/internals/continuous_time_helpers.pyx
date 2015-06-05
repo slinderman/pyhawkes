@@ -17,7 +17,7 @@ cdef double SQRT_2PI = 2.5066282746310002
 
 
 ### Continuous time helper functions with logistic normal impulse responses
-cdef double logit(double p) nogil:
+cdef inline double logit(double p) nogil:
     return log(p / (1-p))
 
 cdef inline double ln_impulse(double dt, double mu, double tau, double dt_max) nogil:

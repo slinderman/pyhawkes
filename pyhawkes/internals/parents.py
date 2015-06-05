@@ -2,6 +2,7 @@ import numpy as np
 
 from pybasicbayes.distributions import BayesianDistribution, GibbsSampling, MeanField
 from pyhawkes.internals.parent_updates import mf_update_Z, resample_Z
+from pyhawkes.utils.utils import initialize_pyrngs
 
 from pyhawkes.utils.profiling import line_profiled
 PROFILING = True
@@ -52,6 +53,9 @@ class SpikeAndSlabParents(_ParentsBase, GibbsSampling):
         self.Z  = np.zeros((T,K,K,B), dtype=np.int32)
         self.Z0 = np.copy(self.S).astype(np.int32)
 
+        # Initialize GSL RNGs
+        self.pyrngs = initialize_pyrngs()
+
     def _check_Z(self):
         """
         Check that Z adds up to the correct amount
@@ -99,6 +103,43 @@ class SpikeAndSlabParents(_ParentsBase, GibbsSampling):
         # DEBUG
         self._check_Z()
 
+    def _resample_Z_gsl(self, bias_model, weight_model, impulse_model):
+        """
+        Resample the parents in using gslrandom
+        """
+        from gslrandom import multinomial_par
+        S, T, K, B, F = self.S, self.T, self.K, self.B, self.F
+        # Make a big matrix of size T x (K*B + 1)
+        P = np.empty((self.T, 1+self.K * self.B))
+        for k2 in xrange(self.K):
+            P[:,0] = bias_model.lambda0[k2]
+
+            Ak2 = np.repeat(weight_model.A[:,k2], B)
+            Wk2 = np.repeat(weight_model.W[:,k2], B)
+            Gk2 = impulse_model.g[:,k2,:].reshape((K*B,), order="C")
+            Fk2 = F.reshape((T,K*B))
+            P[:,1:] = Ak2 * Wk2 * Gk2 * Fk2
+
+            # Sample parents from P with counts S[:,k2]
+            Z_buffer = np.empty((self.T, 1+self.K * self.B), dtype=np.uint32)
+            multinomial_par(self.pyrngs, self.S[:,k2].astype(np.uint32), P, Z_buffer)
+
+            # Copy the parents back into Z
+            self.Z0[:,k2] = Z_buffer[:,0]
+            self.Z[:,:,k2,:] = Z_buffer[:,1:].reshape((T,K,B), order="C")
+
+        # DEBUG
+        # self._check_Z()
+
+    def _resample_Z_cython(self, bias_model, weight_model, impulse_model):
+        # Call cython function to resample parents
+        lambda0 = bias_model.lambda0
+        W = weight_model.A * weight_model.W
+        # W = weight_model.W
+        g = impulse_model.g
+        F = self.F
+        resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
+
     def resample(self, bias_model, weight_model, impulse_model):
         """
         Resample the parents given the bias_model, weight_model, and impulse_model.
@@ -111,16 +152,10 @@ class SpikeAndSlabParents(_ParentsBase, GibbsSampling):
 
         # Resample the parents in python
         # self._resample_Z_python(bias_model, weight_model, impulse_model)
+        # self._resample_Z_cython(bias_model, weight_model, impulse_model)
+        self._resample_Z_gsl(bias_model, weight_model, impulse_model)
 
-        # Call cython function to resample parents
-        lambda0 = bias_model.lambda0
-        W = weight_model.A * weight_model.W
-        # W = weight_model.W
-        g = impulse_model.g
-        F = self.F
-        resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
-
-        # self._check_Z()
+        self._check_Z()
 
 class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
     """

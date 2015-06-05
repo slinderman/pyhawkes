@@ -690,8 +690,6 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             self.network.resample_v(self.weight_model.A, self.weight_model.W)
             self.network.resample_m()
 
-
-
     def add_data(self, S, F=None, minibatchsize=None):
         """
         Add a data set to the list of observations.

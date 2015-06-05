@@ -18,7 +18,7 @@ PROFILING=True
 K = 10
 B = 3
 dt = 1
-dt_max = 90.
+dt_max = 10.
 T = 100.
 network_hypers = {'C': 1, 'kappa': 1., 'c': np.zeros(K, dtype=np.int), 'p': 1*np.ones((1,1)), 'v': 10.}
 dt_model = pyhawkes.models.\

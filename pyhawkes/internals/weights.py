@@ -103,8 +103,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         # TODO: Write a Cython function to sample this more efficiently
         p = self.network.P
         for k1 in xrange(self.K):
-            sys.stdout.write('.')
-            sys.stdout.flush()
+            # sys.stdout.write('.')
+            # sys.stdout.flush()
             for k2 in xrange(self.K):
                 if model is None:
                     ll0 = 0
@@ -127,8 +127,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 #           = lp1 - ln(exp(lp0) + exp(lp1))
                 #           = lp1 - Z
                 self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
-        sys.stdout.write('\n')
-        sys.stdout.flush()
+        # sys.stdout.write('\n')
+        # sys.stdout.flush()
 
     def _get_suff_statistics(self, N, Z):
         """

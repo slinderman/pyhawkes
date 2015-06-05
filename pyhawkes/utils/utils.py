@@ -1,6 +1,17 @@
 import os
 import numpy as np
 
+def initialize_pyrngs():
+    from gslrandom import PyRNG, get_omp_num_threads
+    if "OMP_NUM_THREADS" in os.environ:
+        num_threads = os.environ["OMP_NUM_THREADS"]
+    else:
+        num_threads = get_omp_num_threads()
+    assert num_threads > 0
+
+    # Choose random seeds
+    seeds = np.random.randint(2**16, size=num_threads)
+    return [PyRNG(seed) for seed in seeds]
 
 def get_unique_file_name(filedir, filename):
     """
