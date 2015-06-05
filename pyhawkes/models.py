@@ -1292,10 +1292,13 @@ class DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(DiscreteTimeNetwor
 
 class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     _default_bkgd_hypers = {"alpha" : 1.0, "beta" : 1.0}
-    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 10.0, "alpha_0": 1.0, "beta_0" : 0.1}
+    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0" : 1.0}
     _default_weight_hypers = {}
+
+    # This model uses an SBM with beta-distributed sparsity levels
+    _network_class          = StochasticBlockModel
     _default_network_hypers = {'C': 1, 'c': None,
-                               'p': 0.5,
+                               'p': None, 'tau1': 1.0, 'tau0': 1.0,
                                'allow_self_connections': True,
                                'kappa': 1.0,
                                'v': None, 'alpha': 1.0, 'beta': 1.0,
@@ -1333,7 +1336,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         self.network_hypers = copy.deepcopy(self._default_network_hypers)
         self.network_hypers.update(network_hypers)
         self.network = \
-            StochasticBlockModelFixedSparsity(K=self.K, **self.network_hypers)
+            self._network_class(K=self.K, **self.network_hypers)
 
         # Initialize the weight model
         from pyhawkes.internals.weights import SpikeAndSlabContinuousTimeGammaWeights
@@ -1531,7 +1534,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         lp += self.bias_model.log_probability()
         lp += self.weight_model.log_probability()
         lp += self.impulse_model.log_probability()
-        lp += self.network.log_probability()
+        # lp += self.network.log_probability()
 
         return lp
 

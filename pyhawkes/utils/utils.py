@@ -13,6 +13,21 @@ def initialize_pyrngs():
     seeds = np.random.randint(2**16, size=num_threads)
     return [PyRNG(seed) for seed in seeds]
 
+def convert_discrete_to_continuous(S, dt):
+    # Convert S to continuous time
+    from pybasicbayes.util.general import ibincount
+    T = S.shape[0] * dt
+    S_ct = dt * np.concatenate([ibincount(Sk) for Sk in S.T]).astype(float)
+    S_ct += dt * np.random.rand(*S_ct.shape)
+    assert np.all(S_ct < T)
+    C_ct = np.concatenate([k*np.ones(Sk.sum()) for k,Sk in enumerate(S.T)]).astype(int)
+
+    # Sort the data
+    perm = np.argsort(S_ct)
+    S_ct = S_ct[perm]
+    C_ct = C_ct[perm]
+    return S_ct, C_ct, T
+
 def get_unique_file_name(filedir, filename):
     """
     Get a unique filename by appending filename with .x, where x

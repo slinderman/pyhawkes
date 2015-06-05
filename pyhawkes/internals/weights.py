@@ -313,6 +313,13 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         return A * (self.mf_kappa_1 / self.mf_v_1) + \
                (1.0 - A) * (self.mf_kappa_0 / self.mf_v_0)
 
+    def std_A(self):
+        """
+        Compute the standard deviation of A
+        :return:
+        """
+        return np.sqrt(self.mf_p * (1-self.mf_p))
+
     def expected_log_W(self):
         """
         Compute the expected log W under the variational approximation
@@ -548,6 +555,9 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
     def log_likelihood(self,x):
         raise NotImplementedError
 
+    def log_probability(self):
+        return 0
+
     def rvs(self,size=[]):
         raise NotImplementedError
 
@@ -620,7 +630,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
                 ll -= self.W_effective[:,k].dot(Ns)
 
                 # + \sum_n log(lambda(s_n))
-                ll += np.log(lmbda0[k] + np.sum(self.A[:,k][:,None] * lmbda_ir[C==k,:], axis=0)).sum()
+                ll += np.log(lmbda0[k] + np.sum(self.A[:,k] * lmbda_ir[C==k,:], axis=1)).sum()
             return ll
 
         # TODO: Write a Cython function to sample this more efficiently

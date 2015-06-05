@@ -17,11 +17,14 @@ if "DISPLAY" not in os.environ:
 import matplotlib.pyplot as plt
 
 from pyhawkes.utils.basis import IdentityBasis
+from pyhawkes.utils.utils import convert_discrete_to_continuous
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
     DiscreteTimeNetworkHawkesModelGammaMixture, \
     DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity, \
-    DiscreteTimeNetworkHawkesModelSpikeAndSlab
+    DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
+    ContinuousTimeNetworkHawkesModel
 from pyhawkes.plotting.plotting import plot_network
+
 
 from baselines.xcorr import infer_net_from_xcorr
 
@@ -33,6 +36,7 @@ def run_comparison(data_path, output_path, seed=None, thresh=0.5):
     :param data_path:
     :return:
     """
+    import ipdb; ipdb.set_trace()
     if seed is None:
         seed = np.random.randint(2**32)
 
@@ -108,6 +112,11 @@ def run_comparison(data_path, output_path, seed=None, thresh=0.5):
     #                              output_path=output_path,
     #                              standard_model=bfgs_model)
 
+    gibbs_samples, gibbs_timestamps = \
+        fit_ct_network_hawkes_gibbs(S, K, C, dt, dt_max,
+                                 output_path=output_path,
+                                 standard_model=bfgs_model)
+
     # Fit a network Hawkes model with Batch VB
     # vb_models, vb_timestamps = fit_network_hawkes_vb(S, K, dt, dt_max,
     #                                          standard_model=standard_models[-1])
@@ -122,6 +131,9 @@ def run_comparison(data_path, output_path, seed=None, thresh=0.5):
                                                     output_path,
                                                     standard_model=bfgs_model,
                                                     true_network=network)
+
+    # Plot the network and its uncertainty
+    import ipdb; ipdb.set_trace()
 
     # Compute area under roc curve of inferred network
     auc_rocs, fprs, tprs = compute_auc_roc(network,
@@ -147,14 +159,14 @@ def run_comparison(data_path, output_path, seed=None, thresh=0.5):
 
 
     # Compute the predictive log likelihoods
-    # plls = compute_predictive_ll(S_test, S,
-    #                              bfgs_model=bfgs_model,
-    #                              gibbs_samples=gibbs_samples,
-    #                              svi_models=svi_models)
-    #
-    # print "Log Predictive Likelihoods: "
-    # pprint.pprint(plls)
-    #
+    plls = compute_predictive_ll(S_test, S,
+                                 bfgs_model=bfgs_model,
+                                 gibbs_samples=gibbs_samples,
+                                 svi_models=svi_models)
+
+    print "Log Predictive Likelihoods: "
+    pprint.pprint(plls)
+
     # # Plot the predictive log likelihood
     # # N_iters = plls['svi'].size
     # N_iters = 100
@@ -322,13 +334,13 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
         # v ~ Gamma(alpha, beta) for alpha = 10, beta = 10 / 125
         import pdb; pdb.set_trace()
         E_W = 0.01
-        kappa = 1.25
+        kappa = 10.
         E_v = kappa / E_W
         alpha = 10.
         beta = alpha / E_v
-        network_hypers = {'C': C,
+        network_hypers = {'C': 2,
                           'kappa': kappa, 'alpha': alpha, 'beta': beta,
-                          'tau1': 1.0, 'tau0': 10.0,
+                          'p': 0.8,
                           'allow_self_connections': False}
         test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max,
                                                                 basis=test_basis,
@@ -370,6 +382,80 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
 
     return samples, timestamps
 
+
+def fit_ct_network_hawkes_gibbs(S, K, C, dt, dt_max,
+                                output_path,
+                                standard_model=None):
+
+    # Check for existing Gibbs results
+    if os.path.exists(output_path + ".gibbs.pkl"):
+        with open(output_path + ".gibbs.pkl", 'r') as f:
+            print "Loading Gibbs results from ", (output_path + ".gibbs.pkl")
+            (samples, timestamps) = cPickle.load(f)
+
+    else:
+        print "Fitting the data with a network Hawkes model using Gibbs sampling"
+
+        S_ct, C_ct, T = convert_discrete_to_continuous(S, dt)
+
+        # Set the network prior such that E[W] ~= 0.01
+        # W ~ Gamma(kappa, v) for kappa = 1.25 => v ~ 125
+        # v ~ Gamma(alpha, beta) for alpha = 10, beta = 10 / 125
+        E_W = 0.2
+        kappa = 10.
+        E_v = kappa / E_W
+        alpha = 5.
+        beta = alpha / E_v
+        network_hypers = {'C': 1,
+                          "c": np.zeros(K).astype(np.int),
+                          "p": 0.25,
+                          "v": E_v,
+                          # 'kappa': kappa,
+                          # 'alpha': alpha, 'beta': beta,
+                          # 'p': 0.1,
+                          'allow_self_connections': False}
+
+        test_model = \
+            ContinuousTimeNetworkHawkesModel(K, dt_max=dt_max,
+                                             network_hypers=network_hypers)
+        test_model.add_data(S_ct, C_ct, T)
+
+        # Initialize with the standard model parameters
+        if standard_model is not None:
+            test_model.initialize_with_standard_model(standard_model)
+
+        plt.ion()
+        im = plot_network(test_model.weight_model.A, test_model.weight_model.W, vmax=0.025)
+        plt.pause(0.001)
+
+        # Gibbs sample
+        N_samples = 100
+        samples = []
+        lps = [test_model.log_probability()]
+        timestamps = []
+        for itr in xrange(N_samples):
+            if itr % 1 == 0:
+                print "Iteration ", itr, "\tLL: ", lps[-1]
+                im.set_data(test_model.weight_model.W_effective)
+                plt.pause(0.001)
+
+            # lps.append(test_model.log_probability())
+            lps.append(test_model.log_probability())
+            samples.append(test_model.resample_and_copy())
+            timestamps.append(time.clock())
+
+            print test_model.network.p
+
+            # Save this sample
+            with open(output_path + ".gibbs.itr%04d.pkl" % itr, 'w') as f:
+                cPickle.dump(samples[-1], f, protocol=-1)
+
+        # Save the Gibbs samples
+        with open(output_path + ".gibbs.pkl", 'w') as f:
+            print "Saving Gibbs samples to ", (output_path + ".gibbs.pkl")
+            cPickle.dump((samples, timestamps), f, protocol=-1)
+
+    return samples, timestamps
 
 def fit_network_hawkes_svi(S, K, C, dt, dt_max,
                            output_path,
@@ -628,14 +714,18 @@ def compute_predictive_ll(S_test, S_train,
         # Compute log(E[pred likelihood]) on second half of samplese
         offset       = len(gibbs_samples) // 2
         # Preconvolve with the Gibbs model's basis
-        F_test = gibbs_samples[0].basis.convolve_with_basis(S_test)
+        # F_test = gibbs_samples[0].basis.convolve_with_basis(S_test)
+        S_ct, C_ct, T = convert_discrete_to_continuous(S_test, 0.02)
 
         plls['gibbs'] = []
         for s in gibbs_samples[offset:]:
-            plls['gibbs'].append(s.heldout_log_likelihood(S_test, F=F_test))
+            # plls['gibbs'].append(s.heldout_log_likelihood(S_test, F=F_test))
+            plls['gibbs'].append(s.heldout_log_likelihood(S_ct, C_ct, T))
 
         # Convert to numpy array
         plls['gibbs'] = np.array(plls['gibbs'])
+
+    import ipdb; ipdb.set_trace()
 
     if vb_models is not None:
         print "Computing pred ll for VB"
@@ -737,7 +827,7 @@ def plot_prc_curves(precs, recalls, fig_path="./"):
     ax.set_ylabel("Precision")
 
     plt.legend(loc=1)
-    ax.set_title("Precision-Recall Curve")
+    ax.set_title("Network %d" % net)
     plt.subplots_adjust(bottom=0.25, left=0.25)
 
     plt.savefig(os.path.join(os.path.dirname(fig_path), "figure3d.pdf"))
@@ -761,10 +851,31 @@ def plot_networks(W_xcorr, bfgs_model, network):
     plt.show()
 
 
+def plot_confidence_network(A_true,
+                            svi_models=None):
+    """
+    Compute the AUC of the precision recall curve
+    :return:
+    """
+    A_flat = A_true.ravel()
+    # Compute ROC based on E[A] under variational posterior
+    # W_svi = svi_models[-1].weight_model.expected_W()
+    mean_A = svi_models[-1].weight_model.expected_A()
+    std_A = np.sqrt(svi_models[-1].weight_model.mf_p
+                    * (1-svi_models[-1].weight_model.mf_p))
+
+    score = mean_A / std_A
+
+    plt.figure()
+    plt.imshow(score, interpolation="none", cmap="Reds")
+    plt.colorbar()
+    plt.show()
+
+
 # seed = 2650533028
 seed = 11223344
-net = 5
-run = 1
+net = 6
+run = 2
 thresh = 0.68
 data_path = os.path.join("data", "chalearn", "small", "network%d_oopsi.pkl.gz" % net)
 out_path  = os.path.join("data", "chalearn", "small", "network%d_run%03d" % (net,run), "results" )

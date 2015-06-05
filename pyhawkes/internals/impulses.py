@@ -393,7 +393,7 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
         return 0
 
     def log_probability(self):
-        return self.log_likelihood()
+        return self.log_likelihood((self.mu, self.tau))
 
     def resample(self, data=[]):
         """
