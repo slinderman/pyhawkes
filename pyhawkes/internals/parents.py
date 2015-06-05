@@ -3,6 +3,10 @@ import numpy as np
 from pybasicbayes.distributions import BayesianDistribution, GibbsSampling, MeanField
 from pyhawkes.internals.parent_updates import mf_update_Z, resample_Z
 
+from pyhawkes.utils.profiling import line_profiled
+PROFILING = True
+
+
 class _ParentsBase(BayesianDistribution):
     """
     Encapsulates the TxKxKxB array of parent multinomial distributed
@@ -349,11 +353,30 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
     def rvs(self, data=[]):
         raise NotImplementedError("No prior for parents to sample from.")
 
-    # raise NotImplementedError
-
     def resample(self):
-        # TODO: Call cython function to resample parents
-        self.resample_Z_python()
+        # self.resample_Z_python()
+
+        from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
+        S, C, Z, dt_max = self.S, self.C, self.Z, self.dt_max
+        lambda0 = self.model.bias_model.lambda0
+        W = self.model.weight_model.W
+        mu, tau = self.model.impulse_model.mu, self.model.impulse_model.tau
+
+        ct_resample_Z_logistic_normal(
+            S, C, Z, dt_max,
+            lambda0, W, mu, tau)
+
+        assert (Z > -2).all()
+        assert (Z < np.arange(Z.shape[0])).all()
+
+        # Update sufficient statistics
+        self.bkgd_ss = np.zeros(self.K)
+        self.weight_ss = np.zeros((self.K, self.K))
+        self.imp_ss = np.zeros((3, self.K, self.K))
+        ct_compute_suff_stats(S, C, Z, dt_max,
+                              self.bkgd_ss, self.weight_ss, self.imp_ss)
+
+        assert (self.bkgd_ss + self.weight_ss.sum(0) == self.Ns).all()
 
     def resample_Z_python(self):
         from pybasicbayes.util.stats import sample_discrete
@@ -424,22 +447,33 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
         S, C, Z, dt_max = self.S, self.C, self.Z, self.dt_max
 
         # 0: count, # 1: Sum of scaled dt, #2: Sum of sq scaled dt
-        imp_ss = np.zeros((3, self.K, self.K))
-        for n in xrange(self.N):
-            par = Z[n]
-            if par > -1:
-                dt = S[n] - S[par]
-                imp_ss[0, C[par], C[n]] += 1
-                imp_ss[1, C[par], C[n]] += np.log(dt) - np.log(dt_max - dt)
 
-        # In a second pass, compute the sum of squares
-        mu = imp_ss[1] / (imp_ss[0] + 1e-64)
-        for n in xrange(self.N):
-            par = Z[n]
-            if par > -1:
-                dt = S[n] - S[par]
-                sdt = np.log(dt) - np.log(dt_max - dt)
-                imp_ss[2, C[par], C[n]] += (sdt - mu[C[par], C[n]])**2
+        # Compute manually
+        # imp_ss_manual = np.zeros((3, self.K, self.K))
+        # for n in xrange(self.N):
+        #     par = Z[n]
+        #     if par > -1:
+        #         dt = S[n] - S[par]
+        #         imp_ss_manual[0, C[par], C[n]] += 1
+        #         imp_ss_manual[1, C[par], C[n]] += np.log(dt) - np.log(dt_max - dt)
+        #
+        # # In a second pass, compute the sum of squares
+        # mu = imp_ss_manual[1] / (imp_ss_manual[0] + 1e-64)
+        # for n in xrange(self.N):
+        #     par = Z[n]
+        #     if par > -1:
+        #         dt = S[n] - S[par]
+        #         sdt = np.log(dt) - np.log(dt_max - dt)
+        #         imp_ss_manual[2, C[par], C[n]] += (sdt - mu[C[par], C[n]])**2
+        #
+        # assert np.isfinite(imp_ss_manual).all()
 
-        assert np.isfinite(imp_ss).all()
-        return imp_ss
+        # Compute with cython
+        # imp_ss = np.zeros((3, self.K, self.K))
+        # from pyhawkes.internals.continuous_time_helpers import ct_compute_imp_suff_stats
+        # ct_compute_imp_suff_stats(S, C, Z, dt_max, imp_ss)
+
+        # assert np.allclose(imp_ss_manual, imp_ss2)
+
+
+        return self.imp_ss

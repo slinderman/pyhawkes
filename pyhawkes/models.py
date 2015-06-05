@@ -17,6 +17,10 @@ from pyhawkes.internals.parents import SpikeAndSlabParents, GammaMixtureParents
 from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockModelFixedSparsity
 from pyhawkes.utils.basis import CosineBasis
 
+
+from pyhawkes.utils.profiling import line_profiled
+PROFILING = True
+
 # TODO: Add a simple HomogeneousPoissonProcessModel
 
 class DiscreteTimeStandardHawkesModel(object):
@@ -1463,31 +1467,39 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         # Compute the instantaneous rate at the individual events
         # Sum over potential parents.
 
-        # TODO: Call cython function to evaluate instantaneous rate
+        # Compute it manually
         S, C, dt_max = data.S, data.C, self.dt_max
         N = S.shape[0]
         lambda0 = self.bias_model.lambda0
         W = self.weight_model.W_effective
-        impulse = self.impulse_model.impulse
+        mu, tau = self.impulse_model.mu, self.impulse_model.tau
 
+        # lmbda_manual = np.zeros(N)
+        # impulse = self.impulse_model.impulse
+        # # Resample parents
+        # for n in xrange(N):
+        #     # First parent is just the background rate of this process
+        #     lmbda_manual[n] += lambda0[C[n]]
+        #
+        #     # Iterate backward from the most recent to compute probabilities of each parent spike
+        #     for par in xrange(n-1, -1, -1):
+        #         dt = S[n] - S[par]
+        #
+        #         # Since the spikes are sorted, we can stop if we reach a potential
+        #         # parent that occurred greater than dt_max in the past
+        #         if dt > dt_max:
+        #             break
+        #
+        #         Wparn = W[C[par], C[n]]
+        #         if Wparn > 0:
+        #             lmbda_manual[n] += Wparn * impulse(dt, C[par], C[n])
+
+        # Call cython function to evaluate instantaneous rate
+        from pyhawkes.internals.continuous_time_helpers import compute_rate_at_events
         lmbda = np.zeros(N)
-        # Resample parents
-        for n in xrange(N):
-            # First parent is just the background rate of this process
-            lmbda[n] += lambda0[C[n]]
+        compute_rate_at_events(S, C, dt_max, lambda0, W, mu, tau, lmbda)
 
-            # Iterate backward from the most recent to compute probabilities of each parent spike
-            for par in xrange(n-1, -1, -1):
-                dt = S[n] - S[par]
-
-                # Since the spikes are sorted, we can stop if we reach a potential
-                # parent that occurred greater than dt_max in the past
-                if dt > dt_max:
-                    break
-
-                Wparn = W[C[par], C[n]]
-                if Wparn > 0:
-                    lmbda[n] += Wparn * impulse(dt, C[par], C[n])
+        # assert np.allclose(lmbda_manual, lmbda)
 
         return lmbda
 
@@ -1562,6 +1574,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         return self.log_likelihood(data)
 
     def compute_rate(self, S, C, T, dt=1.0):
+        # TODO: Write a cythonized version of this
         # Compute rate for each process at intervals of dt
         t = np.concatenate([np.arange(0, T, step=dt), [T]])
         rate = np.zeros((t.size, self.K))
@@ -1601,6 +1614,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         Perform one iteration of the Gibbs sampling algorithm.
         :return:
         """
+        # import ipdb; ipdb.set_trace()
         # Update the parents.
         # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
         for p in self.data_list:

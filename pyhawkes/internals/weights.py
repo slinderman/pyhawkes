@@ -8,6 +8,10 @@ from pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Bernoulli, Gamma
 from pyhawkes.utils.utils import logistic, logit
 
+from pyhawkes.utils.profiling import line_profiled
+PROFILING = True
+
+
 class SpikeAndSlabGammaWeights(GibbsSampling):
     """
     Encapsulates the KxK Bernoulli adjacency matrix and the
@@ -551,7 +555,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
     def W_effective(self):
         return self.A * self.W
 
-    def _compute_weighted_impulses_at_events(self, data):
+    def _compute_weighted_impulses_at_events_manual(self, data):
         # Compute the instantaneous rate at the individual events
         # Sum over potential parents.
 
@@ -580,6 +584,17 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
 
         return lmbda
 
+    def _compute_weighted_impulses_at_events(self, data):
+        from pyhawkes.internals.continuous_time_helpers import \
+            compute_weighted_impulses_at_events
+
+        N, S, C, Z, dt_max = data.N, data.S, data.C, data.Z, self.model.dt_max
+        W = self.W
+        mu, tau = self.model.impulse_model.mu, self.model.impulse_model.tau
+        lmbda = np.zeros((N, self.K))
+        compute_weighted_impulses_at_events(S, C, Z, dt_max, W, mu, tau, lmbda)
+        return lmbda
+
     def _resample_A_given_W(self, data):
         """
         Resample A given W. This must be immediately followed by an
@@ -588,6 +603,11 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         """
         # Precompute weightedi impulse responses for each event
         lmbda_irs = [self._compute_weighted_impulses_at_events(d) for d in data]
+
+        # lmbda_irs_manual = [self._compute_weighted_impulses_at_events_manual(d) for d in data]
+        # for l1,l2 in zip(lmbda_irs_manual, lmbda_irs):
+        #     assert np.allclose(l1,l2)
+
         lmbda0 = self.model.lambda0
 
         def _log_likelihood_single_process(k):
@@ -600,21 +620,21 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
                 ll -= self.W_effective[:,k].dot(Ns)
 
                 # + \sum_n log(lambda(s_n))
-                ll += np.log(lmbda0[k] + np.sum(self.A[:,k][:,None] * lmbda_ir[:,C==k], axis=0)).sum()
+                ll += np.log(lmbda0[k] + np.sum(self.A[:,k][:,None] * lmbda_ir[C==k,:], axis=0)).sum()
             return ll
 
         # TODO: Write a Cython function to sample this more efficiently
         p = self.network.P
         for k1 in xrange(self.K):
-            sys.stdout.write('.')
-            sys.stdout.flush()
+            # sys.stdout.write('.')
+            # sys.stdout.flush()
             for k2 in xrange(self.K):
                 # Handle deterministic cases
-                if p[k1,k2] == 0:
+                if p[k1,k2] == 0.:
                     self.A[k1,k2] = 0
                     continue
 
-                if p[k1,k2] == 1.0:
+                if p[k1,k2] == 1.:
                     self.A[k1,k2] = 1
                     continue
 
@@ -632,8 +652,9 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
                 Z   = logsumexp([lp0, lp1])
 
                 self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
-        sys.stdout.write('\n')
-        sys.stdout.flush()
+
+        # sys.stdout.write('\n')
+        # sys.stdout.flush()
 
     def resample_W_given_A_and_z(self, N, Zsum):
         """
@@ -659,7 +680,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         Zsum = np.zeros((self.K, self.K))
         for d in data:
             Zsum += d.weight_ss
-            N += d.N
+            N += d.Ns
 
         # Resample W | A, Z
         self.resample_W_given_A_and_z(N, Zsum)

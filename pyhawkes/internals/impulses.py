@@ -410,7 +410,7 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
             ss += d.compute_imp_suff_stats()
 
         n = ss[0]
-        xbar = ss[1] / ss[0]
+        xbar = ss[1] / (n + 1e-32)
         xvar = ss[2]
 
         alpha_post = alpha_0 + n / 2.
@@ -418,8 +418,11 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
         beta_post += 0.5 * lmbda_0 * n / (lmbda_0 + n) * (xbar-mu_0)**2
 
         lmbda_post = lmbda_0 + n
-        mu_post = (lmbda_0 * mu_0 + n * xbar) / (lmbda_0*n)
+        mu_post = (lmbda_0 * mu_0 + n * xbar) / (lmbda_0 + n)
 
         from pyhawkes.utils.utils import sample_nig
         self.mu, self.tau = \
             sample_nig(mu_post, lmbda_post, alpha_post, beta_post)
+
+        assert np.isfinite(self.mu).all()
+        assert np.isfinite(self.tau).all()
