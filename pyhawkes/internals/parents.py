@@ -111,7 +111,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             ss[0,k] = Zk[:,0].sum()
         return ss
 
-    def compute_weight_ss(self):
+    def compute_approx_weight_ss(self):
         K, B = self.K, self.B
         ss = np.zeros((2, self.K, self.K))
         for k2, Zk in enumerate(self.Z):
@@ -119,6 +119,28 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             ss[0,:,k2] = Zk[:,1:].sum(0).reshape((K,B)).sum(1)
             # ss[1,k1,k2] = N[k1] (to be multiplied by A)
             ss[1,:,k2] = self.Ns
+        return ss
+
+    def compute_weight_ss(self):
+        """
+        For comparison, compute the exact sufficient statistics for ss[1,:,:]
+        :param data: a TxK array of event counts assigned to the background process
+        :return:
+        """
+        K, B, F = self.K, self.B, self.F
+        A = self.model.weight_model.A
+        beta = self.model.impulse_model.g
+        ss = np.zeros((2, self.K, self.K))
+
+        for k2, Zk in enumerate(self.Z):
+            # ss[0,k1,k2] = \sum_t \sum_b Z_{t,k2}^{k1,b}
+            ss[0,:,k2] = Zk[:,1:].sum(0).reshape((K,B)).sum(1)
+
+            # ss[1,k1,k2] = A_k1,k2 * \sum_t \sum_b F[t,k1,b] * beta[k1,k2,b]
+            for k1 in range(self.K):
+                for k2 in range(self.K):
+                    ss[1,k1,k2] = A[k1,k2] * (F[:,k1,:].dot(beta[k1,k2,:])).sum()
+
         return ss
 
     def compute_ir_ss(self):
