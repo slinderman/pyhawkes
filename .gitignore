@@ -52,3 +52,8 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# Results
+data/synthetic/results*
+data/**/*.tgz
+data/chalearn/small/*.pkl.gz

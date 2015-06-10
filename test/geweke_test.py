@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
 from scipy.stats import gamma, beta
+from pybasicbayes.util.text import progprint_xrange
 
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelGammaMixture
 
-def geweke_test():
+if __name__ == "__main__":
     """
     Create a discrete time Hawkes model and generate from it.
 
@@ -16,7 +16,9 @@ def geweke_test():
     dt_max = 3.0
     network_hypers = {'c': np.array([0], dtype=np.int),
                       'p': 0.5, 'kappa': 3.0, 'v': 15.0}
+    weight_hypers = {"kappa_0": 3.0, "nu_0": 15.0}
     model = DiscreteTimeNetworkHawkesModelGammaMixture(K=1, dt=dt, dt_max=dt_max,
+                                                       weight_hypers=weight_hypers,
                                                        network_hypers=network_hypers)
     model.generate(T=T)
 
@@ -24,9 +26,7 @@ def geweke_test():
     N_samples = 10000
     samples = []
     lps = []
-    for itr in xrange(N_samples):
-        if itr % 10 == 0:
-            print "Iteration: ", itr
+    for itr in progprint_xrange(N_samples, perline=50):
         # Resample the model
         model.resample_model(resample_network=False)
         samples.append(model.copy_sample())
@@ -90,10 +90,10 @@ def geweke_test():
 
     plt.figure()
     Aeq0 = A_samples[:,0,0] == 0
-    p_W1 = gamma(model.weight_model.kappa_0, scale=1./model.weight_model.nu_0)
+    p_W0 = gamma(model.weight_model.kappa_0, scale=1./model.weight_model.nu_0)
     _, bins, _ = plt.hist(W_samples[Aeq0,0,0], bins=20, alpha=0.5, normed=True)
     bincenters = 0.5*(bins[1:]+bins[:-1])
-    plt.plot(bincenters, p_W1.pdf(bincenters), 'r--', linewidth=1)
+    plt.plot(bincenters, p_W0.pdf(bincenters), 'r--', linewidth=1)
     plt.xlabel('W')
     plt.ylabel('p(W | A=0)')
 
@@ -112,6 +112,3 @@ def geweke_test():
         plt.ylabel('p(g_%d)' % b)
 
     plt.show()
-
-
-geweke_test()

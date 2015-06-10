@@ -18,7 +18,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
     KxK gamma weight matrix. Implements Gibbs sampling given
     the parent variables.
     """
-    def __init__(self, K, network):
+    def __init__(self, model):
         """
         Initialize the spike-and-slab gamma weight model with either a
         network object containing the prior or rho, alpha, and beta to
@@ -30,9 +30,10 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         :param alpha:   Gamma shape parameter
         :param beta:    Gamma scale parameter
         """
-        self.K = K
+        self.model = model
+        self.K = model.K
         # assert isinstance(network, GibbsNetwork), "network must be a GibbsNetwork object"
-        self.network = network
+        self.network = model.network
 
 
         # Initialize parameters A and W
@@ -70,8 +71,6 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                (kappa-1) * np.log(W) - v * W
         ll += (A*lp_W).sum()
 
-        print "LL(AW):\t", ll
-
         return ll
 
     def log_probability(self):
@@ -94,7 +93,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         raise NotImplementedError()
 
 
-    def _resample_A_given_W(self, model):
+    def _resample_A_given_W(self):
         """
         Resample A given W. This must be immediately followed by an
         update of z | A, W.
@@ -106,17 +105,17 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
             # sys.stdout.write('.')
             # sys.stdout.flush()
             for k2 in xrange(self.K):
-                if model is None:
+                if self.model is None:
                     ll0 = 0
                     ll1 = 0
                 else:
                     # Compute the log likelihood of the events given W and A=0
                     self.A[k1,k2] = 0
-                    ll0 = model._log_likelihood_single_process(k2)
+                    ll0 = self.model._log_likelihood_single_process(k2)
 
                     # Compute the log likelihood of the events given W and A=1
                     self.A[k1,k2] = 1
-                    ll1 = model._log_likelihood_single_process(k2)
+                    ll1 = self.model._log_likelihood_single_process(k2)
 
                 # Sample A given conditional probability
                 lp0 = ll0 + np.log(1.0 - p[k1,k2])
@@ -165,27 +164,23 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
 
         return ss
 
-    def resample_W_given_A_and_z(self, N, Z, F, beta):
+    def resample_W_given_A_and_z(self, data=[]):
         """
         Resample the weights given A and z.
         :return:
         """
-        assert (N is None and Z is None) \
-               or (isinstance(Z, np.ndarray)
-                   and Z.ndim == 4
-                   and Z.shape[1] == self.K
-                   and Z.shape[2] == self.K
-                   and isinstance(N, np.ndarray)
-                   and N.shape == (self.K,)), \
-            "N must be a K-vector and Z must be a TxKxKxB array of parent counts"
+        ss = np.zeros((2, self.K, self.K)) + \
+             sum([d.compute_weight_ss() for d in data])
 
-        ss = self._get_suff_statistics(N, Z)
-        kappa_post = self.network.kappa + ss[0,:]
-        v_post  = self.network.V + ss[1,:]
+        # Account for whether or not a connection is present in N
+        ss[1] *= self.A
 
-        self.W = np.array(np.random.gamma(kappa_post, 1.0/v_post)).reshape((self.K, self.K))
+        kappa_post = self.network.kappa + ss[0]
+        v_post  = self.network.V + ss[1 ]
 
-    def resample(self, model=None, N=None, Z=None, F=None, beta=None):
+        self.W = np.atleast_1d(np.random.gamma(kappa_post, 1.0/v_post)).reshape((self.K, self.K))
+
+    def resample(self, data=[]):
         """
         Resample A and W given the parents
         :param N:   A length-K vector specifying how many events occurred
@@ -193,17 +188,17 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         :param Z:   A TxKxKxB array of parent assignment counts
         """
         # Resample W | A
-        self.resample_W_given_A_and_z(N, Z, F, beta)
+        self.resample_W_given_A_and_z(data)
 
         # Resample A given W
-        self._resample_A_given_W(model)
+        self._resample_A_given_W()
 
 class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     """
     For variational inference we approximate the spike at zero with a smooth
     Gamma distribution that has infinite density at zero.
     """
-    def __init__(self, K, network, kappa_0=0.1, nu_0=10.0):
+    def __init__(self, model, kappa_0=0.1, nu_0=10.0):
         """
         Initialize the spike-and-slab gamma weight model with either a
         network object containing the prior or rho, alpha, and beta to
@@ -215,10 +210,12 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         :param kappa_0:     Shape for gamma spike (small)
         :param nu_0:        Scale for gamma spike (large)
         """
-        self.K = K
-        assert network is not None, "A network object must be given"
+        self.model = model
+        self.network = model.network
+        self.K = model.K
 
-        self.network = network
+        self.network = model.network
+        assert model.network is not None, "A network object must be given"
 
         # Save gamma parameters
         self.kappa_0 = kappa_0
@@ -234,7 +231,7 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         # Variational weight distribution given that there is an edge
         self.mf_kappa_1 = self.network.kappa * np.ones((self.K, self.K))
         # self.mf_v_1 = network.alpha / network.beta * np.ones((self.K, self.K))
-        self.mf_v_1 = network.V * np.ones((self.K, self.K))
+        self.mf_v_1 = self.network.V * np.ones((self.K, self.K))
 
         # Initialize parameters A and W
         self.A = np.ones((self.K, self.K))
@@ -443,25 +440,9 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
         self.W = (1-self.A) * np.random.gamma(self.mf_kappa_0, 1.0/self.mf_v_0)
         self.W += self.A * np.random.gamma(self.mf_kappa_1, 1.0/self.mf_v_1)
 
-    # Gibbs sampling
-    def _get_suff_statistics(self, N, Z):
-        """
-        Compute the sufficient statistics from the data set.
-        :param data: a TxK array of event counts assigned to the background process
-        :return:
-        """
-        ss = np.zeros((2, self.K, self.K))
-
-        if N is not None and Z is not None:
-            # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
-            ss[0,:,:] = Z.sum(axis=(0,3))
-            # ss[1,k1,k2] = N[k1]
-            ss[1,:,:] = N[:,None]
-
-        return ss
-
-    def resample(self, N=None, Z=None):
-        ss = self._get_suff_statistics(N,Z)
+    def resample(self, data=[]):
+        ss = np.zeros((2, self.K, self.K)) + \
+             sum([d.compute_weight_ss() for d in data])
 
         # First resample A from its marginal distribution after integrating out W
         self._resample_A(ss)

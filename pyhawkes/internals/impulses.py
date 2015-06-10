@@ -11,7 +11,7 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
     vectors of length B for each pair of processes, k and k', which
     we denote $\bbeta^{(k,k')}. This class contains all K^2 vectors.
     """
-    def __init__(self, K, B, gamma=None):
+    def __init__(self, model, gamma=None):
         """
         Initialize a set of Dirichlet weight vectors.
         :param K:     The number of processes in the model.
@@ -21,18 +21,18 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         """
         # assert isinstance(model, DiscreteTimeNetworkHawkesModel), \
         #        "model must be a DiscreteTimeNetworkHawkesModel"
-        # self.model = model
-        self.K = K
-        self.B = B
+        self.model = model
+        self.K = model.K
+        self.B = model.B
 
         if gamma is not None:
             assert np.isscalar(gamma) or \
                    (isinstance(gamma, np.ndarray) and
-                    gamma.shape == (B,)), \
+                    gamma.shape == (self.B,)), \
                 "gamma must be a scalar or a length B vector"
 
             if np.isscalar(gamma):
-                self.gamma = gamma * np.ones(B)
+                self.gamma = gamma * np.ones(self.B)
             else:
                 self.gamma = gamma
         else:
@@ -70,36 +70,13 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
     def log_probability(self):
         return self.log_likelihood(self.g)
 
-    def _get_suff_statistics(self, data):
-        """
-        Compute the sufficient statistics from the data set.
-        :param data: a TxK array of event counts assigned to the background process
-        :return:
-        """
-        # The only sufficient statistic is the KxKxB array of event counts assigned
-        # to each of the basis functions
-        if data is not None:
-            ss = data.sum(axis=0)
-        else:
-            ss = np.zeros((self.K, self.K, self.B))
-
-        return ss
-
-    def resample(self, data=None):
+    def resample(self, data=[]):
         """
         Resample the
-        :param data: a TxKxKxB array of parents. T time bins, K processes,
-                     K parent processes, and B bases for each parent process.
         """
-        assert data is None or \
-               (isinstance(data, np.ndarray) and
-                data.ndim == 4 and
-                data.shape[1] == data.shape[2] == self.K
-                and data.shape[3] == self.B), \
-            "Data must be a TxKxKxB array of parents"
+        ss = np.zeros((self.K, self.K, self.B)) + \
+             sum([d.compute_ir_ss() for d in data])
 
-
-        ss = self._get_suff_statistics(data)
         for k1 in xrange(self.K):
             for k2 in xrange(self.K):
                 alpha_post = self.gamma + ss[k1, k2, :]

@@ -89,14 +89,14 @@ def fit_continuous_time_model_gibbs(S_ct, C_ct, N_samples=100):
 if __name__ == "__main__":
     # run_time_vs_bias()
     # biases = np.logspace(-1,1, num=10)
-    res_file = os.path.join("results", "run_time_vs_rate.pkl")
+    res_file = os.path.join("results", "run_time_vs_rate_2.pkl")
 
     if os.path.exists(res_file):
         print "Loading results from ", res_file
         with open(res_file, "r") as f:
             events_per_bin, dt_times, ct_times = cPickle.load(f)
     else:
-        biases = np.linspace(10**-1,10**1, num=10)
+        biases = np.linspace(10**-1,3**1, num=5)
         N_runs_per_bias = 5
         N_samples = 100
 

@@ -13,7 +13,7 @@ from pybasicbayes.models import ModelGibbsSampling, ModelMeanField
 from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
-from pyhawkes.internals.parents import SpikeAndSlabParents, GammaMixtureParents
+from pyhawkes.internals.parents import DiscreteTimeParents
 from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockModelFixedSparsity
 from pyhawkes.utils.basis import CosineBasis
 
@@ -536,7 +536,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
     _weight_class           = None
     _default_weight_hypers  = {}
 
-    _parent_class           = None
+    _parent_class           = DiscreteTimeParents
 
     _network_class          = None
     _default_network_hypers = {}
@@ -557,6 +557,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.dt_max = dt_max
         self.B      = B
 
+        # Initialize the data list to empty
+        self.data_list = []
+
         # Initialize the basis
         if basis is not None:
             # assert basis.B == B
@@ -576,7 +579,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             # Use the given basis hyperparameters
             self.bkgd_hypers = copy.deepcopy(self._default_bkgd_hypers)
             self.bkgd_hypers.update(bkgd_hypers)
-            self.bias_model = self._bkgd_class(self.K, self.dt, **self.bkgd_hypers)
+            self.bias_model = self._bkgd_class(self, **self.bkgd_hypers)
 
         # Initialize the impulse response model
         if impulse is not None:
@@ -587,8 +590,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             # Use the given basis hyperparameters
             self.impulse_hypers = copy.deepcopy(self._default_impulse_hypers)
             self.impulse_hypers.update(impulse_hypers)
-            self.impulse_model = self._impulse_class(self.K, self.B,
-                                                     **self.impulse_hypers)
+            self.impulse_model = self._impulse_class(self, **self.impulse_hypers)
 
 
         # Initialize the network model
@@ -617,11 +619,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         else:
             self.weight_hypers = copy.deepcopy(self._default_weight_hypers)
             self.weight_hypers.update(weight_hypers)
-            self.weight_model = self._weight_class(self.K, self.network,
-                                                   **self.weight_hypers)
+            self.weight_model = self._weight_class(self, **self.weight_hypers)
 
-        # Initialize the data list to empty
-        self.data_list = []
 
     def initialize_with_standard_model(self, standard_model):
         """
@@ -710,12 +709,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             assert isinstance(F, np.ndarray) and F.shape == (T, self.K, self.B), \
                 "F must be a filtered event count matrix"
         else:
-            print "Convolving with basis"
             F = self.basis.convolve_with_basis(S)
-
-        # # Check that \sum_t F[t,k,b] ~= Nk / dt
-        # Fsum = F.sum(axis=0)
-        # print "F_err:  ", Fsum - N/self.dt
 
         # If minibatchsize is not None, add minibatches of data
         if minibatchsize is not None:
@@ -724,28 +718,21 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                 T_mb = end - offset
                 S_mb = S[offset:end,:]
                 F_mb = F[offset:end,:]
-                N_mb = np.atleast_1d(S_mb.sum(axis=0))
 
                 # Instantiate parent object for this minibatch
-                parents = self._parent_class(T_mb, self.K, self.B, S_mb, F_mb)
+                parents = self._parent_class(self, T_mb, S_mb, F_mb)
 
                 # Add minibatch to the data list
-                self.data_list.append((S_mb, N_mb, F_mb, parents))
+                self.data_list.append(parents)
 
         else:
             # Instantiate corresponding parent object
-            parents = self._parent_class(T, self.K, self.B, S, F)
-
-            # TODO: Remove this resample as it allocates memory
-            # parents.resample(self.bias_model, self.weight_model, self.impulse_model)
-
-            # Get the event count
-            N = np.atleast_1d(S.sum(axis=0))
+            parents = self._parent_class(self, T, S, F)
 
             # Add to the data list
-            self.data_list.append((S, N, F, parents))
+            self.data_list.append(parents)
 
-    def check_stability(self):
+    def check_stability(self, verbose=False):
         """
         Check that the weight matrix is stable
 
@@ -758,11 +745,10 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             from scipy.sparse.linalg import eigs
             maxeig = eigs(self.weight_model.W_effective, k=1)[0]
 
-        print "Max eigenvalue: ", maxeig
-        if maxeig < 1.0:
-            return True
-        else:
-            return False
+        if verbose:
+            print "Max eigenvalue: ", maxeig
+
+        return maxeig < 1.0
 
     def copy_sample(self):
         """
@@ -802,8 +788,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         G = np.tensordot(self.basis.basis, self.impulse_model.g, axes=([1], [2]))
         L = self.basis.L
         assert G.shape == (L,self.K, self.K)
-        H = self.weight_model.W_effective[None,:,:] * \
-            G
+        H = self.weight_model.W_effective[None,:,:] * G
 
         # Transpose H so that it is faster for tensor mult
         H = np.transpose(H, axes=[0,2,1])
@@ -823,7 +808,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             # Compute change in rate via tensor product
             dR = np.tensordot( H, S[t,:], axes=([2, 0]))
-            R[t+1:t+L+1,:] += dR
+            R[t:t+L,:] += dR
 
             # For each sampled event, add a weighted impulse response to the rate
             # for k in xrange(self.K):
@@ -931,8 +916,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         else:
             assert len(self.data_list) > index, "Dataset %d does not exist!" % index
-            S, _, F, _ = self.data_list[index]
-            T,K = S.shape
+            data = self.data_list[index]
+            T,K,S,F = data.T, data.K, data.S, data.F
 
         if proc is None:
             # Compute the rate
@@ -1017,7 +1002,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         # Get the likelihood of the datasets
         for ind in indices:
-            S,_,_,_  = self.data_list[ind]
+            S = self.data_list[ind].S
             R = self.compute_rate(index=ind)
             ll += self._poisson_log_likelihood(S,R)
 
@@ -1032,9 +1017,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         ll = 0
 
         # Get the likelihood of the datasets
-        for ind,(S,_,_,_)  in enumerate(self.data_list):
+        for ind, data in enumerate(self.data_list):
             Rk = self.compute_rate(index=ind, proc=k)
-            ll += self._poisson_log_likelihood(S[:,k], Rk)
+            ll += self._poisson_log_likelihood(data.S[:,k], Rk)
 
         return ll
 
@@ -1054,16 +1039,16 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
     _weight_class           = SpikeAndSlabGammaWeights
     _default_weight_hypers  = {}
-    _parent_class           = SpikeAndSlabParents
 
     _network_class          = StochasticBlockModel
     _default_network_hypers = {'C': 1, 'c': None,
                                'p': None, 'tau1': 1.0, 'tau0': 1.0,
                                'allow_self_connections': True,
                                'kappa': 1.0,
-                               'v': None, 'alpha': 1.0, 'beta': 1.0,
+                               'v': None, 'alpha': 5.0, 'beta': 1.0,
                                'pi': 1.0}
 
+    @line_profiled
     def resample_model(self):
         """
         Perform one iteration of the Gibbs sampling algorithm.
@@ -1071,33 +1056,28 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
         """
         # Update the parents.
         # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
-        for _,_,_,p in self.data_list:
-            p.resample(self.bias_model, self.weight_model, self.impulse_model)
+        for p in self.data_list:
+            p.resample()
 
         # Update the bias model given the parents assigned to the background
-        self.bias_model.resample(
-            data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
+        self.bias_model.resample(self.data_list)
 
         # Update the impulse model given the parents assignments
-        self.impulse_model.resample(
-            data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+        # self.impulse_model.resample(self.data_list)
 
         # Update the network model
-        self.network.resample(data=(self.weight_model.A, self.weight_model.W))
+        # self.network.resample(data=(self.weight_model.A, self.weight_model.W))
 
         # Update the weight model given the parents assignments
-        self.weight_model.resample(
-            model=self,
-            N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
-            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+        self.weight_model.resample(self.data_list)
 
     def initialize_with_standard_model(self, standard_model):
         super(DiscreteTimeNetworkHawkesModelSpikeAndSlab, self).\
             initialize_with_standard_model(standard_model)
 
         # Update the parents.
-        for _,_,_,p in self.data_list:
-            p.resample(self.bias_model, self.weight_model, self.impulse_model)
+        for d in self.data_list:
+            d.resample()
 
 
 class DiscreteTimeNetworkHawkesModelSpikeAndSlabFixedSparsity(DiscreteTimeNetworkHawkesModelSpikeAndSlab):
@@ -1114,8 +1094,6 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
     _weight_class           = GammaMixtureWeights
     _default_weight_hypers  = {'kappa_0': 0.1, 'nu_0': 1000.0}
 
-    _parent_class           = GammaMixtureParents
-
     # This model uses an SBM with beta-distributed sparsity levels
     _network_class          = StochasticBlockModel
     _default_network_hypers = {'C': 1, 'c': None,
@@ -1131,21 +1109,17 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         :return:
         """
         # Update the parents.
-        for _,_,_,p in self.data_list:
-            p.resample(self.bias_model, self.weight_model, self.impulse_model)
+        for p in self.data_list:
+            p.resample()
 
         # Update the bias model given the parents assigned to the background
-        self.bias_model.resample(
-            data=np.concatenate([p.Z0 for (_,_,_,p) in self.data_list]))
+        self.bias_model.resample(self.data_list)
 
         # Update the impulse model given the parents assignments
-        self.impulse_model.resample(
-            data=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+        self.impulse_model.resample(self.data_list)
 
         # Update the weight model given the parents assignments
-        self.weight_model.resample(
-            N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
-            Z=np.concatenate([p.Z for (_,_,_,p) in self.data_list]))
+        self.weight_model.resample(self.data_list)
 
         # Update the network model
         if resample_network:
@@ -1418,8 +1392,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
                "C must be a N array of parent indices"
 
         # Instantiate corresponding parent object
-        from pyhawkes.internals.parents import SpikeAndSlabContinuousTimeParents
-        parents = SpikeAndSlabContinuousTimeParents(self, S, C, T, self.K, self.dt_max)
+        from pyhawkes.internals.parents import ContinuousTimeParents
+        parents = ContinuousTimeParents(self, S, C, T, self.K, self.dt_max)
 
         # Add to the data list
         self.data_list.append(parents)

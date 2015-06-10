@@ -8,7 +8,7 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
     """
     Encapsulates the vector of K gamma-distributed bias variables.
     """
-    def __init__(self, K, dt, alpha, beta):
+    def __init__(self, model, alpha, beta):
         """
         Initialize a bias vector for each of the K processes.
 
@@ -17,8 +17,9 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
         :param alpha:   Shape parameter of the gamma prior
         :param beta:    Scale parameter of the gamma prior
         """
-        self.K = K
-        self.dt = dt
+        self.model = model
+        self.K = model.K
+        self.dt = model.dt
         self.alpha = alpha
         self.beta = beta
 
@@ -61,19 +62,15 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
 
         return ss
 
-    def resample(self,data=[]):
+    def resample(self, data=[]):
         """
         Resample the background rate from its gamma conditional distribution.
 
         :param data: Z0, a TxK matrix of events assigned to the background.
         """
+        ss = np.zeros((2, self.K)) + \
+             sum([d.compute_bkgd_ss() for d in data])
 
-        assert len(data) == 0 or (isinstance(data, np.ndarray)
-                                  and data.ndim == 2
-                                  and data.shape[1] == self.K), \
-            "Data must be a TxK array of event counts assigned to the background"
-
-        ss = self._get_suff_statistics(data)
         alpha_post = self.alpha + ss[0,:]
         beta_post  = self.beta + ss[1,:]
 

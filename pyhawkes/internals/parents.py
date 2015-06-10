@@ -1,19 +1,22 @@
 import numpy as np
 
-from pybasicbayes.distributions import BayesianDistribution, GibbsSampling, MeanField
-from pyhawkes.internals.parent_updates import mf_update_Z, resample_Z
+from pybasicbayes.distributions import GibbsSampling, MeanField
+from gslrandom import multinomial_par, multinomial
+
 from pyhawkes.utils.utils import initialize_pyrngs
+from pyhawkes.internals.parent_updates import mf_update_Z
+from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
 
 from pyhawkes.utils.profiling import line_profiled
 PROFILING = True
 
 
-class _ParentsBase(BayesianDistribution):
+class DiscreteTimeParents(GibbsSampling, MeanField):
     """
     Encapsulates the TxKxKxB array of parent multinomial distributed
     parent variables.
     """
-    def __init__(self, T, K, B, S, F):
+    def __init__(self, model, T, S, F):
         """
         Initialize a parent array Z of size TxKxKxB to model the
         event parents for data matrix S (TxK) which has been filtered
@@ -28,11 +31,106 @@ class _ParentsBase(BayesianDistribution):
         :param S: Data matrix (TxK)
         :param F: Filtered data matrix (TxKxB)
         """
+        self.model = model
+        self.dt = model.dt
+        self.K = model.K
+        self.B = model.B
+
+        # TODO: Remove dependencies on S and F
         self.T = T
-        self.K = K
-        self.B = B
         self.S = S
         self.F = F
+
+        # Save sparse versions of S and F
+        self.ts = []
+        self.Ts = []
+        self.Ns = []
+        self.Ss = []
+        self.Fs = []
+        for k in xrange(self.K):
+            # Find the rows where S[:,k] is nonzero
+                tk = np.where(S[:,k])[0]
+                self.ts.append(tk)
+                self.Ts.append(len(tk))
+                self.Ss.append(S[tk,k].astype(np.uint32))
+                self.Ns.append(S[tk,k].sum())
+                self.Fs.append(F[tk])
+
+
+        # The base class handles the parent variables
+        # We use a sparse representation that only considers times (rows)
+        # where there is a spike
+        self._Z = None
+        self._EZ = None
+
+        # Initialize GSL RNGs for resampling Z
+        self.pyrngs = initialize_pyrngs()
+
+    @property
+    def Z(self):
+        if self._Z is None:
+            self._Z = []
+            for Tk in self.Ts:
+                self._Z.append(np.zeros((Tk, 1+self.K*self.B), dtype=np.uint32))
+
+        return self._Z
+
+    @property
+    def EZ(self):
+        if self._EZ is None:
+            self._EZ = []
+            for Tk in self.Ts:
+                self._EZ.append(np.zeros((Tk, 1+self.K*self.B)))
+
+        return self._EZ
+
+    # Debugging helper functions
+    def _check_Z(self):
+        """
+        Check that Z adds up to the correct amount
+        :return:
+        """
+        for Sk, Zk in zip(self.Ss, self.Z):
+            assert (Sk == Zk.sum(1)).all()
+
+    def _check_EZ(self):
+        """
+        Check that Z adds up to the correct amount
+        :return:
+        """
+        for Sk, Zk in zip(self.Ss, self.Z):
+            assert np.allclose(Sk, Zk.sum(1))
+
+    # Compute sufficient statistics
+    def compute_bkgd_ss(self):
+        # \sum_{t} z_{t,k}^{0} and T * dt
+        ss = np.zeros((2, self.K))
+
+        ss[1,:] = self.T * self.dt
+        for k,Zk in enumerate(self.Z):
+            ss[0,k] = Zk[:,0].sum()
+        return ss
+
+    def compute_weight_ss(self):
+        K, B = self.K, self.B
+        ss = np.zeros((2, self.K, self.K))
+        for k2, Zk in enumerate(self.Z):
+            # ss[0,k1,k2] = \sum_t \sum_b Z_{t,k2}^{k1,b}
+            ss[0,:,k2] = Zk[:,1:].sum(0).reshape((K,B)).sum(1)
+            # ss[1,k1,k2] = N[k1] (to be multiplied by A)
+            ss[1,:,k2] = self.Ns
+        return ss
+
+    def compute_ir_ss(self):
+        """
+        Compute the sufficient statistics for the impulse responses
+        """
+        K, B = self.K, self.B
+        # ss[k1,k2,b] = \sum_t z_{t,k2}^{k1,b}
+        ss = np.zeros((self.K, self.K, self.B))
+        for k2, Zk in enumerate(self.Z):
+            ss[:,k2,:] = Zk[:,1:].sum(0).reshape((K,B))
+        return ss
 
     def log_likelihood(self, x):
         pass
@@ -40,107 +138,35 @@ class _ParentsBase(BayesianDistribution):
     def rvs(self, data=[]):
         raise NotImplementedError("No prior for parents to sample from.")
 
-
-class SpikeAndSlabParents(_ParentsBase, GibbsSampling):
-    """
-    Parent distribution with Gibbs sampling
-    """
-    def __init__(self, T, K, B, S, F):
-        super(SpikeAndSlabParents, self).__init__(T, K, B, S, F)
-
-        # Initialize parent arrays for Gibbs sampling
-        # Attribute all events to the background.
-        self.Z  = np.zeros((T,K,K,B), dtype=np.int32)
-        self.Z0 = np.copy(self.S).astype(np.int32)
-
-        # Initialize GSL RNGs
-        self.pyrngs = initialize_pyrngs()
-
-    def _check_Z(self):
-        """
-        Check that Z adds up to the correct amount
-        :return:
-        """
-        Zsum = self.Z0 + self.Z.sum(axis=(1,3))
-        # assert np.allclose(self.S, Zsum), "_check_Z failed. Zsum does not add up to S!"
-        if not np.allclose(self.S, Zsum):
-            print "_check_Z failed. Zsum does not add up to S!"
-            import pdb; pdb.set_trace()
-
-    def _resample_Z_python(self, bias_model, weight_model, impulse_model):
+    def _resample_Z_python(self):
         """
         Resample the parents in python.
         """
+        bias_model, weight_model, impulse_model = \
+            self.model.bias_model, self.model.weight_model, self.model.impulse_model
+
         # TODO: This can all be done with multinomial_par!
-        for t in xrange(self.T):
-            for k2 in xrange(self.K):
-                # If there are no events then there's nothing to do
-                if self.S[t, k2] == 0:
-                    continue
+        for k2, (Sk, Fk, Zk) in enumerate(zip(self.Ss, self.Fs, self.Z)):
+            for st,ft,zt in zip(Sk, Fk, Zk):
+                assert st > 0
 
                 # Compute the normalized probability vector for the background rate and
                 # each of the basis functions for every other process
-                p0  = np.atleast_1d(bias_model.lambda0[k2])         # (1,)
-                Ak2 = weight_model.A[:,k2]                          # (K,)
-                Wk2 = weight_model.W[:,k2]                          # (K,)
-                Gk2 = impulse_model.g[:,k2,:]                    # (K,B)
-                Ft  =  self.F[t,:,:]                                # (K,B)
-                pkb = Ft * Ak2[:,None] * Wk2[:,None] * Gk2
+                p = np.zeros(1 + self.K * self.B)
+                p[0]  = bias_model.lambda0[k2]                  # Background
+                Wk2 = weight_model.W_effective[:,k2]            # (K,)
+                Gk2 = impulse_model.g[:,k2,:]                   # (K,B)
+                p[1:] = (ft *  Wk2[:,None] * Gk2).ravel()
 
-                assert pkb.shape == (self.K, self.B)
-
-                # Combine the probabilities into a normalized vector of length KB+1
-                p = np.concatenate([p0, pkb.reshape((self.K*self.B,))])
+                # Normalize
                 p = p / p.sum()
 
                 # Sample a multinomial distribution to assign events to parents
-                parents = np.random.multinomial(self.S[t, k2], p)
+                zt[:] = np.random.multinomial(st, p)
 
-                # Copy the parents back into Z
-                self.Z0[t,k2] = parents[0]
-                self.Z[t,:,k2,:] = parents[1:].reshape((self.K, self.B))
-
-        # DEBUG
         self._check_Z()
 
-    def _resample_Z_gsl(self, bias_model, weight_model, impulse_model):
-        """
-        Resample the parents in using gslrandom
-        """
-        from gslrandom import multinomial_par
-        S, T, K, B, F = self.S, self.T, self.K, self.B, self.F
-        # Make a big matrix of size T x (K*B + 1)
-        P = np.empty((self.T, 1+self.K * self.B))
-        for k2 in xrange(self.K):
-            P[:,0] = bias_model.lambda0[k2]
-
-            Ak2 = np.repeat(weight_model.A[:,k2], B)
-            Wk2 = np.repeat(weight_model.W[:,k2], B)
-            Gk2 = impulse_model.g[:,k2,:].reshape((K*B,), order="C")
-            Fk2 = F.reshape((T,K*B))
-            P[:,1:] = Ak2 * Wk2 * Gk2 * Fk2
-
-            # Sample parents from P with counts S[:,k2]
-            Z_buffer = np.empty((self.T, 1+self.K * self.B), dtype=np.uint32)
-            multinomial_par(self.pyrngs, self.S[:,k2].astype(np.uint32), P, Z_buffer)
-
-            # Copy the parents back into Z
-            self.Z0[:,k2] = Z_buffer[:,0]
-            self.Z[:,:,k2,:] = Z_buffer[:,1:].reshape((T,K,B), order="C")
-
-        # DEBUG
-        # self._check_Z()
-
-    def _resample_Z_cython(self, bias_model, weight_model, impulse_model):
-        # Call cython function to resample parents
-        lambda0 = bias_model.lambda0
-        W = weight_model.A * weight_model.W
-        # W = weight_model.W
-        g = impulse_model.g
-        F = self.F
-        resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
-
-    def resample(self, bias_model, weight_model, impulse_model):
+    def _resample_Z_gsl(self, data=[]):
         """
         Resample the parents given the bias_model, weight_model, and impulse_model.
 
@@ -149,56 +175,33 @@ class SpikeAndSlabParents(_ParentsBase, GibbsSampling):
         :param impulse_model:
         :return:
         """
+        bias_model, weight_model, impulse_model = \
+            self.model.bias_model, self.model.weight_model, self.model.impulse_model
+        K, B = self.K, self.B
+        # Make a big matrix of size T x (K*B + 1)
+        for k2, (Sk, Fk, Tk, Zk) in enumerate(zip(self.Ss, self.Fs, self.Ts, self.Z)):
+            P = np.zeros((Tk, 1+self.K * self.B))
+            P[:,0] = bias_model.lambda0[k2]
 
-        # Resample the parents in python
-        # self._resample_Z_python(bias_model, weight_model, impulse_model)
-        # self._resample_Z_cython(bias_model, weight_model, impulse_model)
-        self._resample_Z_gsl(bias_model, weight_model, impulse_model)
+            Wk2 = np.repeat(weight_model.W_effective[:,k2], B)
+            Gk2 = impulse_model.g[:,k2,:].reshape((K*B,), order="C")
+            P[:,1:] = Wk2 * Gk2 * Fk.reshape((Tk, K*B))
 
-        self._check_Z()
+            # Normalize the rows
+            P = P / P.sum(1)[:,None]
 
-class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
-    """
-    Parent distribution with Gibbs sampling
-    """
-    def __init__(self, T, K, B, S, F):
-        super(GammaMixtureParents, self).__init__(T, K, B, S, F)
+            # Sample parents from P with counts S[:,k2]
+            # multinomial_par(self.pyrngs, Sk, P, Zk)
+            multinomial(self.pyrngs[0], Sk, P, out=Zk)
 
-        # Lazily initialize arrays for mean field parameters
-        self.EZ  = None
-        self.EZ0 = None
+        # DEBUG
+        # self._check_Z()
 
-        # Do the same for Gibbs sampling
-        self.Z   = None
-        self.Z0  = None
+    def resample(self,data=[]):
+        self._resample_Z_python()
+        # self._resample_Z_gsl()
 
-        # Initialize parent arrays for Gibbs sampling
-        # Attribute all events to the background.
-        # self.Z  = np.zeros((T,K,K,B), dtype=np.int32)
-        # self.Z0 = np.copy(self.S).astype(np.int32)
-
-    def _check_Z(self):
-        """
-        Check that Z adds up to the correct amount
-        :return:
-        """
-        Zsum = self.Z0 + self.Z.sum(axis=(1,3))
-        # assert np.allclose(self.S, Zsum), "_check_Z failed. Zsum does not add up to S!"
-        if not np.allclose(self.S, Zsum):
-            print "_check_Z failed. Zsum does not add up to S!"
-            import pdb; pdb.set_trace()
-
-    def _check_EZ(self):
-        """
-        Check that Z adds up to the correct amount
-        :return:
-        """
-        EZsum = self.EZ0 + self.EZ.sum(axis=(1,3))
-        # assert np.allclose(self.S, Zsum), "_check_Z failed. Zsum does not add up to S!"
-        if not np.allclose(self.S, EZsum):
-            print "_check_Z failed. Zsum does not add up to S!"
-            import pdb; pdb.set_trace()
-
+    ### Mean Field
     def expected_Z(self):
         """
         E[z] = u[t,k,k',b] * s[t,k']
@@ -320,37 +323,8 @@ class GammaMixtureParents(_ParentsBase, MeanField, GibbsSampling):
 
         return vlb
 
-    def resample(self, bias_model, weight_model, impulse_model):
-        """
-        Resample the parents given the bias_model, weight_model, and impulse_model.
 
-        :param bias_model:
-        :param weight_model:
-        :param impulse_model:
-        :return:
-        """
-        # If necessary, initialize parent arrays for Gibbs sampling
-        # Attribute all events to the background.
-        if self.Z is None:
-            self.Z  = np.zeros((self.T,self.K,self.K,self.B),
-                               dtype=np.int32)
-        if self.Z0 is None:
-            self.Z0 = np.copy(self.S).astype(np.int32)
-
-        # Resample the parents in python
-        # self._resample_Z_python(bias_model, weight_model, impulse_model)
-
-        # Call cython function to resample parents
-        lambda0 = bias_model.lambda0
-        W = weight_model.W_effective
-        g = impulse_model.g
-        F = self.F
-        resample_Z(self.Z0, self.Z, self.S, lambda0, W, g, F)
-
-        self._check_Z()
-
-
-class SpikeAndSlabContinuousTimeParents(GibbsSampling):
+class ContinuousTimeParents(GibbsSampling):
     """
     Implementation of spike and slab categorical parents
     (one for each event). We only need to keep track of
@@ -391,7 +365,6 @@ class SpikeAndSlabContinuousTimeParents(GibbsSampling):
     def resample(self):
         # self.resample_Z_python()
 
-        from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
         S, C, Z, dt_max = self.S, self.C, self.Z, self.dt_max
         lambda0 = self.model.bias_model.lambda0
         W = self.model.weight_model.W

@@ -87,7 +87,7 @@ def demo(seed=None):
     ###########################################################
     # Fit the test model with Gibbs sampling
     ###########################################################
-    N_samples = 500
+    N_samples = 5
     samples = []
     lps = []
     # plls = []
