@@ -1002,27 +1002,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         # Get the likelihood of the datasets
         for ind in indices:
-            S = self.data_list[ind].S
-            R = self.compute_rate(index=ind)
-            ll += self._poisson_log_likelihood(S,R)
+            ll += self.data_list[ind].log_likelihood()
 
         return ll
-
-    def _log_likelihood_single_process(self, k):
-        """
-        Helper function to compute the log likelihood of a single process
-        :param k: process to compute likelihood for
-        :return:
-        """
-        ll = 0
-
-        # Get the likelihood of the datasets
-        for ind, data in enumerate(self.data_list):
-            Rk = self.compute_rate(index=ind, proc=k)
-            ll += self._poisson_log_likelihood(data.S[:,k], Rk)
-
-        return ll
-
 
     def log_probability(self):
         """
@@ -1160,21 +1142,17 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
 
     def meanfield_coordinate_descent_step(self):
         # Update the parents.
-        for _,_,_,p in self.data_list:
-            p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
+        for p in self.data_list:
+            p.meanfieldupdate()
 
         # Update the bias model given the parents assigned to the background
-        self.bias_model.meanfieldupdate(
-            EZ0=np.concatenate([p.EZ0 for (_,_,_,p) in self.data_list]))
+        self.bias_model.meanfieldupdate(self.data_list)
 
         # Update the impulse model given the parents assignments
-        self.impulse_model.meanfieldupdate(
-            EZ=np.concatenate([p.EZ for (_,_,_,p) in self.data_list]))
+        self.impulse_model.meanfieldupdate(self.data_list)
 
         # Update the weight model given the parents assignments
-        self.weight_model.meanfieldupdate(
-            N=np.atleast_1d(np.sum([N for (_,N,_,_) in self.data_list], axis=0)),
-            EZ=np.concatenate([p.EZ for (_,_,_,p) in self.data_list]))
+        self.weight_model.meanfieldupdate(self.data_list)
 
         # Update the network model
         self.network.meanfieldupdate(self.weight_model)
@@ -1182,6 +1160,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         return self.get_vlb()
 
     def get_vlb(self):
+        return 0
         # Compute the variational lower bound
         vlb = 0
         for _,_,_,p in self.data_list:

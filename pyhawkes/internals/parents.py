@@ -98,8 +98,53 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         Check that Z adds up to the correct amount
         :return:
         """
-        for Sk, Zk in zip(self.Ss, self.Z):
-            assert np.allclose(Sk, Zk.sum(1))
+        for Sk, EZk in zip(self.Ss, self.EZ):
+            assert np.allclose(Sk, EZk.sum(1))
+
+    def log_likelihood(self):
+        """
+        Compute the *marginal* log likelihood by summing over
+        parent assignments. In practice, this just means compute
+        the total area under the rate function (an easy sum) and
+        the instantaneous rate at the time of spikes.
+        """
+        ll = 0
+        for k in xrange(self.K):
+            ll += self.log_likelihood_single_process(k)
+        return ll
+
+    def log_likelihood_single_process(self, k2):
+        """
+        Compute the *marginal* log likelihood by summing over
+        parent assignments. In practice, this just means compute
+        the total area under the rate function (an easy sum) and
+        the instantaneous rate at the time of spikes.
+        """
+        lambda0 = self.model.bias_model.lambda0
+        W = self.model.weight_model.W_effective
+        g = self.model.impulse_model.g
+
+        T, K, B, dt = self.T, self.K, self.B, self.dt
+        Sk, Fk, Tk = self.Ss[k2], self.Fs[k2], self.Ts[k2]
+
+        ll = 0
+        # Compute the integrated rate
+        # Each event induces a weighted impulse response
+        ll += -lambda0[k2] * T * dt
+        ll += -(W[:,k2] * self.Ns).sum()
+
+        # Compute the instantaneous log rate
+        Wk2 = W[:,k2][None,:,None] #(1,K,1)
+        Gk2 = g[:,k2,:][None,:,:] # (1,K,B)
+        lam = lambda0[k2] + (Wk2 * Gk2 * Fk).sum(axis=(1,2))
+
+        ll += (Sk * np.log(lam)).sum()
+        return ll
+
+
+    def rvs(self, data=[]):
+        raise NotImplementedError("No prior for parents to sample from.")
+
 
     # Compute sufficient statistics
     def compute_bkgd_ss(self):
@@ -153,12 +198,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         for k2, Zk in enumerate(self.Z):
             ss[:,k2,:] = Zk[:,1:].sum(0).reshape((K,B))
         return ss
-
-    def log_likelihood(self, x):
-        pass
-
-    def rvs(self, data=[]):
-        raise NotImplementedError("No prior for parents to sample from.")
 
     def _resample_Z_python(self):
         """
@@ -224,81 +263,103 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # self._resample_Z_gsl()
 
     ### Mean Field
-    def expected_Z(self):
-        """
-        E[z] = u[t,k,k',b] * s[t,k']
-        :return:
-        """
-        # We store E[Z] directly, we never just need u
-        return self.EZ
+    # Compute expected sufficient statistics
+    def compute_exp_bkgd_ss(self):
+        # \sum_{t} z_{t,k}^{0} and T * dt
+        ss = np.zeros((2, self.K))
+        for k,EZk in enumerate(self.EZ):
+            ss[0,k] = EZk[:,0].sum()
 
-    def expected_Z0(self):
+        ss[1,:] = self.T * self.dt
+        return ss
+
+    def compute_exp_weight_ss(self):
+        K, B = self.K, self.B
+        ss = np.zeros((2, self.K, self.K))
+        for k2, EZk in enumerate(self.EZ):
+            # ss[0,k1,k2] = \sum_t \sum_b Z_{t,k2}^{k1,b}
+            ss[0,:,k2] = EZk[:,1:].sum(0).reshape((K,B)).sum(1)
+            # ss[1,k1,k2] = N[k1] (to be multiplied by A)
+            ss[1,:,k2] = self.Ns
+        return ss
+
+    def compute_exp_ir_ss(self):
         """
-        E[z0] = u0[t,k'] * s[t,k']
-        :return:
+        Compute the sufficient statistics for the impulse responses
         """
-        # We store E[Z0] directly, we never just need u
-        return self.EZ0
+        K, B = self.K, self.B
+        # ss[k1,k2,b] = \sum_t z_{t,k2}^{k1,b}
+        ss = np.zeros((self.K, self.K, self.B))
+        for k2, EZk in enumerate(self.EZ):
+            ss[:,k2,:] = EZk[:,1:].sum(0).reshape((K,B))
+        return ss
 
     def expected_log_likelihood(self,x):
         pass
 
-    def _mf_update_Z_python(self, bias_model, weight_model, impulse_model):
+    def _mf_update_Z_python(self):
         """
         Update the mean field parameters for the latent parents
         :return:
         """
-        for t in xrange(self.T):
-            for k2 in xrange(self.K):
-                # If there are no events then there's nothing to do
-                if self.S[t, k2] == 0:
-                    continue
+        bias_model, weight_model, impulse_model = \
+            self.model.bias_model, self.model.weight_model, self.model.impulse_model
+        K, B = self.K, self.B
 
-                # Compute the normalized probability vector for the background rate and
-                # each of the basis functions for every other process
-                p0  = np.exp(bias_model.expected_log_lambda0()[k2])     # scalar
-                Wk2 = np.exp(weight_model.expected_log_W()[:,k2])       # (K,)
-                Gk2 = np.exp(impulse_model.expected_log_g()[:,k2,:])    # (K,B)
-                Ft  =  self.F[t,:,:]                                    # (K,B)
-                pkb = Ft * Wk2[:,None] * Gk2
+        for k2, (Sk, Fk, Tk, EZk) in enumerate(zip(self.Ss, self.Fs, self.Ts, self.EZ)):
+            Sk = Sk.astype(np.float)
+            # Compute the normalized probability vector for the background rate and
+            # each of the basis functions for every other process
+            p0  = np.exp(bias_model.expected_log_lambda0()[k2])     # scalar
+            Wk2 = np.exp(weight_model.expected_log_W()[:,k2])       # (K,)
+            Gk2 = np.exp(impulse_model.expected_log_g()[:,k2,:])    # (K,B)
+            pkb = Fk * Wk2[None,:,None] * Gk2[None,:,:]
+            assert pkb.shape == (Tk, K, B)
 
-                assert pkb.shape == (self.K, self.B)
+            pkb = pkb.reshape((-1, K*B))
 
-                # Combine the probabilities into a normalized vector of length KB+1
-                Z = p0 + pkb.sum()
-                self.EZ0[t,k2] = p0 / Z * self.S[t,k2].astype(float)
-                self.EZ[t,:,k2,:] = pkb.reshape((self.K,self.B)) / Z * self.S[t,k2].astype(float)
+            # Combine the probabilities into a normalized vector of length KB+1
+            Z = p0 + pkb.sum(axis=1)
+            EZk[:,0] = p0 / Z * Sk
+            EZk[:,1:] = pkb / Z[:,None] * Sk[:,None]
 
-    def meanfieldupdate(self, bias_model, weight_model, impulse_model):
-        """
-        Perform the mean field update.
+            assert np.all(np.isfinite(EZk))
 
-        :param bias_model:
-        :param weight_model:
-        :param impulse_model:
-        :return:
-        """
-        # If necessary, initialize arrays for mean field parameters
-        if self.EZ is None:
-            self.EZ  = np.zeros((self.T,self.K,self.K,self.B))
-        if self.EZ0 is None:
-            self.EZ0 = np.copy(self.S).astype(np.float)
+        self._check_EZ()
 
-        # Uncomment this line to use python
-        # self._mf_update_Z_python(bias_model, weight_model, impulse_model)
+    # def meanfieldupdate_old(self, bias_model, weight_model, impulse_model):
+    #     """
+    #     Perform the mean field update.
+    #
+    #     :param bias_model:
+    #     :param weight_model:
+    #     :param impulse_model:
+    #     :return:
+    #     """
+    #     # If necessary, initialize arrays for mean field parameters
+    #     if self.EZ is None:
+    #         self.EZ  = np.zeros((self.T,self.K,self.K,self.B))
+    #     if self.EZ0 is None:
+    #         self.EZ0 = np.copy(self.S).astype(np.float)
+    #
+    #     # Uncomment this line to use python
+    #     # self._mf_update_Z_python(bias_model, weight_model, impulse_model)
+    #
+    #     # Use Cython
+    #     exp_E_log_lambda0 = np.exp(bias_model.expected_log_lambda0())
+    #     exp_E_log_W       = np.exp(weight_model.expected_log_W())
+    #     exp_E_log_g       = np.exp(impulse_model.expected_log_g())
+    #
+    #     mf_update_Z(self.EZ0, self.EZ, self.S,
+    #                 exp_E_log_lambda0,
+    #                 exp_E_log_W,
+    #                 exp_E_log_g,
+    #                 self.F)
+    #
+    #     # self._check_EZ()
 
-        # Use Cython
-        exp_E_log_lambda0 = np.exp(bias_model.expected_log_lambda0())
-        exp_E_log_W       = np.exp(weight_model.expected_log_W())
-        exp_E_log_g       = np.exp(impulse_model.expected_log_g())
-
-        mf_update_Z(self.EZ0, self.EZ, self.S,
-                    exp_E_log_lambda0,
-                    exp_E_log_W,
-                    exp_E_log_g,
-                    self.F)
-
-        # self._check_EZ()
+    def meanfieldupdate(self):
+        return self._mf_update_Z_python()
 
     def get_vlb(self, bias_model, weight_model, impulse_model):
         """

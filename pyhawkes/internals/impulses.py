@@ -98,22 +98,23 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
 
         return E_lng
 
-    def mf_update_gamma(self, EZ, minibatchfrac=1.0, stepsize=1.0):
+    def mf_update_gamma(self, data, minibatchfrac=1.0, stepsize=1.0):
         """
         Update gamma given E[Z]
         :return:
         """
-        gamma_hat = self.gamma + EZ.sum(axis=0) / minibatchfrac
+        exp_ss = sum([d.compute_exp_ir_ss() for d in data])
+        gamma_hat = self.gamma + exp_ss / minibatchfrac
         self.mf_gamma = (1.0 - stepsize) * self.mf_gamma + stepsize * gamma_hat
 
     def expected_log_likelihood(self,x):
         pass
 
-    def meanfieldupdate(self, EZ):
-        self.mf_update_gamma(EZ)
+    def meanfieldupdate(self, data=[]):
+        self.mf_update_gamma(data)
 
-    def meanfield_sgdstep(self, EZ, minibatchfrac, stepsize):
-        self.mf_update_gamma(EZ, minibatchfrac=minibatchfrac, stepsize=stepsize)
+    def meanfield_sgdstep(self, data, minibatchfrac, stepsize):
+        self.mf_update_gamma(data, minibatchfrac=minibatchfrac, stepsize=stepsize)
 
     def get_vlb(self):
         """

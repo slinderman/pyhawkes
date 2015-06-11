@@ -93,7 +93,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         raise NotImplementedError()
 
 
-    def _resample_A_given_W(self):
+    def _resample_A_given_W(self, data):
         """
         Resample A given W. This must be immediately followed by an
         update of z | A, W.
@@ -111,11 +111,11 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 else:
                     # Compute the log likelihood of the events given W and A=0
                     self.A[k1,k2] = 0
-                    ll0 = self.model._log_likelihood_single_process(k2)
+                    ll0 = sum([d.log_likelihood_single_process(k2) for d in data])
 
                     # Compute the log likelihood of the events given W and A=1
                     self.A[k1,k2] = 1
-                    ll1 = self.model._log_likelihood_single_process(k2)
+                    ll1 = sum([d.log_likelihood_single_process(k2) for d in data])
 
                 # Sample A given conditional probability
                 lp0 = ll0 + np.log(1.0 - p[k1,k2])
@@ -128,41 +128,6 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
         # sys.stdout.write('\n')
         # sys.stdout.flush()
-
-    def _get_suff_statistics(self, N, Z):
-        """
-        Compute the sufficient statistics from the data set.
-        :param data: a TxK array of event counts assigned to the background process
-        :return:
-        """
-        ss = np.zeros((2, self.K, self.K))
-
-        if N is not None and Z is not None:
-            # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
-            ss[0,:,:] = Z.sum(axis=(0,3))
-            # ss[1,k1,k2] = N[k1] * A[k1,k2]
-            ss[1,:,:] = N[:,None] * self.A
-
-        return ss
-
-    def _get_exact_suff_statistics(self, Z, F, beta):
-        """
-        For comparison, compute the exact sufficient statistics for ss[1,:,:]
-        :param data: a TxK array of event counts assigned to the background process
-        :return:
-        """
-        ss = np.zeros((2, self.K, self.K))
-
-        if F is not None and beta is not None:
-            # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
-            ss[0,:,:] = Z.sum(axis=(0,3))
-
-            # ss[1,k1,k2] = A_k1,k2 * \sum_t \sum_b F[t,k1,b] * beta[k1,k2,b]
-            for k1 in range(self.K):
-                for k2 in range(self.K):
-                    ss[1,k1,k2] = self.A[k1,k2] * (F[:,k1,:].dot(beta[k1,k2,:])).sum()
-
-        return ss
 
     def resample_W_given_A_and_z(self, data=[]):
         """
@@ -191,7 +156,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         self.resample_W_given_A_and_z(data)
 
         # Resample A given W
-        self._resample_A_given_W()
+        self._resample_A_given_W(data)
 
 class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     """
@@ -359,32 +324,33 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
                        stepsize * logit_p
         self.mf_p = logistic(logit_p_hat)
 
-    def meanfieldupdate_kappa_v(self, EZ, N, minibatchfrac=1.0, stepsize=1.0):
+    def meanfieldupdate_kappa_v(self, data=[], minibatchfrac=1.0, stepsize=1.0):
         """
         Update the variational weight distributions
         :return:
         """
-        EZ_sum = EZ.sum(axis=(0,3))
+        exp_ss = sum([d.compute_exp_weight_ss() for d in data])
+
         # kappa' = kappa + \sum_t \sum_b z[t,k,k',b]
-        kappa0_hat = self.kappa_0 + EZ_sum / minibatchfrac
-        kappa1_hat = self.network.kappa + EZ_sum / minibatchfrac
+        kappa0_hat = self.kappa_0 + exp_ss[0] / minibatchfrac
+        kappa1_hat = self.network.kappa + exp_ss[0] / minibatchfrac
         self.mf_kappa_0 = (1.0 - stepsize) * self.mf_kappa_0 + stepsize * kappa0_hat
         self.mf_kappa_1 = (1.0 - stepsize) * self.mf_kappa_1 + stepsize * kappa1_hat
 
         # v_0'[k,k'] = self.nu_0 + N[k]
-        v0_hat = self.nu_0 * np.ones((self.K, self.K)) + N[:,None] / minibatchfrac
+        v0_hat = self.nu_0 * np.ones((self.K, self.K)) + exp_ss[1] / minibatchfrac
         self.mf_v_0 = (1.0 - stepsize) * self.mf_v_0 + stepsize * v0_hat
 
         # v_1'[k,k'] = E[v[k,k']] + N[k]
-        v1_hat = self.network.expected_v() + N[:,None] / minibatchfrac
+        v1_hat = self.network.expected_v() + exp_ss[1] / minibatchfrac
         self.mf_v_1 = (1.0 - stepsize) * self.mf_v_1 + stepsize * v1_hat
 
-    def meanfieldupdate(self, EZ, N):
-        self.meanfieldupdate_kappa_v(EZ, N)
+    def meanfieldupdate(self, data=[]):
+        self.meanfieldupdate_kappa_v(data)
         self.meanfieldupdate_p()
 
-    def meanfield_sgdstep(self, EZ, N, minibatchfrac,stepsize):
-        self.meanfieldupdate_kappa_v(EZ, N, minibatchfrac=minibatchfrac, stepsize=stepsize)
+    def meanfield_sgdstep(self, data, minibatchfrac,stepsize):
+        self.meanfieldupdate_kappa_v(data, minibatchfrac=minibatchfrac, stepsize=stepsize)
         self.meanfieldupdate_p(stepsize=stepsize)
 
     def get_vlb(self):
