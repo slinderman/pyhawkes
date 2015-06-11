@@ -1002,9 +1002,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         # Get the likelihood of the datasets
         for ind in indices:
-            S = self.data_list[ind].S
-            R = self.compute_rate(index=ind)
-            ll += self._poisson_log_likelihood(S,R)
+            ll += self.data_list[ind].log_likelihood()
 
         return ll
 

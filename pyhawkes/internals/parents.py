@@ -101,7 +101,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         for Sk, Zk in zip(self.Ss, self.Z):
             assert np.allclose(Sk, Zk.sum(1))
 
-    def log_likelihood(self, x):
+    def log_likelihood(self):
         """
         Compute the *marginal* log likelihood by summing over
         parent assignments. In practice, this just means compute
@@ -131,7 +131,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # Compute the integrated rate
         # Each event induces a weighted impulse response
         ll += -lambda0[k2] * T * dt
-        ll += -W[:,k2] * self.Ns
+        ll += -(W[:,k2] * self.Ns).sum()
 
         # Compute the instantaneous log rate
         Wk2 = W[:,k2][None,:,None] #(1,K,1)

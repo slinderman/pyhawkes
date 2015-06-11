@@ -332,7 +332,6 @@ def fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
         # Set the network prior such that E[W] ~= 0.01
         # W ~ Gamma(kappa, v) for kappa = 1.25 => v ~ 125
         # v ~ Gamma(alpha, beta) for alpha = 10, beta = 10 / 125
-        import pdb; pdb.set_trace()
         E_W = 0.01
         kappa = 10.
         E_v = kappa / E_W
