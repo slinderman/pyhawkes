@@ -15,6 +15,8 @@ from pyhawkes.models import \
 
 from pyhawkes.plotting.plotting import plot_network
 
+init_with_map = True
+do_plot = False
 
 def demo(seed=None):
     """
@@ -44,7 +46,6 @@ def demo(seed=None):
     ###########################################################
     # Initialize with MAP estimation on a standard Hawkes model
     ###########################################################
-    init_with_map = True
     if init_with_map:
         init_len   = T
         print "Initializing with BFGS on first ", init_len, " time bins."
@@ -81,7 +82,8 @@ def demo(seed=None):
         test_model.initialize_with_standard_model(init_model)
 
     # Initialize plots
-    # ln, im_net, im_clus = initialize_plots(true_model, test_model, S)
+    if do_plot:
+        ln, im_net, im_clus = initialize_plots(true_model, test_model, S)
 
     ###########################################################
     # Fit the test model with variational Bayesian inference
@@ -102,8 +104,8 @@ def demo(seed=None):
         samples.append(test_model.copy_sample())
 
         # Update plot
-        # if itr % 1 == 0:
-        #     update_plots(itr, test_model, S, ln, im_clus, im_net)
+        if itr % 1 == 0 and do_plot:
+            update_plots(itr, test_model, S, ln, im_clus, im_net)
 
     ###########################################################
     # Analyze the samples
