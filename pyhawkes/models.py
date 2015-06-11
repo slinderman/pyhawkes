@@ -1160,11 +1160,11 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         return self.get_vlb()
 
     def get_vlb(self):
-        return 0
         # Compute the variational lower bound
         vlb = 0
-        for _,_,_,p in self.data_list:
-            vlb += p.get_vlb(self.bias_model, self.weight_model, self.impulse_model)
+        for d in self.data_list:
+            vlb += d.get_vlb()
+
         vlb += self.bias_model.get_vlb()
         vlb += self.impulse_model.get_vlb()
         vlb += self.weight_model.get_vlb()

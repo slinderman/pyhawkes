@@ -24,6 +24,17 @@ def generate_synthetic_data(seed=None):
 
     T_test=1000
 
+    # Debugging network:
+    C = 1
+    K = 4
+    T = 1000
+    dt = 1.0
+    B = 3
+    p = 0.5
+    kappa = 3.0
+    v = kappa * 5.0
+    c = np.zeros(K, dtype=np.int)
+
     # Small network:
     # Seed: 1957629166
     # C = 4
@@ -50,15 +61,15 @@ def generate_synthetic_data(seed=None):
 
     # Medium netowrk 2:
     # Seed = 3848328624
-    C = 5
-    K = 50
-    T = 100000
-    dt = 1.0
-    B = 3
-    kappa = 2.0
-    c = np.arange(C).repeat((K // C))
-    p = 0.4 * np.eye(C) + 0.01 * (1-np.eye(C))
-    v = kappa * (5 * np.eye(C) + 5.0 * (1-np.eye(C)))
+    # C = 5
+    # K = 50
+    # T = 100000
+    # dt = 1.0
+    # B = 3
+    # kappa = 2.0
+    # c = np.arange(C).repeat((K // C))
+    # p = 0.4 * np.eye(C) + 0.01 * (1-np.eye(C))
+    # v = kappa * (5 * np.eye(C) + 5.0 * (1-np.eye(C)))
 
 
     # Large network:

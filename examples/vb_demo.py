@@ -31,7 +31,7 @@ def demo(seed=None):
     # Load some example data.
     # See data/synthetic/generate.py to create more.
     ###########################################################
-    data_path = os.path.join("data", "synthetic", "synthetic_K20_C4_T10000.pkl.gz")
+    data_path = os.path.join("data", "synthetic", "synthetic_K4_C1_T1000.pkl.gz")
     with gzip.open(data_path, 'r') as f:
         S, true_model = cPickle.load(f)
 
@@ -44,7 +44,7 @@ def demo(seed=None):
     ###########################################################
     # Initialize with MAP estimation on a standard Hawkes model
     ###########################################################
-    init_with_map = False
+    init_with_map = True
     if init_with_map:
         init_len   = T
         print "Initializing with BFGS on first ", init_len, " time bins."
@@ -77,17 +77,17 @@ def demo(seed=None):
     # F_test = test_model.basis.convolve_with_basis(S_test)
 
     # Initialize with the standard model parameters
-    # if init_model is not None:
-    #     test_model.initialize_with_standard_model(init_model)
+    if init_model is not None:
+        test_model.initialize_with_standard_model(init_model)
 
     # Initialize plots
-    ln, im_net, im_clus = initialize_plots(true_model, test_model, S)
+    # ln, im_net, im_clus = initialize_plots(true_model, test_model, S)
 
     ###########################################################
     # Fit the test model with variational Bayesian inference
     ###########################################################
     # VB coordinate descent
-    N_iters = 1000
+    N_iters = 100
     vlbs = []
     samples = []
     for itr in xrange(N_iters):
@@ -102,13 +102,13 @@ def demo(seed=None):
         samples.append(test_model.copy_sample())
 
         # Update plot
-        if itr % 1 == 0:
-            update_plots(itr, test_model, S, ln, im_clus, im_net)
+        # if itr % 1 == 0:
+        #     update_plots(itr, test_model, S, ln, im_clus, im_net)
 
     ###########################################################
     # Analyze the samples
     ###########################################################
-    analyze_samples(true_model, init_model, samples)
+    analyze_samples(true_model, init_model, samples, vlbs)
 
 def initialize_plots(true_model, test_model, S):
     K = true_model.K

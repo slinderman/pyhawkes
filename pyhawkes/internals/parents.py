@@ -295,8 +295,10 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         return ss
 
     def expected_log_likelihood(self,x):
+        # TODO: Compute expected rate and expected log rate at time of spikes.
         pass
 
+    # Mean field updates!
     def _mf_update_Z_python(self):
         """
         Update the mean field parameters for the latent parents
@@ -361,48 +363,57 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
     def meanfieldupdate(self):
         return self._mf_update_Z_python()
 
-    def get_vlb(self, bias_model, weight_model, impulse_model):
+    def get_vlb(self):
         """
         E_q[\ln p(z | \lambda)] - E_q[\ln q(z)]
         :return:
         """
+        bias_model, weight_model, impulse_model = \
+            self.model.bias_model, self.model.weight_model, self.model.impulse_model
+        K,B = self.K, self.B
+
         vlb = 0
         # First term
         # E[LN p(z_tk^0 | \lambda_0)] = - LN z_tk^0! + z_tk^0 * LN \lambda_0 - \lambda_0
         # The factorial cancels with the second term
         E_ln_lam = bias_model.expected_log_lambda0()
         E_lam = bias_model.expected_lambda0()
-        vlb += (self.EZ0 * E_ln_lam[None, :]).sum()
-        vlb += (-self.T * E_lam).sum()
+        for k, EZk in enumerate(self.EZ):
+            vlb += (EZk[:,0] * E_ln_lam[k]).sum()
+            vlb += (-self.T * E_lam[k]).sum()
 
         # Second term
         # -E[LN q(z_tk^0)] = -LN s_tk! + LN z_tk^0! - z_tk^0 LN u_tk^0
         # The factorial of z cancels with the first term
         # The factorial of s is const wrt z
-        ln_u0 = np.log(self.EZ0 / self.S.astype(np.float))
-        ln_u0 = np.nan_to_num(ln_u0)
-        vlb += (-self.EZ0 * ln_u0).sum()
+        for k, (EZk, Sk) in enumerate(zip(self.EZ, self.Ss)):
+            ln_u0 = np.log(EZk[:,0] / Sk.astype(np.float))
+            ln_u0 = np.nan_to_num(ln_u0)
+            vlb += (-EZk[:,0] * ln_u0).sum()
 
         # Now do the same for the weighted impulse responses
         # First term
-        E_ln_Wg = np.log(self.F[:,:,None,:]) + \
-                  weight_model.expected_log_W()[None,:,:,None] + \
-                  impulse_model.expected_log_g()[None,:,:,:]
-        E_ln_Wg = np.nan_to_num(E_ln_Wg)
+        # TODO: We shouldn't have to look at the whole dataset
+        # Since each impulse response is normalized...
+        for k, (EZk, Sk, Fk, Tk, tk) in enumerate(zip(self.EZ, self.Ss, self.Fs, self.Ts, self.ts)):
+            E_ln_Wg = np.log(self.F) + \
+                      weight_model.expected_log_W()[:,k][None,:,None] + \
+                      impulse_model.expected_log_g()[:,k,:][None,:,:]
+            E_ln_Wg = np.nan_to_num(E_ln_Wg)
 
-        E_Wg    = self.F[:,:,None,:] * \
-                  weight_model.expected_W()[None,:,:,None] * \
-                  impulse_model.expected_g()[None,:,:,:]
+            E_Wg    = self.F * \
+                      weight_model.expected_W()[:,k][None,:,None] * \
+                      impulse_model.expected_g()[:,k,:][None,:,:]
 
-        assert E_ln_Wg.shape == (self.T, self.K, self.K, self.B)
-        assert E_Wg.shape == (self.T, self.K, self.K, self.B)
-        vlb += (self.EZ * E_ln_Wg[None,:,:,:]).sum()
-        vlb += -E_Wg.sum()
+            assert E_ln_Wg.shape == (self.T, K, B)
+            assert E_Wg.shape == (self.T, K, B)
+            vlb += (EZk[:,1:] * E_ln_Wg[tk].reshape((Tk, K*B))).sum()
+            vlb += -E_Wg.sum()
 
-        # Second term
-        ln_u = np.log(self.EZ / self.S[:,None,:,None].astype(np.float))
-        ln_u = np.nan_to_num(ln_u)
-        vlb += (-self.EZ * ln_u).sum()
+            # Second term
+            ln_u = np.log(EZk[:,1:] / Sk[:,None].astype(np.float))
+            ln_u = np.nan_to_num(ln_u)
+            vlb += (-EZk[:,1:] * ln_u).sum()
 
         return vlb
 

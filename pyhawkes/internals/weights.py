@@ -322,7 +322,8 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
 
         logit_p_hat = (1-stepsize) * logit(self.mf_p) + \
                        stepsize * logit_p
-        self.mf_p = logistic(logit_p_hat)
+        # self.mf_p = logistic(logit_p_hat)
+        self.mf_p = np.clip(logistic(logit_p_hat), 1e-8, 1-1e-8)
 
     def meanfieldupdate_kappa_v(self, data=[], minibatchfrac=1.0, stepsize=1.0):
         """
