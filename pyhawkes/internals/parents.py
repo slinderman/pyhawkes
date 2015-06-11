@@ -55,6 +55,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
                 self.Ss.append(S[tk,k].astype(np.uint32))
                 self.Ns.append(S[tk,k].sum())
                 self.Fs.append(F[tk])
+        self.Ns = np.array(self.Ns)
 
 
         # The base class handles the parent variables
@@ -145,7 +146,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
     def rvs(self, data=[]):
         raise NotImplementedError("No prior for parents to sample from.")
 
-
+    ### Gibbs sampling
     # Compute sufficient statistics
     def compute_bkgd_ss(self):
         # \sum_{t} z_{t,k}^{0} and T * dt
@@ -263,6 +264,40 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # self._resample_Z_gsl()
 
     ### Mean Field
+    def expected_log_likelihood(self,x):
+        """
+        Compute the expected log likelihood of the data
+        This is actually a bit tricky because we can't simply compute
+        E[log \lambda_{t,k}] = E[log(\lambda_0 + \sum_{k,b} W_k g_{kb})]
+
+        Instead, let's just lower bound it with Jensens inequality
+
+        :param x:
+        :return:
+        """
+        bias_model, weight_model, impulse_model = \
+            self.model.bias_model, self.model.weight_model, self.model.impulse_model
+        T, dt, K, B = self.T, self.dt, self.K, self.B
+
+        exp_lam0 = bias_model.expected_lambda0()
+        exp_W = weight_model.expected_W()
+        exp_G = impulse_model.expected_g()
+
+        exp_ll = 0
+        for k2, (Sk, Fk, Tk, Zk) in enumerate(zip(self.Ss, self.Fs, self.Ts, self.Z)):
+            # Compute the integrated rate
+            # Each event induces a weighted impulse response
+            exp_ll += -exp_lam0[k2] * T * dt
+            exp_ll += -(exp_W[:,k2] * self.Ns).sum()
+
+            # Compute the instantaneous log rate
+            exp_lam = exp_lam0[k2] + (Fk * exp_W[:,k2][:,None] * exp_G[:,k2,:]).sum(axis=(1,2))
+
+            # Use Jensen's inequality
+            exp_ll += (Sk * np.log(exp_lam)).sum()
+        return exp_ll
+
+
     # Compute expected sufficient statistics
     def compute_exp_bkgd_ss(self):
         # \sum_{t} z_{t,k}^{0} and T * dt
@@ -294,9 +329,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             ss[:,k2,:] = EZk[:,1:].sum(0).reshape((K,B))
         return ss
 
-    def expected_log_likelihood(self,x):
-        # TODO: Compute expected rate and expected log rate at time of spikes.
-        pass
 
     # Mean field updates!
     def _mf_update_Z_python(self):
@@ -328,37 +360,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             assert np.all(np.isfinite(EZk))
 
         self._check_EZ()
-
-    # def meanfieldupdate_old(self, bias_model, weight_model, impulse_model):
-    #     """
-    #     Perform the mean field update.
-    #
-    #     :param bias_model:
-    #     :param weight_model:
-    #     :param impulse_model:
-    #     :return:
-    #     """
-    #     # If necessary, initialize arrays for mean field parameters
-    #     if self.EZ is None:
-    #         self.EZ  = np.zeros((self.T,self.K,self.K,self.B))
-    #     if self.EZ0 is None:
-    #         self.EZ0 = np.copy(self.S).astype(np.float)
-    #
-    #     # Uncomment this line to use python
-    #     # self._mf_update_Z_python(bias_model, weight_model, impulse_model)
-    #
-    #     # Use Cython
-    #     exp_E_log_lambda0 = np.exp(bias_model.expected_log_lambda0())
-    #     exp_E_log_W       = np.exp(weight_model.expected_log_W())
-    #     exp_E_log_g       = np.exp(impulse_model.expected_log_g())
-    #
-    #     mf_update_Z(self.EZ0, self.EZ, self.S,
-    #                 exp_E_log_lambda0,
-    #                 exp_E_log_W,
-    #                 exp_E_log_g,
-    #                 self.F)
-    #
-    #     # self._check_EZ()
 
     def meanfieldupdate(self):
         return self._mf_update_Z_python()
@@ -396,19 +397,18 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # TODO: We shouldn't have to look at the whole dataset
         # Since each impulse response is normalized...
         for k, (EZk, Sk, Fk, Tk, tk) in enumerate(zip(self.EZ, self.Ss, self.Fs, self.Ts, self.ts)):
-            E_ln_Wg = np.log(self.F) + \
-                      weight_model.expected_log_W()[:,k][None,:,None] + \
-                      impulse_model.expected_log_g()[:,k,:][None,:,:]
+            E_ln_Wg = (np.log(Fk) +
+                       weight_model.expected_log_W()[:,k][None,:,None] +
+                       impulse_model.expected_log_g()[:,k,:][None,:,:])
             E_ln_Wg = np.nan_to_num(E_ln_Wg)
+            assert E_ln_Wg.shape == (Tk, K, B)
+            vlb += (EZk[:,1:] * E_ln_Wg.reshape((Tk, K*B))).sum()
 
-            E_Wg    = self.F * \
-                      weight_model.expected_W()[:,k][None,:,None] * \
-                      impulse_model.expected_g()[:,k,:][None,:,:]
-
-            assert E_ln_Wg.shape == (self.T, K, B)
-            assert E_Wg.shape == (self.T, K, B)
-            vlb += (EZk[:,1:] * E_ln_Wg[tk].reshape((Tk, K*B))).sum()
-            vlb += -E_Wg.sum()
+            # Compute the sum of E[Wg] * N
+            sum_E_Wg = (self.Ns[:,None] *
+                       weight_model.expected_W()[:,k][:,None] *
+                       impulse_model.expected_g()[:,k,:]).sum()
+            vlb += -sum_E_Wg
 
             # Second term
             ln_u = np.log(EZk[:,1:] / Sk[:,None].astype(np.float))

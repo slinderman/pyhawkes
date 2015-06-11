@@ -1174,8 +1174,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
     def sgd_step(self, minibatchsize, stepsize):
         # Sample a minibatch of data
         assert len(self.data_list) == 1, "We only sample from the first data set"
-        S,_,F,_ = self.data_list[0]
-        T = S.shape[0]
+        S, F, T = self.data_list[0].S, self.data_list[0].F, self.data_list[0].T
 
         if not hasattr(self, 'sgd_offset'):
             self.sgd_offset = 0
@@ -1188,32 +1187,31 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         sgd_end = min(self.sgd_offset+minibatchsize, T)
         S_minibatch = S[self.sgd_offset:sgd_end, :]
         F_minibatch = F[self.sgd_offset:sgd_end, :, :]
-        N_minibatch = S_minibatch.sum(axis=0)
         T_minibatch = S_minibatch.shape[0]
         minibatchfrac = float(T_minibatch) / T
 
         # Create a parent object for this minibatch
-        p = self._parent_class(T_minibatch, self.K, self.B, S_minibatch, F_minibatch)
+        p = self._parent_class(self, T_minibatch, S_minibatch, F_minibatch)
 
         # TODO: Grab one dataset from the data_list and assume
         # it has been added in minibatches
 
         # Update the parents using a standard mean field update
-        p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
+        p.meanfieldupdate()
 
         # Update the bias model given the parents assigned to the background
-        self.bias_model.meanfield_sgdstep(p.EZ0,
+        self.bias_model.meanfield_sgdstep([p],
                                           minibatchfrac=minibatchfrac,
                                           stepsize=stepsize)
 
         # Update the impulse model given the parents assignments
-        self.impulse_model.meanfield_sgdstep(p.EZ,
+        self.impulse_model.meanfield_sgdstep([p],
                                              minibatchfrac=minibatchfrac,
                                              stepsize=stepsize)
 
         # Update the weight model given the parents assignments
         # Compute the number of events in the minibatch
-        self.weight_model.meanfield_sgdstep(N=N_minibatch, EZ=p.EZ,
+        self.weight_model.meanfield_sgdstep([p],
                                             minibatchfrac=minibatchfrac,
                                             stepsize=stepsize)
 
