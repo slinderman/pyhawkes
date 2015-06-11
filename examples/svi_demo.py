@@ -15,7 +15,7 @@ from pyhawkes.models import \
 
 from pyhawkes.plotting.plotting import plot_network
 
-init_with_map = True
+init_with_map = False
 do_plot = False
 
 def demo(seed=None):
@@ -89,7 +89,7 @@ def demo(seed=None):
     # Fit the test model with stochastic variational inference
     ###########################################################
     N_iters = 500
-    minibatchsize = 500
+    minibatchsize = 100
     delay = 1.0
     forgetting_rate = 0.5
     stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
@@ -207,8 +207,12 @@ def analyze_samples(true_model, init_model, samples):
     # plt.show()
 
     # Compute the link prediction accuracy curves
-    auc_init = roc_auc_score(true_model.weight_model.A.ravel(),
-                             init_model.W.ravel())
+    if init_model is not None:
+        auc_init = roc_auc_score(true_model.weight_model.A.ravel(),
+                                 init_model.W.ravel())
+    else:
+        auc_init = 0.0
+
     auc_A_mean = roc_auc_score(true_model.weight_model.A.ravel(),
                                A_mean.ravel())
     auc_W_mean = roc_auc_score(true_model.weight_model.A.ravel(),
@@ -225,7 +229,7 @@ def analyze_samples(true_model, init_model, samples):
     plt.plot(auc_init * np.ones_like(aucs), '--k')
     plt.xlabel("Iteration")
     plt.ylabel("Link prediction AUC")
-    plt.show()
+    plt.ylim(-0.1, 1.1)
 
 
     # Compute the adjusted mutual info score of the clusterings

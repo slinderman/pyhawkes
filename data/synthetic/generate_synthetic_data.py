@@ -111,8 +111,13 @@ def generate_synthetic_data(seed=None):
 
     # Create the model with these parameters
     network_hypers = {'C': C, 'kappa': kappa, 'c': c, 'p': p, 'v': v}
+
+    # Create a simple network
+    from pyhawkes.internals.network import ErdosRenyiFixedSparsity
+    network = ErdosRenyiFixedSparsity(K, p, kappa, v=v)
+
     true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, B=B,
-                                                            network_hypers=network_hypers)
+                                                            network=network)
     assert true_model.check_stability()
 
     # Plot the true network
@@ -126,13 +131,10 @@ def generate_synthetic_data(seed=None):
 
     # Pickle and save the data
     out_dir  = os.path.join('data', "synthetic")
-    out_name = 'synthetic_K%d_C%d_T%d.pkl' % (K,C,T)
+    out_name = 'synthetic_K%d_C%d_T%d.pkl.gz' % (K,C,T)
     out_path = os.path.join(out_dir, out_name)
-    with open(out_path, 'w') as f:
+    with gzip.open(out_path, 'w') as f:
         print "Saving output to ", out_path
-        cPickle.dump((S, true_model), f, protocol=-1)
-
-    with gzip.open(out_path + ".gz", 'w') as f:
         cPickle.dump((S, true_model), f, protocol=-1)
 
     # Sample test data
@@ -140,9 +142,9 @@ def generate_synthetic_data(seed=None):
 
     # Pickle and save the data
     out_dir  = os.path.join('data', "synthetic")
-    out_name = 'synthetic_test_K%d_C%d_T%d.pkl' % (K,C,T_test)
+    out_name = 'synthetic_test_K%d_C%d_T%d.pkl.gz' % (K,C,T_test)
     out_path = os.path.join(out_dir, out_name)
-    with open(out_path, 'w') as f:
+    with gzip.open(out_path, 'w') as f:
         print "Saving output to ", out_path
         cPickle.dump((S_test, true_model), f, protocol=-1)
 
