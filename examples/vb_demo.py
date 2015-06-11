@@ -77,8 +77,8 @@ def demo(seed=None):
     # F_test = test_model.basis.convolve_with_basis(S_test)
 
     # Initialize with the standard model parameters
-    if init_model is not None:
-        test_model.initialize_with_standard_model(init_model)
+    # if init_model is not None:
+    #     test_model.initialize_with_standard_model(init_model)
 
     # Initialize plots
     ln, im_net, im_clus = initialize_plots(true_model, test_model, S)

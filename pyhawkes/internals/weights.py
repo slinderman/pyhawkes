@@ -324,32 +324,33 @@ class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
                        stepsize * logit_p
         self.mf_p = logistic(logit_p_hat)
 
-    def meanfieldupdate_kappa_v(self, EZ, N, minibatchfrac=1.0, stepsize=1.0):
+    def meanfieldupdate_kappa_v(self, data=[], minibatchfrac=1.0, stepsize=1.0):
         """
         Update the variational weight distributions
         :return:
         """
-        EZ_sum = EZ.sum(axis=(0,3))
+        exp_ss = sum([d.compute_exp_weight_ss() for d in data])
+
         # kappa' = kappa + \sum_t \sum_b z[t,k,k',b]
-        kappa0_hat = self.kappa_0 + EZ_sum / minibatchfrac
-        kappa1_hat = self.network.kappa + EZ_sum / minibatchfrac
+        kappa0_hat = self.kappa_0 + exp_ss[0] / minibatchfrac
+        kappa1_hat = self.network.kappa + exp_ss[0] / minibatchfrac
         self.mf_kappa_0 = (1.0 - stepsize) * self.mf_kappa_0 + stepsize * kappa0_hat
         self.mf_kappa_1 = (1.0 - stepsize) * self.mf_kappa_1 + stepsize * kappa1_hat
 
         # v_0'[k,k'] = self.nu_0 + N[k]
-        v0_hat = self.nu_0 * np.ones((self.K, self.K)) + N[:,None] / minibatchfrac
+        v0_hat = self.nu_0 * np.ones((self.K, self.K)) + exp_ss[1] / minibatchfrac
         self.mf_v_0 = (1.0 - stepsize) * self.mf_v_0 + stepsize * v0_hat
 
         # v_1'[k,k'] = E[v[k,k']] + N[k]
-        v1_hat = self.network.expected_v() + N[:,None] / minibatchfrac
+        v1_hat = self.network.expected_v() + exp_ss[1] / minibatchfrac
         self.mf_v_1 = (1.0 - stepsize) * self.mf_v_1 + stepsize * v1_hat
 
-    def meanfieldupdate(self, EZ, N):
-        self.meanfieldupdate_kappa_v(EZ, N)
+    def meanfieldupdate(self, data=[]):
+        self.meanfieldupdate_kappa_v(data)
         self.meanfieldupdate_p()
 
-    def meanfield_sgdstep(self, EZ, N, minibatchfrac,stepsize):
-        self.meanfieldupdate_kappa_v(EZ, N, minibatchfrac=minibatchfrac, stepsize=stepsize)
+    def meanfield_sgdstep(self, data, minibatchfrac,stepsize):
+        self.meanfieldupdate_kappa_v(data, minibatchfrac=minibatchfrac, stepsize=stepsize)
         self.meanfieldupdate_p(stepsize=stepsize)
 
     def get_vlb(self):

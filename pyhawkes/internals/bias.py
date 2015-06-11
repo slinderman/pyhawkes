@@ -87,23 +87,23 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
     def expected_log_likelihood(self,x):
         pass
 
-    def mf_update_lambda0(self, EZ0, minibatchfrac=1.0, stepsize=1.0):
+    def mf_update_lambda0(self, data=[], minibatchfrac=1.0, stepsize=1.0):
         """
         Update background rates given expected parent assignments.
         :return:
         """
-        alpha_hat = self.alpha + EZ0.sum(axis=0) / minibatchfrac
+        exp_ss = sum([d.compute_exp_bkgd_ss() for d in data])
+        alpha_hat = self.alpha + exp_ss[0] / minibatchfrac
         self.mf_alpha = (1-stepsize) * self.mf_alpha + stepsize * alpha_hat
 
-        T = EZ0.shape[0]
-        beta_hat = self.beta + T * self.dt / minibatchfrac
+        beta_hat = self.beta + exp_ss[1] / minibatchfrac
         self.mf_beta  = (1-stepsize) * self.mf_beta + stepsize * beta_hat
 
-    def meanfieldupdate(self, EZ0):
-        self.mf_update_lambda0(EZ0)
+    def meanfieldupdate(self, data=[]):
+        self.mf_update_lambda0(data)
 
-    def meanfield_sgdstep(self, EZ0, minibatchfrac, stepsize):
-        self.mf_update_lambda0(EZ0, minibatchfrac=minibatchfrac, stepsize=stepsize)
+    def meanfield_sgdstep(self, data, minibatchfrac, stepsize):
+        self.mf_update_lambda0(data, minibatchfrac=minibatchfrac, stepsize=stepsize)
 
     def get_vlb(self):
         """
