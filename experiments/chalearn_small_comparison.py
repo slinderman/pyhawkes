@@ -107,15 +107,15 @@ def run_comparison(data_path, output_path, seed=None, thresh=0.5):
 
     # Fit a network Hawkes model with Gibbs
     gibbs_samples = gibbs_timestamps = None
-    # gibbs_samples, gibbs_timestamps = \
-    #     fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
-    #                              output_path=output_path,
-    #                              standard_model=bfgs_model)
-
     gibbs_samples, gibbs_timestamps = \
-        fit_ct_network_hawkes_gibbs(S, K, C, dt, dt_max,
+        fit_network_hawkes_gibbs(S, K, C, dt, dt_max,
                                  output_path=output_path,
                                  standard_model=bfgs_model)
+
+    # gibbs_samples, gibbs_timestamps = \
+    #     fit_ct_network_hawkes_gibbs(S, K, C, dt, dt_max,
+    #                              output_path=output_path,
+    #                              standard_model=bfgs_model)
 
     # Fit a network Hawkes model with Batch VB
     # vb_models, vb_timestamps = fit_network_hawkes_vb(S, K, dt, dt_max,

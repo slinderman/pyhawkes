@@ -101,6 +101,51 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         for Sk, Zk in zip(self.Ss, self.Z):
             assert np.allclose(Sk, Zk.sum(1))
 
+    def log_likelihood(self, x):
+        """
+        Compute the *marginal* log likelihood by summing over
+        parent assignments. In practice, this just means compute
+        the total area under the rate function (an easy sum) and
+        the instantaneous rate at the time of spikes.
+        """
+        ll = 0
+        for k in xrange(self.K):
+            ll += self.log_likelihood_single_process(k)
+        return ll
+
+    def log_likelihood_single_process(self, k2):
+        """
+        Compute the *marginal* log likelihood by summing over
+        parent assignments. In practice, this just means compute
+        the total area under the rate function (an easy sum) and
+        the instantaneous rate at the time of spikes.
+        """
+        lambda0 = self.model.bias_model.lambda0
+        W = self.model.weight_model.W_effective
+        g = self.model.impulse_model.g
+
+        T, K, B, dt = self.T, self.K, self.B, self.dt
+        Sk, Fk, Tk = self.Ss[k2], self.Fs[k2], self.Ts[k2]
+
+        ll = 0
+        # Compute the integrated rate
+        # Each event induces a weighted impulse response
+        ll += -lambda0[k2] * T * dt
+        ll += -W[:,k2] * self.Ns
+
+        # Compute the instantaneous log rate
+        Wk2 = W[:,k2][None,:,None] #(1,K,1)
+        Gk2 = g[:,k2,:][None,:,:] # (1,K,B)
+        lam = lambda0[k2] + (Wk2 * Gk2 * Fk).sum(axis=(1,2))
+
+        ll += (Sk * np.log(lam)).sum()
+        return ll
+
+
+    def rvs(self, data=[]):
+        raise NotImplementedError("No prior for parents to sample from.")
+
+
     # Compute sufficient statistics
     def compute_bkgd_ss(self):
         # \sum_{t} z_{t,k}^{0} and T * dt
@@ -131,12 +176,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         for k2, Zk in enumerate(self.Z):
             ss[:,k2,:] = Zk[:,1:].sum(0).reshape((K,B))
         return ss
-
-    def log_likelihood(self, x):
-        pass
-
-    def rvs(self, data=[]):
-        raise NotImplementedError("No prior for parents to sample from.")
 
     def _resample_Z_python(self):
         """

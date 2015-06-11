@@ -25,7 +25,7 @@ if __name__ == "__main__":
     model.generate(T=T)
 
     # Gibbs sample and then generate new data
-    N_samples = 100000
+    N_samples = 10000
     samples = []
     lps = []
     for itr in progprint_xrange(N_samples, perline=50):

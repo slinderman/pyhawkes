@@ -93,7 +93,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         raise NotImplementedError()
 
 
-    def _resample_A_given_W(self):
+    def _resample_A_given_W(self, data):
         """
         Resample A given W. This must be immediately followed by an
         update of z | A, W.
@@ -111,11 +111,11 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 else:
                     # Compute the log likelihood of the events given W and A=0
                     self.A[k1,k2] = 0
-                    ll0 = self.model._log_likelihood_single_process(k2)
+                    ll0 = sum([d.log_likelihood_single_process(k2) for d in data])
 
                     # Compute the log likelihood of the events given W and A=1
                     self.A[k1,k2] = 1
-                    ll1 = self.model._log_likelihood_single_process(k2)
+                    ll1 = sum([d.log_likelihood_single_process(k2) for d in data])
 
                 # Sample A given conditional probability
                 lp0 = ll0 + np.log(1.0 - p[k1,k2])
@@ -128,41 +128,6 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
         # sys.stdout.write('\n')
         # sys.stdout.flush()
-
-    def _get_suff_statistics(self, N, Z):
-        """
-        Compute the sufficient statistics from the data set.
-        :param data: a TxK array of event counts assigned to the background process
-        :return:
-        """
-        ss = np.zeros((2, self.K, self.K))
-
-        if N is not None and Z is not None:
-            # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
-            ss[0,:,:] = Z.sum(axis=(0,3))
-            # ss[1,k1,k2] = N[k1] * A[k1,k2]
-            ss[1,:,:] = N[:,None] * self.A
-
-        return ss
-
-    def _get_exact_suff_statistics(self, Z, F, beta):
-        """
-        For comparison, compute the exact sufficient statistics for ss[1,:,:]
-        :param data: a TxK array of event counts assigned to the background process
-        :return:
-        """
-        ss = np.zeros((2, self.K, self.K))
-
-        if F is not None and beta is not None:
-            # ss[0,k1,k2] = \sum_t \sum_b Z[t,k1,k2,b]
-            ss[0,:,:] = Z.sum(axis=(0,3))
-
-            # ss[1,k1,k2] = A_k1,k2 * \sum_t \sum_b F[t,k1,b] * beta[k1,k2,b]
-            for k1 in range(self.K):
-                for k2 in range(self.K):
-                    ss[1,k1,k2] = self.A[k1,k2] * (F[:,k1,:].dot(beta[k1,k2,:])).sum()
-
-        return ss
 
     def resample_W_given_A_and_z(self, data=[]):
         """
@@ -191,7 +156,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         self.resample_W_given_A_and_z(data)
 
         # Resample A given W
-        self._resample_A_given_W()
+        self._resample_A_given_W(data)
 
 class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     """

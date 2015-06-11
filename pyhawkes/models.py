@@ -1008,22 +1008,6 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         return ll
 
-    def _log_likelihood_single_process(self, k):
-        """
-        Helper function to compute the log likelihood of a single process
-        :param k: process to compute likelihood for
-        :return:
-        """
-        ll = 0
-
-        # Get the likelihood of the datasets
-        for ind, data in enumerate(self.data_list):
-            Rk = self.compute_rate(index=ind, proc=k)
-            ll += self._poisson_log_likelihood(data.S[:,k], Rk)
-
-        return ll
-
-
     def log_probability(self):
         """
         Compute the joint log probability of the data and the parameters
