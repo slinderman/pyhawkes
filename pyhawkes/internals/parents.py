@@ -461,7 +461,7 @@ class ContinuousTimeParents(GibbsSampling):
 
         S, C, Z, dt_max = self.S, self.C, self.Z, self.dt_max
         lambda0 = self.model.bias_model.lambda0
-        W = self.model.weight_model.W
+        W = self.model.weight_model.W_effective
         mu, tau = self.model.impulse_model.mu, self.model.impulse_model.tau
 
         ct_resample_Z_logistic_normal(

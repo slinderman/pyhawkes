@@ -379,7 +379,6 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
         :param data: a TxKxKxB array of parents. T time bins, K processes,
                      K parent processes, and B bases for each parent process.
         """
-        import ipdb; ipdb.set_trace()
         mu_0, lmbda_0, alpha_0, beta_0 = self.mu_0, self.lmbda_0, self.alpha_0, self.beta_0
         assert data is None or isinstance(data, list)
 
@@ -406,3 +405,4 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
 
         assert np.isfinite(self.mu).all()
         assert np.isfinite(self.tau).all()
+

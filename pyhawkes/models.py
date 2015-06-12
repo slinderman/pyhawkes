@@ -1243,7 +1243,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(DiscreteTimeNetwor
 
 class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     _default_bkgd_hypers = {"alpha" : 1.0, "beta" : 1.0}
-    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0" : 1.0}
+    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 10.0, "alpha_0": 10.0, "beta_0" : 1.0}
     _default_weight_hypers = {}
 
     # This model uses an SBM with beta-distributed sparsity levels
@@ -1408,7 +1408,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
                 # Sample normal RVs and take the logistic of them. This is equivalent
                 # to sampling uniformly from the inverse CDF
-                x_ch = g_mu[c_pa, c_ch] + 1/g_tau[c_pa, c_ch]*np.random.randn(n_ch)
+                x_ch = g_mu[c_pa, c_ch] + np.sqrt(1./g_tau[c_pa, c_ch])*np.random.randn(n_ch)
 
                 # Spike times are logistic transformation of x
                 s_ch = s_pa + dt_max * logistic(x_ch)

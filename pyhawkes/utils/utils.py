@@ -54,8 +54,9 @@ def logit(x,lam_max=1.0):
     return np.log(x/lam_max)-np.log(1-(x/lam_max))
 
 def sample_nig(mu0, lmbda0, alpha0, beta0):
+    mu0, lmbda0, alpha0, beta0 = np.broadcast_arrays(mu0, lmbda0, alpha0, beta0)
     shp = mu0.shape
     assert lmbda0.shape == alpha0.shape == beta0.shape == shp
     tau = np.array(np.random.gamma(alpha0, 1./beta0)).reshape(shp)
-    mu = np.array(np.random.normal(mu0, 1./(lmbda0 * tau))).reshape(shp)
+    mu = np.array(np.random.normal(mu0, np.sqrt(1./(lmbda0 * tau)))).reshape(shp)
     return mu, tau
