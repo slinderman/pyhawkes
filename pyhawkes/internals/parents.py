@@ -435,7 +435,7 @@ class ContinuousTimeParents(GibbsSampling):
         self.model = model
 
         assert S.ndim == 1 and S.shape == C.shape
-        assert C.dtype == np.int and C.min() >= 0 and C.max() < K
+        assert C.dtype == np.int and (len(C) == 0 or (C.min() >= 0 and C.max() < K))
         self.S = S
         self.C = C
         self.T = T

@@ -379,6 +379,7 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
         :param data: a TxKxKxB array of parents. T time bins, K processes,
                      K parent processes, and B bases for each parent process.
         """
+        import ipdb; ipdb.set_trace()
         mu_0, lmbda_0, alpha_0, beta_0 = self.mu_0, self.lmbda_0, self.alpha_0, self.beta_0
         assert data is None or isinstance(data, list)
 
@@ -388,12 +389,13 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
             ss += d.compute_imp_suff_stats()
 
         n = ss[0]
-        xbar = ss[1] / (n + 1e-32)
+        xbar = np.nan_to_num(ss[1] / n)
         xvar = ss[2]
 
         alpha_post = alpha_0 + n / 2.
-        beta_post = beta_0 + 0.5 * xvar
-        beta_post += 0.5 * lmbda_0 * n / (lmbda_0 + n) * (xbar-mu_0)**2
+        # beta_post = beta_0 + 0.5 * xvar
+        # beta_post += 0.5 * lmbda_0 * n / (lmbda_0 + n) * (xbar-mu_0)**2
+        beta_post = beta_0 + 0.5 * xvar + 0.5 * lmbda_0 * n * (xbar-mu_0)**2 / (lmbda_0+n)
 
         lmbda_post = lmbda_0 + n
         mu_post = (lmbda_0 * mu_0 + n * xbar) / (lmbda_0 + n)

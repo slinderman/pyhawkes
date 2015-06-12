@@ -1355,18 +1355,20 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         :param T: max time of
         """
         assert isinstance(T, float), "T must be a float"
-        assert isinstance(S, np.ndarray) and S.ndim == 1 \
-               and S.min() >= 0 and S.max() < T and \
-               S.dtype == np.float, \
-               "S must be a N array of event times"
+        if len(S) > 0:
+            assert isinstance(S, np.ndarray) and S.ndim == 1 \
+                   and S.min() >= 0 and S.max() < T and \
+                   S.dtype == np.float, \
+                   "S must be a N array of event times"
 
-        # Make sure S is sorted
-        assert (np.diff(S) >= 0).all(), "S must be sorted!"
+            # Make sure S is sorted
+            assert (np.diff(S) >= 0).all(), "S must be sorted!"
 
-        assert isinstance(C, np.ndarray) and C.shape == S.shape \
-               and C.min() >= 0 and C.max() < self.K and \
-               C.dtype == np.int, \
-               "C must be a N array of parent indices"
+        if len(C) > 0:
+            assert isinstance(C, np.ndarray) and C.shape == S.shape \
+                   and C.min() >= 0 and C.max() < self.K and \
+                   C.dtype == np.int, \
+                   "C must be a N array of parent indices"
 
         # Instantiate corresponding parent object
         from pyhawkes.internals.parents import ContinuousTimeParents
@@ -1375,8 +1377,83 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         # Add to the data list
         self.data_list.append(parents)
 
-    def generate(self,keep=True,**kwargs):
-        raise NotImplementedError
+    def generate(self, keep=True, T=100.0, max_round=100, **kwargs):
+        from pyhawkes.utils.utils import logistic
+        K, dt_max = self.K, self.dt_max
+
+        lambda0 = self.bias_model.lambda0
+        W, A = self.weight_model.W, self.weight_model.A
+        g_mu, g_tau = self.impulse_model.mu, self.impulse_model.tau
+
+
+        def _generate_helper(S, C, s_pa, c_pa, round=0):
+            # Recursively generate new generations of spikes with
+            # given impulse response parameters. Takes in a single spike
+            # as the parent and recursively calls itself on all children
+            # spikes
+
+            assert round < max_round, "Exceeded maximum recursion depth of %d" % max_round
+
+            for c_ch in np.arange(K):
+                w = W[c_pa, c_ch]
+                a = A[c_pa, c_ch]
+                if w==0 or a==0:
+                    continue
+
+                # The total area under the impulse response curve(ratE)  is w
+                # Sample spikes from a homogenous poisson process with rate
+                # 1 until the time exceeds w. Then transform those spikes
+                # such that they are distributed under a logistic normal impulse
+                n_ch = np.random.poisson(w)
+
+                # Sample normal RVs and take the logistic of them. This is equivalent
+                # to sampling uniformly from the inverse CDF
+                x_ch = g_mu[c_pa, c_ch] + 1/g_tau[c_pa, c_ch]*np.random.randn(n_ch)
+
+                # Spike times are logistic transformation of x
+                s_ch = s_pa + dt_max * logistic(x_ch)
+
+                # Only keep spikes within the simulation time interval
+                s_ch = s_ch[s_ch < T]
+                n_ch = len(s_ch)
+
+                S.append(s_ch)
+                C.append(c_ch * np.ones(n_ch, dtype=np.int))
+
+                # Generate offspring from child spikes
+                for s in s_ch:
+                    _generate_helper(S, C, s, c_ch, round=round+1)
+
+        # Initialize output arrays, a dictionary of numpy arrays
+        S = []
+        C = []
+
+        # Sample background spikes
+        for k in np.arange(K):
+            N = np.random.poisson(lambda0[k]*T)
+            S_bkgd = np.random.rand(N)*T
+            C_bkgd = k*np.ones(N, dtype=np.int)
+            S.append(S_bkgd)
+            C.append(C_bkgd)
+
+            # Each background spike spawns a cascade
+            for s,c in zip(S_bkgd, C_bkgd):
+                _generate_helper(S, C, s, c)
+
+        # Concatenate arrays
+        S = np.concatenate(S)
+        C = np.concatenate(C)
+
+        # Sort
+        perm = np.argsort(S)
+        S = S[perm]
+        C = C[perm]
+
+        if keep:
+            self.add_data(S, C, T)
+
+        return S, C
+
 
     def check_stability(self):
         """
