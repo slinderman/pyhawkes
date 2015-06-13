@@ -143,7 +143,7 @@ if __name__ == "__main__":
     # initializing with the standard model
     models = [
         "SS-DTH (Gibbs)",
-        "SS-CTH (Gibbs)",
+        #"SS-CTH (Gibbs)",
         "MoG-DTH (VB)",
         "MoG-DTH (SVI)"
     ]
