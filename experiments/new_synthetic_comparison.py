@@ -151,19 +151,19 @@ if __name__ == "__main__":
     ]
     methods = [
         harness.fit_spikeslab_network_hawkes_gibbs,
-        harness.fit_ct_network_hawkes_gibbs,
+        #harness.fit_ct_network_hawkes_gibbs,
         harness.fit_network_hawkes_vb,
         harness.fit_network_hawkes_svi
     ]
     inf_args = [
-        {"N_samples": 100, "standard_model": std_model},
         {"N_samples": 1000, "standard_model": std_model},
+        #{"N_samples": 1000, "standard_model": std_model},
         {"N_samples": 1000, "standard_model": std_model},
         {"N_samples": 1000, "standard_model": std_model}
     ]
     model_args = [
         {"basis": basis, "network": copy.deepcopy(network)},
-        {"network": copy.deepcopy(network), "impulse_hypers" : {"mu_0": 0., "lmbda_0": 2.0, "alpha_0": 2.0, "beta_0" : 1.0}},
+        #{"network": copy.deepcopy(network), "impulse_hypers" : {"mu_0": 0., "lmbda_0": 2.0, "alpha_0": 2.0, "beta_0" : 1.0}},
         {"basis": basis, "network": copy.deepcopy(network)},
         {"basis": basis, "network": copy.deepcopy(network)},
     ]
