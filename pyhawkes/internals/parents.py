@@ -359,7 +359,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
 
             assert np.all(np.isfinite(EZk))
 
-        self._check_EZ()
+        # self._check_EZ()
 
     def meanfieldupdate(self):
         return self._mf_update_Z_python()

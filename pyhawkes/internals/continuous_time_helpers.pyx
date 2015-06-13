@@ -28,7 +28,7 @@ cdef inline double ln_impulse(double dt, double mu, double tau, double dt_max) n
     cdef double Z = dt * (dt_max - dt)/dt_max * SQRT_2PI / sqrt(tau)
     return exp(-tau/2. * (logit(dt/dt_max) - mu)**2) / Z
 
-cpdef void ct_resample_Z_logistic_normal_serial(
+cpdef ct_resample_Z_logistic_normal_serial(
     double[::1] S, long[::1] C, long[::1] Z, double dt_max,
     double[::1] lambda0, double[:,::1] W, double[:,::1] mu, double[:,::1] tau):
 
@@ -85,7 +85,7 @@ cpdef void ct_resample_Z_logistic_normal_serial(
             print "Failed!"
             print acc
 
-cpdef void ct_resample_Z_logistic_normal(
+cpdef ct_resample_Z_logistic_normal(
     double[::1] S, long[::1] C, long[::1] Z, double dt_max,
     double[::1] lambda0, double[:,::1] W, double[:,::1] mu, double[:,::1] tau):
 
@@ -176,7 +176,7 @@ cpdef ct_compute_suff_stats(
     assert np.isfinite(imp_ss).all()
 
 
-cpdef void compute_rate_at_events(
+cpdef compute_rate_at_events(
     double[::1] S, long[::1] C, double dt_max,
     double[::1] lambda0, double[:,::1] W,
     double[:,::1] mu, double[:,::1] tau,
@@ -208,7 +208,7 @@ cpdef void compute_rate_at_events(
                 lmbda[n] += W[C[par], C[n]] * ln_impulse(dt, mu[C[par], C[n]], tau[C[par], C[n]], dt_max)
 
 
-cpdef void compute_weighted_impulses_at_events(
+cpdef compute_weighted_impulses_at_events(
     double[::1] S, long[::1] C, long[::1] Z, double dt_max,
     double[:,::1] W, double[:,::1] mu, double[:,::1] tau,
     double[:,::1] lmbda

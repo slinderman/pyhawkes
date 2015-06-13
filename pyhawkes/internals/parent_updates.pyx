@@ -119,7 +119,7 @@ cpdef resample_Z(int[:,::1] Z0, int[:,:,:,::1] Z, long[:,::1] S,
 
 
 
-cpdef mf_update_Z(int k2,
+cpdef void mf_update_Z(int k2,
                   double[:,::1] EZ,
                   long[::1] S,
                   double exp_E_log_lambda0,
@@ -127,11 +127,11 @@ cpdef mf_update_Z(int k2,
                   double[:,::1] exp_E_log_g,
                   double[:,:,::1] F):
 
-    cdef int t, k1, k2, b, i
+    cdef int t, k1, b, i
 
     cdef int T, K, B
     T = EZ.shape[0]
-    K = exp_E_log_lambda.shape[0]
+    K = exp_E_log_lambda0.shape[0]
     B = exp_E_log_g.shape[2]
 
     cdef double Z
@@ -149,18 +149,18 @@ cpdef mf_update_Z(int k2,
             # First compute the normalizer of the multinomial probability vector
             # TODO: Check that we are not reusing p
             # Compute the background rate
-            Z = Z + exp_E_log_lambda0[k2]
+            Z = Z + exp_E_log_lambda0
 
             # Compute the rate from each other proc and basis function
             for k1 in range(K):
                 for b in range(B):
-                    Z = Z + exp_E_log_W[k1,k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b]
+                    Z = Z + exp_E_log_W[k1] * exp_E_log_g[k1,b] * F[t, k1, b]
 
 
             # Now compute the expected counts
-            EZ[t,0] = exp_E_log_lambda0[k2] / Z * S[t]
+            EZ[t,0] = exp_E_log_lambda0 / Z * S[t]
 
             # TODO: Should we try to avoid recomputing the multiplications?
             for k1 in range(K):
                 for b in range(B):
-                    EZ[t,1+k1*B+b] = exp_E_log_W[k1,k2] * exp_E_log_g[k1,k2,b] * F[t, k1, b] / Z * S[t]
+                    EZ[t,1+k1*B+b] = exp_E_log_W[k1] * exp_E_log_g[k1,b] * F[t, k1, b] / Z * S[t]
