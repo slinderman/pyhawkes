@@ -253,8 +253,8 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             P = P / P.sum(1)[:,None]
 
             # Sample parents from P with counts S[:,k2]
-            # multinomial_par(self.pyrngs, Sk, P, Zk)
-            multinomial(self.pyrngs[0], Sk, P, out=Zk)
+            multinomial_par(self.pyrngs, Sk, P, Zk)
+            # multinomial(self.pyrngs[0], Sk, P, out=Zk)
 
         # DEBUG
         # self._check_Z()
