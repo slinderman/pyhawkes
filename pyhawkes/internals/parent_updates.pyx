@@ -119,7 +119,7 @@ cpdef resample_Z(int[:,::1] Z0, int[:,:,:,::1] Z, long[:,::1] S,
 
 
 
-cpdef void mf_update_Z(int k2,
+cpdef mf_update_Z(int k2,
                   double[:,::1] EZ,
                   long[::1] S,
                   double exp_E_log_lambda0,
