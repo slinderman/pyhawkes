@@ -226,7 +226,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
                 # Sample a multinomial distribution to assign events to parents
                 zt[:] = np.random.multinomial(st, p)
 
-        self._check_Z()
+        # self._check_Z()
 
     def _resample_Z_gsl(self, data=[]):
         """
@@ -260,8 +260,8 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # self._check_Z()
 
     def resample(self,data=[]):
-        self._resample_Z_python()
-        # self._resample_Z_gsl()
+        # self._resample_Z_python()
+        self._resample_Z_gsl()
 
     ### Mean Field
     def expected_log_likelihood(self,x):

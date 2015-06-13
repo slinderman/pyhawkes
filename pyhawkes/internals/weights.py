@@ -1,16 +1,69 @@
-import sys
-
 import numpy as np
 from scipy.special import gammaln, psi
 from scipy.misc import logsumexp
+
+from joblib import Parallel, delayed
 
 from pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Bernoulli, Gamma
 from pyhawkes.utils.utils import logistic, logit
 
 from pyhawkes.utils.profiling import line_profiled
-PROFILING = True
+PROFILING=True
 
+def _log_likelihood_single_process(k2, T, dt,
+                                   lambda0, W, g,
+                                   Sk, Fk, Ns):
+    """
+    Compute the *marginal* log likelihood by summing over
+    parent assignments. In practice, this just means compute
+    the total area under the rate function (an easy sum) and
+    the instantaneous rate at the time of spikes.
+    """
+    ll = 0
+    # Compute the integrated rate
+    # Each event induces a weighted impulse response
+    ll += -lambda0[k2] * T * dt
+    ll += -(W[:,k2] * Ns).sum()
+
+    # Compute the instantaneous log rate
+    Wk2 = W[:,k2][None,:,None] #(1,K,1)
+    Gk2 = g[:,k2,:][None,:,:] # (1,K,B)
+    lam = lambda0[k2] + (Wk2 * Gk2 * Fk).sum(axis=(1,2))
+
+    ll += (Sk * np.log(lam)).sum()
+    return ll
+
+@line_profiled
+def _resample_column_of_A(k2, K, p, dt, lambda0, A, W, g, Ts, Sks, Fks, Nss):
+    A = A.copy()
+    A_col = np.zeros(K)
+    for k1 in xrange(K):
+        # Compute the log likelihood of the events given W and A=0
+        A[k1,k2] = 0
+        # ll0 = sum([d.log_likelihood_single_process(k2) for d in data])
+        ll0 = 0
+        for T, Sk, Fk, Ns in zip(Ts, Sks, Fks, Nss):
+            ll0 += _log_likelihood_single_process(k2, T, dt, lambda0, A*W, g, Sk, Fk, Ns)
+
+        # Compute the log likelihood of the events given W and A=1
+        A[k1,k2] = 1
+        # ll1 = sum([d.log_likelihood_single_process(k2) for d in data])
+        ll1 = 0
+        for T, Sk, Fk, Ns in zip(Ts, Sks, Fks, Nss):
+            ll1 += _log_likelihood_single_process(k2, T, dt, lambda0, A*W, g, Sk, Fk, Ns)
+
+        # Sample A given conditional probability
+        lp0 = ll0 + np.log(1.0 - p[k1,k2])
+        lp1 = ll1 + np.log(p[k1,k2])
+        Z   = logsumexp([lp0, lp1])
+
+        # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
+        #           = lp1 - ln(exp(lp0) + exp(lp1))
+        #           = lp1 - Z
+        A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
+        A_col[k1] = A[k1,k2]
+    return A_col
 
 class SpikeAndSlabGammaWeights(GibbsSampling):
     """
@@ -92,6 +145,36 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         """
         raise NotImplementedError()
 
+    def _joblib_resample_A_given_W(self, data):
+        """
+        Resample A given W. This must be immediately followed by an
+        update of z | A, W. This  version uses joblib to parallelize
+        over columns of A.
+        :return:
+        """
+        # import ipdb; ipdb.set_trace()
+        p = self.network.P
+        K = self.K
+        dt = self.model.dt
+        lambda0 = self.model.lambda0
+        A = self.A.copy()
+        W = self.W
+        g = self.model.impulse_model.g
+        if len(data) == 0:
+            self.A = np.random.rand() < p
+            return
+
+        # We can naively parallelize over receiving neurons, k2
+        # To avoid serializing and copying the data object, we
+        # manually extract the required arrays Sk, Fk, etc.
+        A_cols = Parallel(n_jobs=2)(delayed(
+            _resample_column_of_A)(k2, K, p, dt, lambda0, A, W, g,
+                                   [d.T for d in data],
+                                   [d.Ss[k2] for d in data],
+                                   [d.Fs[k2] for d in data],
+                                   [d.Ns for d in data])
+                for k2 in range(self.K))
+        self.A = np.array(A_cols).T
 
     def _resample_A_given_W(self, data):
         """
@@ -99,11 +182,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         update of z | A, W.
         :return:
         """
-        # TODO: Write a Cython function to sample this more efficiently
         p = self.network.P
         for k1 in xrange(self.K):
-            # sys.stdout.write('.')
-            # sys.stdout.flush()
             for k2 in xrange(self.K):
                 if self.model is None:
                     ll0 = 0
@@ -126,8 +206,6 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
                 #           = lp1 - ln(exp(lp0) + exp(lp1))
                 #           = lp1 - Z
                 self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
-        # sys.stdout.write('\n')
-        # sys.stdout.flush()
 
     def resample_W_given_A_and_z(self, data=[]):
         """
@@ -156,7 +234,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         self.resample_W_given_A_and_z(data)
 
         # Resample A given W
-        self._resample_A_given_W(data)
+        # self._resample_A_given_W(data)
+        self._joblib_resample_A_given_W(data)
 
 class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     """

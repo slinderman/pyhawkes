@@ -23,7 +23,6 @@ from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
     DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
     ContinuousTimeNetworkHawkesModel
 
-
 Results = namedtuple("Results", ["samples", "timestamps", "lps", "test_lls"])
 
 def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
@@ -35,10 +34,10 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
     # Check for existing Gibbs results
     if os.path.exists(output_path):
         with gzip.open(output_path, 'r') as f:
-            print "Loading Gibbs results from ", output_path
+            print "Loading standard BFGS results from ", output_path
             results = cPickle.load(f)
     else:
-        print "Fitting the data with a network Hawkes model using Gibbs sampling"
+        print "Fitting a standard Hawkes model using BFGS"
 
         test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, W_max=W_max, **model_args)
         test_model.add_data(S)
@@ -73,7 +72,7 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
 
 def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
                                        model_args={}, standard_model=None,
-                                       N_samples=100):
+                                       N_samples=100, time_limit=8*60*60):
 
     T,K = S.shape
 
@@ -94,12 +93,13 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
 
         # TODO: Precompute F_test
 
+
         # Gibbs sample
         samples = []
         lps = [test_model.log_probability()]
         hlls = [test_model.heldout_log_likelihood(S_test)]
         times = [0]
-        for _ in progprint_xrange(N_samples, perline=5):
+        for _ in progprint_xrange(N_samples, perline=10):
             # Update the model
             tic = time.time()
             samples.append(test_model.resample_and_copy())
@@ -112,6 +112,10 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
             # # Save this sample
             # with open(output_path + ".gibbs.itr%04d.pkl" % itr, 'w') as f:
             #     cPickle.dump(samples[-1], f, protocol=-1)
+
+            # Check if time limit has been exceeded
+            if np.sum(times) > time_limit:
+                break
 
         # Get cumulative timestamps
         timestamps = np.cumsum(times)
@@ -131,7 +135,7 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
 
 def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
                                 model_args={}, standard_model=None,
-                                N_samples=100):
+                                N_samples=100, time_limit=8*60*60):
 
     K = S.shape[1]
     S_ct, C_ct, T = convert_discrete_to_continuous(S, dt)
@@ -158,7 +162,7 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
         lps = [test_model.log_probability()]
         hlls = [test_model.heldout_log_likelihood(S_test_ct, C_test_ct, T_test)]
         times = [0]
-        for _ in progprint_xrange(N_samples, perline=5):
+        for _ in progprint_xrange(N_samples, perline=25):
             # Update the model
             tic = time.time()
             samples.append(test_model.resample_and_copy())
@@ -171,6 +175,10 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
             # # Save this sample
             # with open(output_path + ".gibbs.itr%04d.pkl" % itr, 'w') as f:
             #     cPickle.dump(samples[-1], f, protocol=-1)
+
+            # Check if time limit has been exceeded
+            if np.sum(times) > time_limit:
+                break
 
         # Get cumulative timestamps
         timestamps = np.cumsum(times)
@@ -189,7 +197,7 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
 
 def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
                           model_args={}, standard_model=None,
-                          N_samples=100):
+                          N_samples=100, time_limit=8*60*60):
 
     T,K = S.shape
 
@@ -238,6 +246,10 @@ def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
             # with open(output_path + ".svi.itr%04d.pkl" % itr, 'w') as f:
             #     cPickle.dump(samples[-1], f, protocol=-1)
 
+            # Check if time limit has been exceeded
+            if np.sum(times) > time_limit:
+                break
+
         # Get cumulative timestamps
         timestamps = np.cumsum(times)
         lps = np.array(lps)
@@ -255,9 +267,9 @@ def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
 
 def fit_network_hawkes_svi(S, S_test, dt, dt_max, output_path,
                            model_args={}, standard_model=None,
-                           N_samples=100,
+                           N_samples=100, time_limit=8*60*60,
                            delay=10.0,
-                           forgetting_rate=0.5):
+                           forgetting_rate=0.25):
 
     T,K = S.shape
 
@@ -309,6 +321,10 @@ def fit_network_hawkes_svi(S, S_test, dt, dt_max, output_path,
             # Save this sample
             # with open(output_path + ".svi.itr%04d.pkl" % itr, 'w') as f:
             #     cPickle.dump(samples[-1], f, protocol=-1)
+
+            # Check if time limit has been exceeded
+            if np.sum(times) > time_limit:
+                break
 
         # Get cumulative timestamps
         timestamps = np.cumsum(times)

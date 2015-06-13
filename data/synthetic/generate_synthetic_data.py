@@ -25,15 +25,15 @@ def generate_synthetic_data(seed=None):
     T_test=1000
 
     # Debugging network:
-    C = 1
-    K = 4
-    T = 1000
-    dt = 1.0
-    B = 3
-    p = 0.5
-    kappa = 3.0
-    v = kappa * 5.0
-    c = np.zeros(K, dtype=np.int)
+    # C = 1
+    # K = 4
+    # T = 1000
+    # dt = 1.0
+    # B = 3
+    # p = 0.5
+    # kappa = 3.0
+    # v = kappa * 5.0
+    # c = np.zeros(K, dtype=np.int)
 
     # Small network:
     # Seed: 1957629166
@@ -71,6 +71,17 @@ def generate_synthetic_data(seed=None):
     # p = 0.4 * np.eye(C) + 0.01 * (1-np.eye(C))
     # v = kappa * (5 * np.eye(C) + 5.0 * (1-np.eye(C)))
 
+    # Medium netowrk, one cluster
+    # Seed: 3848328624
+    C = 1
+    K = 50
+    T = 100000
+    dt = 1.0
+    B = 3
+    p = 0.08
+    kappa = 3.0
+    v = kappa * 5.0
+    c = np.zeros(K, dtype=np.int)
 
     # Large network:
     # Seed = 2467634490
@@ -118,6 +129,7 @@ def generate_synthetic_data(seed=None):
 
     true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, B=B,
                                                             network=network)
+
     assert true_model.check_stability()
 
     # Plot the true network
@@ -127,7 +139,7 @@ def generate_synthetic_data(seed=None):
     plt.pause(0.001)
 
     # Sample from the true model
-    S,R = true_model.generate(T=T, keep=False, print_interval=100)
+    S,R = true_model.generate(T=T, keep=False, print_interval=50)
 
     # Pickle and save the data
     out_dir  = os.path.join('data', "synthetic")

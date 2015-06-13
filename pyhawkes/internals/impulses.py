@@ -45,6 +45,11 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         # Initialize mean field parameters
         self.mf_gamma = self.gamma[None, None, :] * np.ones((self.K, self.K, self.B))
 
+    @property
+    def impulses(self):
+        basis = self.model.basis.basis
+        return np.tensordot(basis, self.g, axes=[1,2])
+
     def rvs(self, size=[]):
         """
         Sample random variables from the Dirichlet impulse response distribution.
@@ -345,6 +350,17 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
                        self.alpha_0 * np.ones((self.K, self.K)),
                        self.beta_0 * np.ones((self.K, self.K)))
 
+    @property
+    def impulses(self):
+        N_pts = 50
+        t = np.linspace(0, self.dt_max, N_pts)
+        ir = np.zeros((N_pts, self.K, self.K))
+        for k1 in xrange(self.K):
+            for k2 in xrange(self.K):
+                ir[:,k1,k2] = self.impulse(t, k1, k2)
+        return t, ir
+
+    # TODO: Rename this
     def impulse(self, dt, k1, k2):
         """
         Impulse response induced by an event on process k1 on

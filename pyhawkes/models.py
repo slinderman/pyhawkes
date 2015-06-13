@@ -9,6 +9,7 @@ from scipy.special import gammaln
 from scipy.optimize import minimize
 
 from pybasicbayes.models import ModelGibbsSampling, ModelMeanField
+from pybasicbayes.util.text import progprint_xrange
 
 from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
@@ -17,9 +18,6 @@ from pyhawkes.internals.parents import DiscreteTimeParents
 from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockModelFixedSparsity
 from pyhawkes.utils.basis import CosineBasis
 
-
-from pyhawkes.utils.profiling import line_profiled
-PROFILING = True
 
 # TODO: Add a simple HomogeneousPoissonProcessModel
 
@@ -622,6 +620,27 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             self.weight_model = self._weight_class(self, **self.weight_hypers)
 
 
+    # Expose basic variables
+    @property
+    def A(self):
+        return self.weight_model.A
+
+    @property
+    def W(self):
+        return self.weight_model.W
+
+    @property
+    def W_effective(self):
+        return self.weight_model.W_effective
+
+    @property
+    def lambda0(self):
+        return self.bias_model.lambda0
+
+    @property
+    def impulses(self):
+        return self.impulse_model.impulses
+
     def initialize_with_standard_model(self, standard_model):
         """
         Initialize with a standard Hawkes model. Typically this will have
@@ -664,7 +683,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         # Alternatively, we can start with a sparse matrix
         # of only strong connections. What sparsity? How about the
         # mean under the network model
-        sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
+        # sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
+        sparsity = self.network.p
         A = W > np.percentile(W, (1.0 - sparsity) * 100)
 
         # Set the model parameters
@@ -674,7 +694,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.impulse_model.g    = g.copy('C')
 
 
-        if not self.network.fixed:
+        if isinstance(self.network, StochasticBlockModel) and not self.network.fixed:
             # Cluster the standard model with kmeans in order to initialize the network
             from sklearn.cluster import KMeans
 
@@ -768,7 +788,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.data_list = data_list
         return model_copy
 
-    def generate(self, keep=True, T=100, print_interval=None):
+    def generate(self, keep=True, T=100, print_interval=25, verbose=False):
         """
         Generate a new data set with the sampled parameters
 
@@ -799,10 +819,10 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         # Add the background rate
         R += self.bias_model.lambda0[None,:]
 
+        iterator = progprint_xrange(T, perline=print_interval) if verbose else xrange(T)
+
         # Iterate over time bins
-        for t in xrange(T):
-            if print_interval is not None and t % print_interval == 0:
-                print "Iteration ", t
+        for t in iterator:
             # Sample a Poisson number of events for each process
             S[t,:] = np.random.poisson(R[t,:] * self.dt)
 
@@ -1030,7 +1050,6 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
                                'v': None, 'alpha': 5.0, 'beta': 1.0,
                                'pi': 1.0}
 
-    @line_profiled
     def resample_model(self):
         """
         Perform one iteration of the Gibbs sampling algorithm.
@@ -1045,10 +1064,10 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
         self.bias_model.resample(self.data_list)
 
         # Update the impulse model given the parents assignments
-        # self.impulse_model.resample(self.data_list)
+        self.impulse_model.resample(self.data_list)
 
         # Update the network model
-        # self.network.resample(data=(self.weight_model.A, self.weight_model.W))
+        self.network.resample(data=(self.weight_model.A, self.weight_model.W))
 
         # Update the weight model given the parents assignments
         self.weight_model.resample(self.data_list)
@@ -1243,7 +1262,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(DiscreteTimeNetwor
 
 class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     _default_bkgd_hypers = {"alpha" : 1.0, "beta" : 1.0}
-    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 10.0, "alpha_0": 10.0, "beta_0" : 1.0}
+    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0" : 1.0}
     _default_weight_hypers = {}
 
     # This model uses an SBM with beta-distributed sparsity levels
@@ -1255,11 +1274,11 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
                                'v': None, 'alpha': 1.0, 'beta': 1.0,
                                'pi': 1.0}
 
-    def __init__(self, K, dt_max=10.0, B=5,
+    def __init__(self, K, dt_max=10.0,
                  bkgd_hypers={},
                  impulse_hypers={},
                  weight_hypers={},
-                 network_hypers={}):
+                 network=None, network_hypers={}):
         """
         Initialize a discrete time network Hawkes model with K processes.
 
@@ -1267,7 +1286,6 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         """
         self.K      = K
         self.dt_max = dt_max
-        self.B      = B
 
         # Initialize the bias
         # Use the given basis hyperparameters
@@ -1284,10 +1302,16 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
             ContinuousTimeImpulseResponses(self, **self.impulse_hypers)
 
         # Initialize the network model
-        self.network_hypers = copy.deepcopy(self._default_network_hypers)
-        self.network_hypers.update(network_hypers)
-        self.network = \
-            self._network_class(K=self.K, **self.network_hypers)
+        # Initialize the network model
+        if network is not None:
+            assert network.K == self.K
+            self.network = network
+        else:
+            # Use the given network hyperparameters
+            self.network_hypers = copy.deepcopy(self._default_network_hypers)
+            self.network_hypers.update(network_hypers)
+            self.network = \
+                self._network_class(K=self.K, **self.network_hypers)
 
         # Initialize the weight model
         from pyhawkes.internals.weights import SpikeAndSlabContinuousTimeGammaWeights
@@ -1300,13 +1324,26 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         self.data_list = []
 
 
+    # Expose basic variables
+    @property
+    def A(self):
+        return self.weight_model.A
+
+    @property
+    def W(self):
+        return self.weight_model.W
+
+    @property
+    def W_effective(self):
+        return self.weight_model.W_effective
+
     @property
     def lambda0(self):
         return self.bias_model.lambda0
 
     @property
-    def W_effective(self):
-        return self.weight_model.W_effective
+    def impulses(self):
+        return self.impulse_model.impulses
 
     def initialize_with_standard_model(self, standard_model):
         """
