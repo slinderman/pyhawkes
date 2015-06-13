@@ -167,7 +167,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             ss[1,:,k2] = self.Ns
         return ss
 
-    def compute_weight_ss(self):
+    def compute_exact_weight_ss(self):
         """
         For comparison, compute the exact sufficient statistics for ss[1,:,:]
         :param data: a TxK array of event counts assigned to the background process
@@ -188,6 +188,9 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
                     ss[1,k1,k2] = A[k1,k2] * (F[:,k1,:].dot(beta[k1,k2,:])).sum()
 
         return ss
+
+    def compute_weight_ss(self):
+        return self.compute_approx_weight_ss()
 
     def compute_ir_ss(self):
         """
