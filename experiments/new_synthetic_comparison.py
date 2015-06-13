@@ -19,8 +19,6 @@ import matplotlib.pyplot as plt
 
 import harness
 
-from pyhawkes.utils.profiling import show_line_stats
-# PROFILING=True
 
 def load_data(data_path, test_path):
     with gzip.open(data_path, 'r') as f:
@@ -193,5 +191,3 @@ if __name__ == "__main__":
 
     # Plot impulse responses
     # plot_impulse_responses(models, results)
-
-    show_line_stats()
