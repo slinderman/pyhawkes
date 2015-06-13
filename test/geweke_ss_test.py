@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     :return:
     """
-    K = 2
+    K = 1
     T = 50
     dt = 1.0
     dt_max = 3.0
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     model.generate(T=T)
 
     # Gibbs sample and then generate new data
-    N_samples = 1000
+    N_samples = 5
     samples = []
     lps = []
     for itr in progprint_xrange(N_samples, perline=50):
