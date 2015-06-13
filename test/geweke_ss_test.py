@@ -21,11 +21,12 @@ if __name__ == "__main__":
     network_hypers = {'c': np.zeros(K, dtype=np.int), 'p': 0.5, 'kappa': 10.0, 'v': 10*3.0}
     bkgd_hypers = {"alpha": 1., "beta": 10.}
     model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max,
+                                                       weight_hypers={"parallel_resampling": False},
                                                        network_hypers=network_hypers)
     model.generate(T=T)
 
     # Gibbs sample and then generate new data
-    N_samples = 5
+    N_samples = 1000
     samples = []
     lps = []
     for itr in progprint_xrange(N_samples, perline=50):

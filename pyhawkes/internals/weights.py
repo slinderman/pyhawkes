@@ -18,23 +18,19 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
     KxK gamma weight matrix. Implements Gibbs sampling given
     the parent variables.
     """
-    def __init__(self, model):
+    def __init__(self, model, parallel_resampling=True):
         """
         Initialize the spike-and-slab gamma weight model with either a
         network object containing the prior or rho, alpha, and beta to
         define an independent model.
-
-        :param K:       Number of processes
-        :param network: Pointer to a network object exposing rho, alpha, and beta
-        :param rho:     Sparsity level
-        :param alpha:   Gamma shape parameter
-        :param beta:    Gamma scale parameter
         """
         self.model = model
         self.K = model.K
         # assert isinstance(network, GibbsNetwork), "network must be a GibbsNetwork object"
         self.network = model.network
 
+        # Specify whether or not to resample the columns of A in parallel
+        self.parallel_resampling = parallel_resampling
 
         # Initialize parameters A and W
         self.A = np.ones((self.K, self.K))
@@ -174,8 +170,10 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         self.resample_W_given_A_and_z(data)
 
         # Resample A given W
-        # self._resample_A_given_W(data)
-        self._joblib_resample_A_given_W(data)
+        if self.parallel_resampling:
+            self._joblib_resample_A_given_W(data)
+        else:
+            self._resample_A_given_W(data)
 
 class GammaMixtureWeights(GibbsSampling, MeanField, MeanFieldSVI):
     """

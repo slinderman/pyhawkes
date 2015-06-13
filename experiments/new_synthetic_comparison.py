@@ -105,10 +105,10 @@ def plot_impulse_responses(models, results):
 if __name__ == "__main__":
     seed = None
     run = 1
-    K = 4
+    K = 50
     C = 1
-    T = 1000
-    T_train = 1000
+    T = 100000
+    T_train = 10000
     T_test = 1000
     data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
     test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl.gz" % (K,C,T_test))
