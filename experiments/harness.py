@@ -3,6 +3,7 @@ Test harness for fitting the competing models.
 """
 import time
 import cPickle
+import copy
 import os
 import gzip
 import numpy as np
@@ -102,7 +103,8 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
         for _ in progprint_xrange(N_samples, perline=10):
             # Update the model
             tic = time.time()
-            samples.append(test_model.resample_and_copy())
+            test_model.resample_model()
+            samples.append(copy.deepcopy(test_model.get_parameters()))
             times.append(time.time() - tic)
 
             # Compute log probability and heldout log likelihood
@@ -123,7 +125,7 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
         hlls = np.array(hlls)
 
         # Make results object
-        results = Results(samples, timestamps, lps, hlls)
+        results = Results(samples[-1], timestamps, lps, hlls)
 
         # Save the Gibbs samples
         with gzip.open(output_path, 'w') as f:
@@ -165,7 +167,8 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
         for _ in progprint_xrange(N_samples, perline=25):
             # Update the model
             tic = time.time()
-            samples.append(test_model.resample_and_copy())
+            test_model.resample_model()
+            samples.append(copy.deepcopy(test_model.get_parameters()))
             times.append(time.time() - tic)
 
             # Compute log probability and heldout log likelihood
@@ -233,10 +236,12 @@ def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
             tic = time.time()
             test_model.meanfield_coordinate_descent_step()
             times.append(time.time() - tic)
-            samples.append(test_model.copy_sample())
 
             # Resample from variational posterior to compute log prob and hlls
             test_model.resample_from_mf()
+            # samples.append(test_model.copy_sample())
+            samples.append(copy.deepcopy(test_model.get_parameters()))
+
 
             # Compute log probability and heldout log likelihood
             lps.append(test_model.log_probability())
@@ -309,10 +314,11 @@ def fit_network_hawkes_svi(S, S_test, dt, dt_max, output_path,
             tic = time.time()
             test_model.sgd_step(minibatchsize=minibatchsize, stepsize=stepsize[itr])
             times.append(time.time() - tic)
-            samples.append(test_model.copy_sample())
 
             # Resample from variational posterior to compute log prob and hlls
             test_model.resample_from_mf()
+            # samples.append(test_model.copy_sample())
+            samples.append(copy.deepcopy(test_model.get_parameters()))
 
             # Compute log probability and heldout log likelihood
             lps.append(test_model.log_probability())

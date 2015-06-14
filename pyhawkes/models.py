@@ -861,10 +861,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                self.weight_model.W, \
                self.impulse_model.g, \
                self.bias_model.lambda0, \
-               self.network.c, \
                self.network.p, \
-               self.network.v, \
-               self.network.m \
+               self.network.v
 
     def set_parameters(self, params):
         """
