@@ -19,6 +19,9 @@ from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockMode
 from pyhawkes.utils.basis import CosineBasis
 
 
+from pyhawkes.utils.profiling import line_profiled
+# PROFILING=True
+
 # TODO: Add a simple HomogeneousPoissonProcessModel
 
 class DiscreteTimeStandardHawkesModel(object):
@@ -1157,6 +1160,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         #     p.resample(self.bias_model, self.weight_model, self.impulse_model)
         #     p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
 
+    @line_profiled
     def meanfield_coordinate_descent_step(self):
         # Update the parents.
         for p in self.data_list:
@@ -1176,6 +1180,7 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
 
         return self.get_vlb()
 
+    @line_profiled
     def get_vlb(self):
         # Compute the variational lower bound
         vlb = 0

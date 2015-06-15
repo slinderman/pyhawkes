@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import harness
 
 
+
 def load_data(data_path, test_path):
     with gzip.open(data_path, 'r') as f:
         S, true_model = cPickle.load(f)
@@ -154,10 +155,10 @@ if __name__ == "__main__":
         harness.fit_network_hawkes_svi
     ]
     inf_args = [
-        {"N_samples": 1000, "standard_model": std_model},
+        {"N_samples": 3000, "standard_model": std_model},
         #{"N_samples": 1000, "standard_model": std_model},
-        {"N_samples": 1000, "standard_model": std_model},
-        {"N_samples": 1000, "standard_model": std_model}
+        {"N_samples": 3000, "standard_model": std_model},
+        {"N_samples": 3000, "standard_model": std_model}
     ]
     model_args = [
         {"basis": basis, "network": copy.deepcopy(network)},

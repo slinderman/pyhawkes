@@ -8,7 +8,7 @@ from pyhawkes.internals.parent_updates import mf_update_Z
 from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
 
 from pyhawkes.utils.profiling import line_profiled
-PROFILING = True
+# PROFILING = True
 
 
 class DiscreteTimeParents(GibbsSampling, MeanField):
@@ -367,6 +367,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
     def meanfieldupdate(self):
         return self._mf_update_Z_python()
 
+    @line_profiled
     def get_vlb(self):
         """
         E_q[\ln p(z | \lambda)] - E_q[\ln q(z)]
