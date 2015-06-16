@@ -125,7 +125,7 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
         hlls = np.array(hlls)
 
         # Make results object
-        results = Results(samples[-1], timestamps, lps, hlls)
+        results = Results(samples, timestamps, lps, hlls)
 
         # Save the Gibbs samples
         with gzip.open(output_path, 'w') as f:
