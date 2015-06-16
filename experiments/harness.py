@@ -168,8 +168,9 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
             # Update the model
             tic = time.time()
             test_model.resample_model()
-            samples.append(copy.deepcopy(test_model.get_parameters()))
             times.append(time.time() - tic)
+
+            samples.append(copy.deepcopy(test_model.get_parameters()))
 
             # Compute log probability and heldout log likelihood
             lps.append(test_model.log_probability())
