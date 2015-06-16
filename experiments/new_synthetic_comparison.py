@@ -30,7 +30,9 @@ def load_data(data_path, test_path):
 
     return S, S_test, true_model
 
-def plot_pred_ll_vs_time(models, results, S_test, burnin=0):
+def plot_pred_ll_vs_time(models, results, burnin=0,
+                         std_ll=np.nan,
+                         true_ll=np.nan):
     from hips.plotting.layout import create_figure
     from hips.plotting.colormaps import harvard_colors
 
@@ -52,10 +54,18 @@ def plot_pred_ll_vs_time(models, results, S_test, burnin=0):
 
     # plt.legend(loc="outside right")
 
+    # Plot the standard Hawkes test ll
+    plt.plot([t_start, t_stop], std_ll*np.ones(2), lw=2, color=col[len(models)], label="Std.")
+
+    # Plot the true ll
+    plt.plot([t_start, t_stop], true_ll*np.ones(2), '--k',  lw=2,label="True")
+
+    ax.set_xscale("log")
     ax.set_xlim(t_start, t_stop)
     ax.set_xlabel("time [sec]")
     ax.set_ylabel("Pred. Log Lkhd.")
     plt.show()
+
 
 
 def plot_impulse_responses(models, results):
@@ -138,7 +148,6 @@ if __name__ == "__main__":
         harness.fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
                       model_args={"basis": basis, "alpha": 1.0, "beta": 1.0})
     std_model = std_results.samples[0]
-    results.append(std_results)
 
     # Now fit the Bayesian models with MCMC or VB,
     # initializing with the standard model
@@ -175,20 +184,11 @@ if __name__ == "__main__":
                               model_args=margs,
                               **iargs))
 
-    # Insert a "result" object for the true model
-    models.insert(0, "True")
-    results.insert(0,
-       harness.Results(
-           [true_model],
-           np.arange(10),
-           true_model.log_probability()*np.ones(10),
-           true_model.heldout_log_likelihood(S_test) * np.ones(10))
-    )
-
-
     # Plot the reuslts
     plt.ion()
-    plot_pred_ll_vs_time(models, results, S_test, burnin=1)
+    plot_pred_ll_vs_time(models, results, burnin=1,
+                         std_ll=std_results.samples[-1].heldout_log_likelihood(S_test),
+                         true_ll=true_model.heldout_log_likelihood(S_test))
 
     # Plot impulse responses
     # plot_impulse_responses(models, results)

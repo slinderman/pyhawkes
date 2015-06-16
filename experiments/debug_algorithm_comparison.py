@@ -29,7 +29,10 @@ def load_data(data_path, test_path):
 
     return S, S_test, true_model
 
-def plot_pred_ll_vs_time(models, results, S_test, burnin=0, true_ll=np.nan):
+
+def plot_pred_ll_vs_time(models, results, burnin=0,
+                         std_ll=np.nan,
+                         true_ll=np.nan):
     from hips.plotting.layout import create_figure
     from hips.plotting.colormaps import harvard_colors
 
@@ -51,14 +54,16 @@ def plot_pred_ll_vs_time(models, results, S_test, burnin=0, true_ll=np.nan):
 
     # plt.legend(loc="outside right")
 
+    # Plot the standard Hawkes test ll
+    plt.plot([t_start, t_stop], std_ll*np.ones(2), lw=2, color=col[len(models)], label="Std.")
+
     # Plot the true ll
-    plt.plot([t_start, t_stop], true_ll*np.ones(2), '--k')
+    plt.plot([t_start, t_stop], true_ll*np.ones(2), '--k', lw=2, label="True")
 
     ax.set_xlim(t_start, t_stop)
     ax.set_xlabel("time [sec]")
     ax.set_ylabel("Pred. Log Lkhd.")
     plt.show()
-
 
 def plot_impulse_responses(models, results):
     from hips.plotting.layout import create_figure
@@ -179,7 +184,8 @@ if __name__ == "__main__":
 
     # Plot the reuslts
     plt.ion()
-    plot_pred_ll_vs_time(models, results, S_test, burnin=1,
+    plot_pred_ll_vs_time(models, results, burnin=1,
+                         std_ll=std_results.test_lls[-1],
                          true_ll=true_model.heldout_log_likelihood(S_test))
 
     # Plot impulse responses
