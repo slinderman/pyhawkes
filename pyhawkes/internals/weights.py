@@ -102,7 +102,7 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         par.K = self.model.K
 
         if len(data) == 0:
-            self.A = np.random.rand() < self.network.P
+            self.A = np.random.rand(self.K, self.K) < self.network.P
             return
 
         # We can naively parallelize over receiving neurons, k2
@@ -507,10 +507,13 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
     """
     Implementation of spike and slab gamma weights from L&A 2014
     """
-    def __init__(self, model):
+    def __init__(self, model, parallel_resampling=True):
         self.model = model
         self.network = model.network
         self.K = self.model.K
+
+        # Specify whether or not to resample the columns of A in parallel
+        self.parallel_resampling = parallel_resampling
 
         # Initialize parameters A and W
         self.A = np.ones((self.K, self.K))
@@ -631,6 +634,30 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         # sys.stdout.write('\n')
         # sys.stdout.flush()
 
+    def _joblib_resample_A_given_W(self, data):
+        """
+        Resample A given W. This must be immediately followed by an
+        update of z | A, W. This  version uses joblib to parallelize
+        over columns of A.
+        :return:
+        """
+        # Use the module trick to avoid copying globals
+        import pyhawkes.internals.parallel_adjacency_resampling as par
+        par.model = self.model
+        par.data = data
+        par.lambda_irs = [par._compute_weighted_impulses_at_events(d) for d in data]
+
+        if len(data) == 0:
+            self.A = np.random.rand(self.K, self.K) < self.network.P
+            return
+
+        # We can naively parallelize over receiving neurons, k2
+        # To avoid serializing and copying the data object, we
+        # manually extract the required arrays Sk, Fk, etc.
+        A_cols = Parallel(n_jobs=-1, backend="multiprocessing")(
+            delayed(par._ct_resample_column_of_A)(k2) for k2 in range(self.K))
+        self.A = np.array(A_cols).T
+
     def resample_W_given_A_and_z(self, N, Zsum):
         """
         Resample the weights given A and z.
@@ -661,4 +688,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         self.resample_W_given_A_and_z(N, Zsum)
 
         # Resample A | W
-        self._resample_A_given_W(data)
+        if self.parallel_resampling:
+            self._joblib_resample_A_given_W(data)
+        else:
+            self._resample_A_given_W(data)

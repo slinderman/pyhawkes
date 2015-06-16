@@ -18,7 +18,7 @@ def test_geweke():
     dt = 1.0
     dt_max = 3.0
     # network_hypers = {'C': 1, 'p': 0.5, 'kappa': 3.0, 'alpha': 3.0, 'beta': 1.0/20.0}
-    network_hypers = {'c': np.zeros(K, dtype=np.int), 'p': 1.0, 'kappa': 10.0, 'v': 10*3.0}
+    network_hypers = {'c': np.zeros(K, dtype=np.int), 'p': 0.5, 'kappa': 10.0, 'v': 10*3.0}
     bkgd_hypers = {"alpha": 1., "beta": 10.}
     model = ContinuousTimeNetworkHawkesModel(K=K, dt_max=dt_max,
                                              network_hypers=network_hypers)
@@ -26,7 +26,7 @@ def test_geweke():
     model.generate(T=T)
 
     # Gibbs sample and then generate new data
-    N_samples = 10000
+    N_samples = 1000
     samples = []
     lps = []
     for itr in progprint_xrange(N_samples, perline=50):

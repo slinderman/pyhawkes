@@ -74,63 +74,62 @@ def _resample_column_of_A(k2):
 
 
 ### Now do the same thing for continuous time
-# def _compute_weighted_impulses_at_events(data):
-#     from pyhawkes.internals.continuous_time_helpers import \
-#         compute_weighted_impulses_at_events
-#
-#     N, S, C, Z, dt_max = data.N, data.S, data.C, data.Z, model.dt_max
-#     W = model.W
-#     mu, tau = model.impulse_model.mu, model.impulse_model.tau
-#     lmbda = np.zeros((N, model.K))
-#     compute_weighted_impulses_at_events(S, C, Z, dt_max, W, mu, tau, lmbda)
-#     return lmbda
-#
-# def _ct_log_likelihood_single_process(k):
-#     ll = 0
-#     lmbda0 = model.lambda0
-#     lmbda_irs = [_compute_weighted_impulses_at_events(d) for d in data]
-#
-#     for lmbda_ir, d in zip(lmbda_irs, data):
-#         Ns, C, T = d.Ns, d.C, d.T
-#
-#         # - \int lambda_k(t) dt
-#         ll -= lmbda0[k] * T
-#         ll -= Wk.dot(Ns)
-#
-#         # + \sum_n log(lambda(s_n))
-#         ll += np.log(lmbda0[k] + np.sum(Ak * lmbda_ir[C==k,:], axis=1)).sum()
-#     return ll
+def _compute_weighted_impulses_at_events(data):
+    from pyhawkes.internals.continuous_time_helpers import \
+        compute_weighted_impulses_at_events
 
-# def _ct_resample_column_of_A(k2):
-#     p = model.network.P
-#     K = model.K
-#     dt = model.dt
-#     lambda0 = model.lambda0
-#     W = model.W
-#     g = model.impulse_model.g
-#
-#     A_col = model.A[:,k2].copy()
-#     W_col = W[:,k2]
-#
-#     if p[k1,k2] == 0.:
-#         self.A[k1,k2] = 0
-#         continue
-#
-#     if p[k1,k2] == 1.:
-#         self.A[k1,k2] = 1
-#         continue
-#
-#     # Compute the log likelihood of the events given W and A=0
-#     self.A[k1,k2] = 0
-#     ll0 = _log_likelihood_single_process(k2)
-#
-#     # Compute the log likelihood of the events given W and A=1
-#     self.A[k1,k2] = 1
-#     ll1 = _log_likelihood_single_process(k2)
-#
-#     # Sample A given conditional probability
-#     lp0 = ll0 + np.log(1.0 - p[k1,k2])
-#     lp1 = ll1 + np.log(p[k1,k2])
-#     Z   = logsumexp([lp0, lp1])
-#
-#     self.A[k1,k2] = np.log(np.random.rand()) < lp1 - Z
+    N, S, C, Z, dt_max = data.N, data.S, data.C, data.Z, model.dt_max
+    W = model.W
+    mu, tau = model.impulse_model.mu, model.impulse_model.tau
+    lmbda = np.zeros((N, model.K))
+    compute_weighted_impulses_at_events(S, C, Z, dt_max, W, mu, tau, lmbda)
+    return lmbda
+
+# Precompute the weighted impulse responses
+# lambda_irs = [_compute_weighted_impulses_at_events(d) for d in data]
+lambda_irs = None
+
+def _ct_log_likelihood_single_process(k, A_col):
+    ll = 0
+    lmbda0 = model.lambda0
+    W = model.W
+
+    for lmbda_ir, d in zip(lambda_irs, data):
+        Ns, C, T = d.Ns, d.C, d.T
+
+        # - \int lambda_k(t) dt
+        ll -= lmbda0[k] * T
+        ll -= (A_col * W[:,k]).dot(Ns)
+
+        # + \sum_n log(lambda(s_n))
+        ll += np.log(lmbda0[k] + np.sum(A_col * lmbda_ir[C==k,:], axis=1)).sum()
+    return ll
+
+
+def _ct_resample_column_of_A(k2):
+    p = model.network.P
+    K = model.K
+    A_col = model.A[:,k2].copy()
+
+    for k1 in xrange(K):
+        # Compute the log likelihood of the events given W and A=0
+        A_col[k1] = 0
+        # ll0 = sum([d.log_likelihood_single_process(k2) for d in data])
+        ll0 = _ct_log_likelihood_single_process(k2, A_col)
+
+        # Compute the log likelihood of the events given W and A=1
+        A_col[k1] = 1
+        # ll1 = sum([d.log_likelihood_single_process(k2) for d in data])
+        ll1 = _ct_log_likelihood_single_process(k2, A_col)
+
+        # Sample A given conditional probability
+        lp0 = ll0 + np.log(1.0 - p[k1,k2])
+        lp1 = ll1 + np.log(p[k1,k2])
+        Z   = logsumexp([lp0, lp1])
+
+        # ln p(A=1) = ln (exp(lp1) / (exp(lp0) + exp(lp1)))
+        #           = lp1 - ln(exp(lp0) + exp(lp1))
+        #           = lp1 - Z
+        A_col[k1] = np.log(np.random.rand()) < lp1 - Z
+
+    return A_col

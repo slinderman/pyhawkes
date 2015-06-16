@@ -25,6 +25,12 @@ cdef inline double ln_impulse(double dt, double mu, double tau, double dt_max) n
     Impulse response induced by an event on process k1 on
     the rate of process k2 at lag dt
     """
+    if dt < 1e-8:
+        return 0
+
+    if dt_max - dt < 1e-8:
+        return 0
+
     cdef double Z = dt * (dt_max - dt)/dt_max * SQRT_2PI / sqrt(tau)
     return exp(-tau/2. * (logit(dt/dt_max) - mu)**2) / Z
 
@@ -58,7 +64,6 @@ cpdef ct_resample_Z_logistic_normal_serial(
         # Iterate backward from the most recent to compute probabilities of each parent spike
         for par in range(n-1, -1, -1):
             dt = S[n] - S[par]
-
             # Since the spikes are sorted, we can stop if we reach a potential
             # parent that occurred greater than dt_max in the past
             if dt > dt_max:

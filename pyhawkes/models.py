@@ -1683,7 +1683,6 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         Perform one iteration of the Gibbs sampling algorithm.
         :return:
         """
-        # import ipdb; ipdb.set_trace()
         # Update the parents.
         # THIS MUST BE DONE IMMEDIATELY FOLLOWING WEIGHT UPDATES!
         for p in self.data_list:
@@ -1692,7 +1691,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         # Update the bias model given the parents assigned to the background
         self.bias_model.resample(self.data_list)
 
-        # Update the impulse model given the parents assignments
+        # # Update the impulse model given the parents assignments
         self.impulse_model.resample(self.data_list)
 
         # Update the network model
