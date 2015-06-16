@@ -274,9 +274,9 @@ class DiscreteTimeStandardHawkesModel(object):
             R = self.compute_rate(index, ks=ks)
 
             if ks is not None:
-                ll += (-gammaln(S[:,ks]+1) + S[:,ks] * np.log(R) -R*self.dt).sum()
+                ll += (S[:,ks] * np.log(R) -R*self.dt).sum()
             else:
-                ll += (-gammaln(S+1) + S * np.log(R) -R*self.dt).sum()
+                ll += (S * np.log(R) -R*self.dt).sum()
 
         return ll
 
