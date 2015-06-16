@@ -4,7 +4,7 @@ from pybasicbayes.distributions import GibbsSampling, MeanField
 from gslrandom import multinomial_par, multinomial
 
 from pyhawkes.utils.utils import initialize_pyrngs
-from pyhawkes.internals.parent_updates import mf_update_Z
+from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
 from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
 
 from pyhawkes.utils.profiling import line_profiled
@@ -364,11 +364,53 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
 
         # self._check_EZ()
 
+    def _mf_update_Z(self):
+        """
+        Update the mean field parameters for the latent parents
+        :return:
+        """
+        bias_model, weight_model, impulse_model = \
+            self.model.bias_model, self.model.weight_model, self.model.impulse_model
+        K, B = self.K, self.B
+
+        exp_E_log_lambda0 = np.exp(bias_model.expected_log_lambda0())
+        exp_E_log_W = np.exp(weight_model.expected_log_W())
+        exp_E_log_g = np.exp(impulse_model.expected_log_g())
+
+        for k2, (Sk, Fk, EZk) in enumerate(zip(self.Ss, self.Fs, self.EZ)):
+            mf_update_Z(k2, EZk, Sk,
+                        exp_E_log_lambda0,
+                        exp_E_log_W,
+                        exp_E_log_g,
+                        Fk)
+
+        self._check_EZ()
+
     def meanfieldupdate(self):
         return self._mf_update_Z_python()
 
-    @line_profiled
     def get_vlb(self):
+        bias_model, weight_model, impulse_model = \
+            self.model.bias_model, self.model.weight_model, self.model.impulse_model
+        K,B = self.K, self.B
+
+        # First term
+        # E[LN p(z_tk^0 | \lambda_0)] = - LN z_tk^0! + z_tk^0 * LN \lambda_0 - \lambda_0
+        # The factorial cancels with the second term
+        E_ln_lam = bias_model.expected_log_lambda0()
+        E_lam = bias_model.expected_lambda0()
+        E_ln_W = weight_model.expected_log_W()
+        E_W = weight_model.expected_W()
+        E_ln_g = impulse_model.expected_log_g()
+
+        vlb = 0
+        for k, (EZk, Sk, Fk) in enumerate(zip(self.EZ, self.Ss, self.Fs)):
+            vlb += mf_vlb(k, self.T, EZk, Sk, self.Ns, E_ln_lam, E_lam, E_ln_W, E_W, E_ln_g, Fk)
+
+        return vlb
+
+    @line_profiled
+    def get_vlb_python(self):
         """
         E_q[\ln p(z | \lambda)] - E_q[\ln q(z)]
         :return:
@@ -383,9 +425,13 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # The factorial cancels with the second term
         E_ln_lam = bias_model.expected_log_lambda0()
         E_lam = bias_model.expected_lambda0()
+        E_ln_W = weight_model.expected_log_W()
+        E_W = weight_model.expected_W()
+        E_ln_g = impulse_model.expected_log_g()
+
         for k, EZk in enumerate(self.EZ):
             vlb += (EZk[:,0] * E_ln_lam[k]).sum()
-            vlb += (-self.T * E_lam[k]).sum()
+            vlb += -self.T * E_lam[k]
 
         # Second term
         # -E[LN q(z_tk^0)] = -LN s_tk! + LN z_tk^0! - z_tk^0 LN u_tk^0
@@ -402,23 +448,21 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # Since each impulse response is normalized...
         for k, (EZk, Sk, Fk, Tk, tk) in enumerate(zip(self.EZ, self.Ss, self.Fs, self.Ts, self.ts)):
             E_ln_Wg = (np.log(Fk) +
-                       weight_model.expected_log_W()[:,k][None,:,None] +
-                       impulse_model.expected_log_g()[:,k,:][None,:,:])
+                       E_ln_W[:,k][None,:,None] +
+                       E_ln_g[:,k,:][None,:,:])
             E_ln_Wg = np.nan_to_num(E_ln_Wg)
             assert E_ln_Wg.shape == (Tk, K, B)
             vlb += (EZk[:,1:] * E_ln_Wg.reshape((Tk, K*B))).sum()
 
-            # Compute the sum of E[Wg] * N
-            sum_E_Wg = (self.Ns[:,None] *
-                       weight_model.expected_W()[:,k][:,None] *
-                       impulse_model.expected_g()[:,k,:]).sum()
+            # Compute the sum of E[W] * N
+            sum_E_Wg = (self.Ns * E_W[:,k]).sum()
             vlb += -sum_E_Wg
+
 
             # Second term
             ln_u = np.log(EZk[:,1:] / Sk[:,None].astype(np.float))
             ln_u = np.nan_to_num(ln_u)
             vlb += (-EZk[:,1:] * ln_u).sum()
-
         return vlb
 
 
