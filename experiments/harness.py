@@ -93,6 +93,7 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
             test_model.initialize_with_standard_model(standard_model)
 
         # TODO: Precompute F_test
+        F_test = test_model.basis.convolve_with_basis(S_test)
 
 
         # Gibbs sample
@@ -108,8 +109,8 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
             times.append(time.time() - tic)
 
             # Compute log probability and heldout log likelihood
-            lps.append(test_model.log_probability())
-            hlls.append(test_model.heldout_log_likelihood(S_test))
+            # lps.append(test_model.log_probability())
+            hlls.append(test_model.heldout_log_likelihood(S_test, F=F_test))
 
             # # Save this sample
             # with open(output_path + ".gibbs.itr%04d.pkl" % itr, 'w') as f:
@@ -173,7 +174,7 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
             samples.append(copy.deepcopy(test_model.get_parameters()))
 
             # Compute log probability and heldout log likelihood
-            lps.append(test_model.log_probability())
+            # lps.append(test_model.log_probability())
             hlls.append(test_model.heldout_log_likelihood(S_test_ct, C_test_ct, T_test))
 
             # # Save this sample
@@ -221,7 +222,8 @@ def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)
 
-        # TODO: Precompute F_test
+        # Precompute F_test
+        F_test = test_model.basis.convolve_with_basis(S_test)
 
         # Initialize with the standard model parameters
         if standard_model is not None:
@@ -245,8 +247,8 @@ def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
 
 
             # Compute log probability and heldout log likelihood
-            lps.append(test_model.log_probability())
-            hlls.append(test_model.heldout_log_likelihood(S_test))
+            # lps.append(test_model.log_probability())
+            hlls.append(test_model.heldout_log_likelihood(S_test, F=F_test))
 
             # Save this sample
             # with open(output_path + ".svi.itr%04d.pkl" % itr, 'w') as f:
@@ -295,7 +297,8 @@ def fit_network_hawkes_svi(S, S_test, dt, dt_max, output_path,
         if standard_model is not None:
             test_model.initialize_with_standard_model(standard_model)
 
-        # TODO: Precompute F_test
+        # Precompute F_test
+        F_test = test_model.basis.convolve_with_basis(S_test)
 
         # Initialize with the standard model parameters
         if standard_model is not None:
@@ -322,8 +325,8 @@ def fit_network_hawkes_svi(S, S_test, dt, dt_max, output_path,
             samples.append(copy.deepcopy(test_model.get_parameters()))
 
             # Compute log probability and heldout log likelihood
-            lps.append(test_model.log_probability())
-            hlls.append(test_model.heldout_log_likelihood(S_test))
+            # lps.append(test_model.log_probability())
+            hlls.append(test_model.heldout_log_likelihood(S_test, F=F_test))
 
             # Save this sample
             # with open(output_path + ".svi.itr%04d.pkl" % itr, 'w') as f:

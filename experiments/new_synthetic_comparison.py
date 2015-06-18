@@ -117,7 +117,7 @@ if __name__ == "__main__":
     K = 50
     C = 1
     T = 100000
-    T_train = 10000
+    T_train = 100000
     T_test = 1000
     data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
     test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl.gz" % (K,C,T_test))
@@ -164,10 +164,10 @@ if __name__ == "__main__":
         harness.fit_network_hawkes_svi
     ]
     inf_args = [
-        {"N_samples": 3000, "standard_model": std_model},
-        #{"N_samples": 1000, "standard_model": std_model},
-        {"N_samples": 3000, "standard_model": std_model},
-        {"N_samples": 3000, "standard_model": std_model}
+        {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
+        #{"N_samples": 1000, "standard_model": std_model, "time_limit": 16*60*60},
+        {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
+        {"N_samples": 20000, "standard_model": std_model, "time_limit": 20*60*60}
     ]
     model_args = [
         {"basis": basis, "network": copy.deepcopy(network)},
@@ -185,7 +185,7 @@ if __name__ == "__main__":
                               **iargs))
 
     # Plot the reuslts
-    plt.ion()
+    # plt.ion()
     plot_pred_ll_vs_time(models, results, burnin=1,
                          std_ll=std_results.samples[-1].heldout_log_likelihood(S_test),
                          true_ll=true_model.heldout_log_likelihood(S_test))
