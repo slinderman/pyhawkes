@@ -1,4 +1,5 @@
 import copy
+import abc
 
 from scipy.optimize import minimize
 
@@ -8,14 +9,197 @@ import autograd.numpy as np
 from autograd import grad
 
 
-class NonlinearHawkesProcess(object):
+### Nodes
+class _NonlinearHawkesNodeBase(object):
     """
-    Discrete time Poisson GLM
+    A single node of a nonlinear Hawkes process.
     """
+    __metaclass__ = abc.ABCMeta
+
+    constrained = False
+
+    def bias_bnds(self):
+        return None
+
+    def weight_bnds(self):
+        return None
+
+    @abc.abstractmethod
+    def link(self, psi):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def invlink(self, lam):
+        raise NotImplementedError
+
+    def __init__(self, K, B, dt=1.0, sigma=np.inf, lmbda=np.inf):
+        self.K, self.B, self.dt, self.sigma, self.lmbda = K, B, dt, sigma, lmbda
+
+        # Initialize weights
+        self.w = np.zeros(1+self.K*self.B)
+
+        # List of event counts and filtered inputs
+        self.data_list = []
+
+    def add_data(self, F, S):
+        T = F.shape[0]
+        assert S.shape == (T,) and S.dtype in (np.int, np.uint, np.uint32)
+
+        if F.shape[1] == self.K * self.B:
+            F = np.hstack([np.ones((T,)),  F])
+        else:
+            assert F.shape[1] == 1 + self.K * self.B
+
+        self.data_list.append((F, S))
+
+    def initialize_to_background_rate(self):
+        # self.w = abs(1e-6 * np.random.randn(*self.w.shape))
+        self.w = 1e-3 * np.ones_like(self.w)
+        if len(self.data_list) > 0:
+            N = 0
+            T = 0
+            for F,S in self.data_list:
+                N += S.sum(axis=0)
+                T += S.shape[0] * self.dt
+
+            lambda0 = self.invlink(N / float(T))
+            self.w[0] = lambda0
+
+    def log_likelihood(self, index=None):
+        if index is None:
+            data_list = self.data_list
+        else:
+            data_list = [self.data_list[index]]
+
+        ll = 0
+        for F,S in data_list:
+            psi = F.dot(self.w)
+            lam = self.link(psi)
+            ll += (S * np.log(lam) -lam*self.dt).sum()
+
+        return ll
+
+    def objective(self, w):
+        obj = 0
+        N = float(sum([np.sum(d[1]) for d in self.data_list]))
+        for F,S in self.data_list:
+            psi = np.dot(F, w)
+            lam = self.link(psi)
+            obj -= np.sum(S * np.log(lam) -lam*self.dt) / N
+            # assert np.isfinite(ll)
+
+        # Add penalties
+        obj += (0.5 * np.sum(w[1:]**2) / self.sigma**2) / N
+        obj += np.sum(np.abs(w[1:]) * self.lmbda) / N
+
+        # assert np.isfinite(obj)
+
+        return obj
+
+
+    def fit_with_bfgs(self):
+        """
+        Fit the model with BFGS
+        """
+        # If W_max is specified, set this as a bound
+        # if self.W_max is not None:
+        bnds = self.bias_bnds + self.weight_bnds * (self.K * self.B) \
+            if self.constrained else None
+
+        # else:
+        # bnds = [(None, None)] * (1 + self.K * self.B)
+
+        itr = [0]
+        def callback(w):
+            if itr[0] % 10 == 0:
+                print "Iteration: %03d\t LP: %.5f" % (itr[0], self.objective(w))
+            itr[0] = itr[0] + 1
+
+        itr[0] = 0
+        x0 = self.w
+        res = minimize(self.objective,           # Objective function
+                       x0,                       # Initial value
+                       jac=grad(self.objective), # Gradient of the objective
+                       bounds=bnds,              # Bounds on x
+                       callback=callback)
+        self.w = res.x
+
+
+    def copy_node(self):
+        """
+        Return a copy of the parameters of the node
+        """
+        # Shallow copy the data
+        data_list = copy.copy(self.data_list)
+        self.data_list = []
+
+        # Make a deep copy without the data
+        node_copy = copy.deepcopy(self)
+
+        # Reset the data and return the data-less copy
+        self.data_list = data_list
+        return node_copy
+
+
+class LinearHawkesNode(_NonlinearHawkesNodeBase):
+    constrained = True
+
+    @property
+    def bias_bnds(self):
+        return [(1e-16, None)]
+
+    @property
+    def weight_bnds(self):
+        return [(1e-16, None)]
+
+    def link(self, psi):
+        return psi
+
+    def invlink(self, lam):
+        return lam
+
+
+class RectLinearHawkesNode(_NonlinearHawkesNodeBase):
+    def link(self, psi):
+        return np.log(1.+np.exp(psi))
+
+    def invlink(self, lam):
+        return np.log(np.exp(lam) - 1.)
+
+
+class ExpNonlinearHawkesNode(_NonlinearHawkesNodeBase):
+    def link(self, psi):
+        return np.exp(psi)
+
+    def invlink(self, lam):
+        return np.log(lam)
+
+# Dummy class for a homogeneous Hawkes node
+class HomogeneousPoissonNode(_NonlinearHawkesNodeBase):
+    def link(self, psi):
+        return psi
+
+    def invlink(self, lam):
+        return lam
+
+    def fit_with_bfgs(self):
+        # Rather than fitting, just initialize to background rate
+        self.initialize_to_background_rate()
+        self.w[1:] = 0
+
+
+class _NonlinearHawkesProcessBase(object):
+    """
+    Discrete time nonlinear Hawkes process, i.e. Poisson GLM
+    """
+    __metaclass__ = abc.ABCMeta
+
+    _node_class = None
+
     def __init__(self, K, dt=1.0, dt_max=10.0,
                  B=5, basis=None,
-                 link="exp",
-                 sigma=np.inf):
+                 sigma=np.inf,
+                 lmbda=0):
         """
         Initialize a discrete time network Hawkes model with K processes.
 
@@ -26,6 +210,8 @@ class NonlinearHawkesProcess(object):
         self.K = K
         self.dt = dt
         self.dt_max = dt_max
+        self.sigma = sigma
+        self.lmbda = lmbda
 
         # Initialize the basis
         if basis is None:
@@ -37,21 +223,14 @@ class NonlinearHawkesProcess(object):
             self.B = basis.B
 
         # Initialize nodes
-        self.nodes = [NonlinearHawkesNode(K, B, dt=dt, link=link, sigma=sigma)]
-
-        # Initialize the data list to empty
-        self.data_list = []
+        self.nodes = \
+            [self._node_class(self.K, self.B, dt=self.dt,
+                              sigma=self.sigma, lmbda=self.lmbda)
+             for _ in xrange(self.K)]
 
     def initialize_to_background_rate(self):
-        if len(self.data_list) > 0:
-            N = 0
-            T = 0
-            for S,_ in self.data_list:
-                N += S.sum(axis=0)
-                T += S.shape[0] * self.dt
-
-            lambda0 = N / float(T)
-            self.weights[:,0] = lambda0
+        for node in self.nodes:
+            node.initialize_to_background_rate()
 
     @property
     def W(self):
@@ -104,115 +283,51 @@ class NonlinearHawkesProcess(object):
         for k,node in enumerate(self.nodes):
             node.add_data(F, S[:,k])
 
+    def remove_data(self, index):
+        for node in self.nodes:
+            del node.data_list[index]
 
-    def log_likelihood(self):
-        ll = np.sum([node.log_likelihood() for node in self.nodes])
+    def log_likelihood(self, index=None):
+        ll = np.sum([node.log_likelihood(index=index) for node in self.nodes])
         return ll
 
-    def heldout_log_likelihood(self, S):
-        data = self.add_data(S)
-        hll = self.log_likelihood(data=[data])
-        self.data_list.pop()
+    def heldout_log_likelihood(self, S, F=None):
+        self.add_data(S, F=F)
+        hll = self.log_likelihood(index=-1)
+        self.remove_data(-1)
         return hll
 
     def copy_sample(self):
         """
         Return a copy of the parameters of the model
-        :return: The parameters of the model (A,W,\lambda_0, \beta)
         """
-        # return copy.deepcopy(self.get_parameters())
-
         # Shallow copy the data
-        data_list = copy.copy(self.data_list)
-        self.data_list = []
+        nodes_original = copy.copy(self.nodes)
 
         # Make a deep copy without the data
+        self.nodes = [n.copy_node() for n in nodes_original]
         model_copy = copy.deepcopy(self)
 
         # Reset the data and return the data-less copy
-        self.data_list = data_list
+        self.nodes = nodes_original
         return model_copy
 
-
-class NonlinearHawkesNode(object):
-    """
-    A single node of a nonlinear Hawkes process.
-    """
-    def __init__(self, K, B, link="exp", dt=1.0, sigma=np.inf):
-        self.K, self.B, self.dt, self.sigma = K, B, dt, sigma
-
-        if link.lower() == "exp":
-            self.link = np.exp
-            self.invlink = np.log
-        else:
-            raise NotImplementedError()
-
-        # Initialize weights
-        self.w = np.zeros(1+self.K*self.B)
-
-        self.data_list = []
-
-    def add_data(self, F, S):
-        T = F.shape[0]
-        assert S.shape == (T,) and S.dtype in (np.int, np.uint, np.uint32)
-
-        if F.shape[1] == self.K * self.B:
-            F = np.hstack([np.ones((T,)),  F])
-        else:
-            assert F.shape[1] == 1 + self.K * self.B
-
-        self.data_list.append((F, S))
-
-    def initialize_to_background_rate(self):
-        self.w *= 0
-        if len(self.data_list) > 0:
-            N = 0
-            T = 0
-            for F,S in self.data_list:
-                N += S.sum(axis=0)
-                T += S.shape[0] * self.dt
-
-            lambda0 = N / float(T)
-            self.w[0] = self.invlink(lambda0)
-
-    def log_likelihood(self, w=None):
-        if w is None:
-            w = self.w
-
-        ll = 0
-        for F,S in self.data_list:
-            psi = F.dot(w)
-            lam = self.link(psi)
-            ll += (S * np.log(lam) -lam*self.dt).sum()
-
-        return ll
-
-    def objective(self, w):
-        return -self.log_likelihood(w) + 0.5 * np.sum(w**2) / self.sigma**2
-
-
     def fit_with_bfgs(self):
-        """
-        Fit the model with BFGS
-        """
-        # If W_max is specified, set this as a bound
-        # if self.W_max is not None:
-        #     bnds = [(None, None)] + [(-self.W_max, self.W_max)] * (self.K * self.B)
-        # else:
-        #     bnds = [(None, None)] * (1 + self.K * self.B)
-        itr = [0]
-        def callback(w):
-            if itr[0] % 10 == 0:
-                print "Iteration: %03d\t LP: %.1f" % (itr[0], self.objective(w))
-            itr[0] = itr[0] + 1
+        # TODO: This can be parallelized
+        for k, node in enumerate(self.nodes):
+            print ""
+            print "Fitting Node ", k
+            node.fit_with_bfgs()
 
-        for k in xrange(self.K):
-            print "Optimizing process ", k
-            itr[0] = 0
-            x0 = self.w
-            res = minimize(self.objective,           # Objective function
-                           x0,                       # Initial value
-                           jac=grad(self.objective), # Gradient of the objective
-                           # bounds=bnds,              # Bounds on x
-                           callback=callback)
-            self.w = res.x
+
+class StandardHawkesProcess(_NonlinearHawkesProcessBase):
+    _node_class = LinearHawkesNode
+
+class ReluNonlinearHawkesProcess(_NonlinearHawkesProcessBase):
+    _node_class = RectLinearHawkesNode
+
+class ExpNonlinearHawkesProcess(_NonlinearHawkesProcessBase):
+    _node_class = ExpNonlinearHawkesNode
+
+class HomogeneousPoissonProcess(_NonlinearHawkesProcessBase):
+    _node_class = HomogeneousPoissonNode

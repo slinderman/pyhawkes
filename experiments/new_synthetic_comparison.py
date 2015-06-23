@@ -31,7 +31,9 @@ def load_data(data_path, test_path):
     return S, S_test, true_model
 
 def plot_pred_ll_vs_time(models, results, burnin=0,
+                         homog_ll=np.nan,
                          std_ll=np.nan,
+                         nlin_ll=np.nan,
                          true_ll=np.nan):
     from hips.plotting.layout import create_figure
     from hips.plotting.colormaps import harvard_colors
@@ -54,11 +56,18 @@ def plot_pred_ll_vs_time(models, results, burnin=0,
 
     # plt.legend(loc="outside right")
 
+    # Plot baselines
+    plt.plot([t_start, t_stop], homog_ll*np.ones(2), lw=2, color='k', label="Std.")
+
     # Plot the standard Hawkes test ll
     plt.plot([t_start, t_stop], std_ll*np.ones(2), lw=2, color=col[len(models)], label="Std.")
 
+    # Plot the Nonlinear Hawkes test ll
+    plt.plot([t_start, t_stop], nlin_ll*np.ones(2), lw=2, color=col[len(models)+1], label="Nonlinear")
+
     # Plot the true ll
     plt.plot([t_start, t_stop], true_ll*np.ones(2), '--k',  lw=2,label="True")
+
 
     ax.set_xscale("log")
     ax.set_xlim(t_start, t_stop)
@@ -113,11 +122,11 @@ def plot_impulse_responses(models, results):
 
 if __name__ == "__main__":
     seed = None
-    run = 2
+    run = 1
     K = 50
     C = 1
     T = 100000
-    T_train = 100000
+    T_train = 3000
     T_test = 1000
     data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
     test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl.gz" % (K,C,T_test))
@@ -143,11 +152,25 @@ if __name__ == "__main__":
 
     # First fit the standard model
     results = []
+
+    output_path = os.path.join(output_dir, "homog.pkl.gz")
+    homog_results = \
+        harness.fit_homogeneous_pp_model(S, S_test, dt, dt_max, output_path,
+                      model_args={"basis": basis})
+    homog_model = homog_results.samples[0]
+
     output_path = os.path.join(output_dir, "std.pkl.gz")
     std_results = \
         harness.fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
-                      model_args={"basis": basis, "alpha": 1.0, "beta": 1.0})
+                      model_args={"basis": basis, "lmbda": 1.0})
     std_model = std_results.samples[0]
+
+    # Fit a nonlinear Hawkes (Poisson GLM) model
+    output_path = os.path.join(output_dir, "nonlinear_hawkes.pkl.gz")
+    nlin_results = \
+        harness.fit_nonlinear_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
+                                                model_args={"basis": basis, "sigma": np.inf, "lmbda": 1.0})
+    nlin_model = nlin_results.samples[0]
 
     # Now fit the Bayesian models with MCMC or VB,
     # initializing with the standard model
@@ -164,10 +187,10 @@ if __name__ == "__main__":
         harness.fit_network_hawkes_svi
     ]
     inf_args = [
-        {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
+        {"N_samples": 10, "standard_model": std_model, "time_limit": 20*60*60},
         #{"N_samples": 1000, "standard_model": std_model, "time_limit": 16*60*60},
-        {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
-        {"N_samples": 20000, "standard_model": std_model, "time_limit": 20*60*60}
+        {"N_samples": 10, "standard_model": std_model, "time_limit": 20*60*60},
+        {"N_samples": 10, "standard_model": std_model, "time_limit": 20*60*60}
     ]
     model_args = [
         {"basis": basis, "network": copy.deepcopy(network)},
@@ -187,7 +210,9 @@ if __name__ == "__main__":
     # Plot the reuslts
     # plt.ion()
     plot_pred_ll_vs_time(models, results, burnin=1,
+                         homog_ll=homog_model.heldout_log_likelihood(S_test),
                          std_ll=std_results.samples[-1].heldout_log_likelihood(S_test),
+                         nlin_ll=nlin_results.samples[-1].heldout_log_likelihood(S_test),
                          true_ll=true_model.heldout_log_likelihood(S_test))
 
     # Plot impulse responses

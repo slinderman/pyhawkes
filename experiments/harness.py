@@ -18,17 +18,45 @@ if "DISPLAY" not in os.environ:
     matplotlib.use('Agg')
 
 from pyhawkes.utils.utils import convert_discrete_to_continuous
-from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
-    DiscreteTimeNetworkHawkesModelGammaMixture, \
+from pyhawkes.models import DiscreteTimeNetworkHawkesModelGammaMixture, \
     DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity, \
     DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
     ContinuousTimeNetworkHawkesModel
 
+from pyhawkes.standard_models import ReluNonlinearHawkesProcess, StandardHawkesProcess, ExpNonlinearHawkesProcess, HomogeneousPoissonProcess
+
 Results = namedtuple("Results", ["samples", "timestamps", "lps", "test_lls"])
+
+def fit_homogeneous_pp_model(S, S_test, dt, dt_max, output_path,
+                             model_args={}):
+
+    T,K = S.shape
+
+    # Check for existing Gibbs results
+    print "Fitting a nonlinear Hawkes model using BFGS"
+
+    test_model = HomogeneousPoissonProcess(K=K, dt=dt, dt_max=dt_max, **model_args)
+    test_model.add_data(S)
+
+    # Initialize the background rates to their mean
+    test_model.initialize_to_background_rate()
+    lps = [test_model.log_likelihood()]
+    hlls = [test_model.heldout_log_likelihood(S_test)]
+
+    # Convert to arrays
+    lps = np.array(lps)
+    hlls = np.array(hlls)
+    timestamps = np.array([0])
+
+    # Make results object
+    results = Results([test_model.copy_sample()], timestamps, lps, hlls)
+
+    return results
+
 
 def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
                                    standard_model=None,
-                                   model_args={}, W_max=None):
+                                   model_args={}):
 
     T,K = S.shape
 
@@ -40,12 +68,12 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
     else:
         print "Fitting a standard Hawkes model using BFGS"
 
-        test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, W_max=W_max, **model_args)
+        test_model = StandardHawkesProcess(K=K, dt=dt, dt_max=dt_max,  **model_args)
         test_model.add_data(S)
 
         # Initialize the background rates to their mean
         test_model.initialize_to_background_rate()
-        lps = [test_model.log_posterior()]
+        lps = [test_model.log_likelihood()]
         hlls = [test_model.heldout_log_likelihood(S_test)]
 
         # Fit with BFGS
@@ -53,7 +81,7 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
         test_model.fit_with_bfgs()
         init_time = time.clock() - tic
 
-        lps.append(test_model.log_posterior())
+        lps.append(test_model.log_likelihood())
         hlls.append(test_model.heldout_log_likelihood(S_test))
 
         # Convert to arrays
@@ -67,6 +95,50 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
         # Save the model
         with gzip.open(output_path, 'w') as f:
             print "Saving BFGS results to ", output_path
+            cPickle.dump(results, f, protocol=-1)
+
+    return results
+
+def fit_nonlinear_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
+                                    model_args={}):
+
+    T,K = S.shape
+
+    # Check for existing Gibbs results
+    if os.path.exists(output_path):
+        with gzip.open(output_path, 'r') as f:
+            print "Loading standard BFGS results from ", output_path
+            results = cPickle.load(f)
+    else:
+        print "Fitting a nonlinear Hawkes model using BFGS"
+
+        test_model = ReluNonlinearHawkesProcess(K=K, dt=dt, dt_max=dt_max, **model_args)
+        test_model.add_data(S)
+
+        # Initialize the background rates to their mean
+        test_model.initialize_to_background_rate()
+        lps = [test_model.log_likelihood()]
+        hlls = [test_model.heldout_log_likelihood(S_test)]
+
+        # Fit with BFGS
+        tic = time.clock()
+        test_model.fit_with_bfgs()
+        init_time = time.clock() - tic
+
+        lps.append(test_model.log_likelihood())
+        hlls.append(test_model.heldout_log_likelihood(S_test))
+
+        # Convert to arrays
+        lps = np.array(lps)
+        hlls = np.array(hlls)
+        timestamps = np.array([0, init_time])
+
+        # Make results object
+        results = Results([test_model.copy_sample()], timestamps, lps, hlls)
+
+        # Save the model
+        with gzip.open(output_path, 'w') as f:
+            print "Saving nonlinear BFGS results to ", output_path
             cPickle.dump(results, f, protocol=-1)
 
     return results
