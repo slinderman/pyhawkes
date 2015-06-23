@@ -54,7 +54,7 @@ class _NonlinearHawkesNodeBase(object):
 
     def initialize_to_background_rate(self):
         # self.w = abs(1e-6 * np.random.randn(*self.w.shape))
-        self.w = 1e-3 * np.ones_like(self.w)
+        self.w = 1e-6 * np.ones_like(self.w)
         if len(self.data_list) > 0:
             N = 0
             T = 0

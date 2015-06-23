@@ -66,35 +66,65 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
             print "Loading standard BFGS results from ", output_path
             results = cPickle.load(f)
     else:
-        print "Fitting a standard Hawkes model using BFGS"
+        # Split into test and training
+        xv_len      = int(0.01 * len(S))
+        S_train = S[:-xv_len]
+        S_xv    = S[xv_len:]
 
-        test_model = StandardHawkesProcess(K=K, dt=dt, dt_max=dt_max,  **model_args)
-        test_model.add_data(S)
 
-        # Initialize the background rates to their mean
-        test_model.initialize_to_background_rate()
-        lps = [test_model.log_likelihood()]
-        hlls = [test_model.heldout_log_likelihood(S_test)]
+        def _fit(lmbda):
+            print "Fitting a standard Hawkes model using BFGS"
 
-        # Fit with BFGS
-        tic = time.clock()
-        test_model.fit_with_bfgs()
-        init_time = time.clock() - tic
+            test_model = StandardHawkesProcess(K=K, dt=dt, dt_max=dt_max, lmbda=lmbda, **model_args)
+            test_model.add_data(S_train)
 
-        lps.append(test_model.log_likelihood())
-        hlls.append(test_model.heldout_log_likelihood(S_test))
+            # Initialize the background rates to their mean
+            test_model.initialize_to_background_rate()
+            lps = [test_model.log_likelihood()]
+            hlls = [test_model.heldout_log_likelihood(S_test)]
 
-        # Convert to arrays
-        lps = np.array(lps)
-        hlls = np.array(hlls)
-        timestamps = np.array([0, init_time])
+            # Fit with BFGS
+            tic = time.clock()
+            test_model.fit_with_bfgs()
+            init_time = time.clock() - tic
 
-        # Make results object
-        results = Results([test_model.copy_sample()], timestamps, lps, hlls)
+            lps.append(test_model.log_likelihood())
+            hlls.append(test_model.heldout_log_likelihood(S_test))
+
+            # Convert to arrays
+            lps = np.array(lps)
+            hlls = np.array(hlls)
+            timestamps = np.array([0, init_time])
+
+            # Make results object
+            results = Results([test_model.copy_sample()], timestamps, lps, hlls)
+
+            # Compute cross validation log likelihood
+            xv_ll = test_model.heldout_log_likelihood(S_xv)
+
+            return xv_ll, results
+
+        # Fit models with a range of regularization parameters
+        lmbdas = [.1, 1., 5., 10.]
+        xv_lls = []
+        xv_results = []
+
+        for lmbda in lmbdas:
+            xv_ll, results = _fit(lmbda)
+            xv_lls.append(xv_ll)
+            xv_results.append(results)
+
+        # Find the best
+        for lmbda, xv_ll in zip(lmbdas, xv_lls):
+            print "Lambda: ", lmbda, "\tXV LL: ", xv_ll
+
+        best = np.argmax(xv_lls)
+        results = xv_results[best]
+        print "Best: ", best
 
         # Save the model
         with gzip.open(output_path, 'w') as f:
-            print "Saving BFGS results to ", output_path
+            print "Saving nonlinear BFGS results to ", output_path
             cPickle.dump(results, f, protocol=-1)
 
     return results
@@ -107,34 +137,65 @@ def fit_nonlinear_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
     # Check for existing Gibbs results
     if os.path.exists(output_path):
         with gzip.open(output_path, 'r') as f:
-            print "Loading standard BFGS results from ", output_path
+            print "Loading nonlinear BFGS results from ", output_path
             results = cPickle.load(f)
     else:
-        print "Fitting a nonlinear Hawkes model using BFGS"
 
-        test_model = ReluNonlinearHawkesProcess(K=K, dt=dt, dt_max=dt_max, **model_args)
-        test_model.add_data(S)
+        # Split into test and training
+        xv_len      = int(0.01 * len(S))
+        S_train = S[:-xv_len]
+        S_xv    = S[xv_len:]
 
-        # Initialize the background rates to their mean
-        test_model.initialize_to_background_rate()
-        lps = [test_model.log_likelihood()]
-        hlls = [test_model.heldout_log_likelihood(S_test)]
 
-        # Fit with BFGS
-        tic = time.clock()
-        test_model.fit_with_bfgs()
-        init_time = time.clock() - tic
+        def _fit(lmbda):
+            print "Fitting a nonlinear Hawkes model using BFGS"
 
-        lps.append(test_model.log_likelihood())
-        hlls.append(test_model.heldout_log_likelihood(S_test))
+            test_model = ReluNonlinearHawkesProcess(K=K, dt=dt, dt_max=dt_max, lmbda=lmbda, **model_args)
+            test_model.add_data(S_train)
 
-        # Convert to arrays
-        lps = np.array(lps)
-        hlls = np.array(hlls)
-        timestamps = np.array([0, init_time])
+            # Initialize the background rates to their mean
+            test_model.initialize_to_background_rate()
+            lps = [test_model.log_likelihood()]
+            hlls = [test_model.heldout_log_likelihood(S_test)]
 
-        # Make results object
-        results = Results([test_model.copy_sample()], timestamps, lps, hlls)
+            # Fit with BFGS
+            tic = time.clock()
+            test_model.fit_with_bfgs()
+            init_time = time.clock() - tic
+
+            lps.append(test_model.log_likelihood())
+            hlls.append(test_model.heldout_log_likelihood(S_test))
+
+            # Convert to arrays
+            lps = np.array(lps)
+            hlls = np.array(hlls)
+            timestamps = np.array([0, init_time])
+
+            # Make results object
+            results = Results([test_model.copy_sample()], timestamps, lps, hlls)
+
+            # Compute cross validation log likelihood
+            xv_ll = test_model.heldout_log_likelihood(S_xv)
+
+            return xv_ll, results
+
+        # Fit models with a range of regularization parameters
+        lmbdas = [.1, 1., 5., 10.]
+        xv_lls = []
+        xv_results = []
+
+        for lmbda in lmbdas:
+            xv_ll, results = _fit(lmbda)
+            xv_lls.append(xv_ll)
+            xv_results.append(results)
+
+        # Find the best
+        for lmbda, xv_ll in zip(lmbdas, xv_lls):
+            print "Lambda: ", lmbda, "\tXV LL: ", xv_ll
+
+        best = np.argmax(xv_lls)
+        results = xv_results[best]
+        print "Best: ", best
 
         # Save the model
         with gzip.open(output_path, 'w') as f:

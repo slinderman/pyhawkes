@@ -122,11 +122,11 @@ def plot_impulse_responses(models, results):
 
 if __name__ == "__main__":
     seed = None
-    run = 1
+    run = 3
     K = 50
     C = 1
     T = 100000
-    T_train = 3000
+    T_train = 10000
     T_test = 1000
     data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
     test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl.gz" % (K,C,T_test))
@@ -162,14 +162,15 @@ if __name__ == "__main__":
     output_path = os.path.join(output_dir, "std.pkl.gz")
     std_results = \
         harness.fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
-                      model_args={"basis": basis, "lmbda": 1.0})
+                      model_args={"basis": basis})
     std_model = std_results.samples[0]
 
     # Fit a nonlinear Hawkes (Poisson GLM) model
     output_path = os.path.join(output_dir, "nonlinear_hawkes.pkl.gz")
     nlin_results = \
-        harness.fit_nonlinear_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
-                                                model_args={"basis": basis, "sigma": np.inf, "lmbda": 1.0})
+        harness.fit_nonlinear_hawkes_model_bfgs(
+            S, S_test, dt, dt_max, output_path,
+            model_args={"basis": basis, "sigma": np.inf})
     nlin_model = nlin_results.samples[0]
 
     # Now fit the Bayesian models with MCMC or VB,
