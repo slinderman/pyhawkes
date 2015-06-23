@@ -124,7 +124,7 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
 
         # Save the model
         with gzip.open(output_path, 'w') as f:
-            print "Saving nonlinear BFGS results to ", output_path
+            print "Saving std BFGS results to ", output_path
             cPickle.dump(results, f, protocol=-1)
 
     return results
