@@ -670,11 +670,12 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         W = standard_model.W + 1e-6
 
         # The impulse responses are normalized weights
-        g = Wg / W[:,:,None]
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
-                if g[k1,k2,:].sum() < 1e-2:
-                    g[k1,k2,:] = 1.0/self.B
+        # g = Wg / W[:,:,None]
+        # for k1 in xrange(self.K):
+        #     for k2 in xrange(self.K):
+        #         if g[k1,k2,:].sum() < 1e-2:
+        #             g[k1,k2,:] = 1.0/self.B
+        g = standard_model.G
 
         # Clip g to make sure it is stable for MF updates
         g = np.clip(g, 1e-2, np.inf)

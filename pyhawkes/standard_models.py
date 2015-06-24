@@ -245,6 +245,27 @@ class _NonlinearHawkesProcessBase(object):
         return W
 
     @property
+    def G(self):
+        full_W = np.array([node.w for node in self.nodes])
+        WB = full_W[:,1:].reshape((self.K,self.K, self.B))
+
+        # Weight matrix is summed over impulse response functions
+        WT = WB.sum(axis=2)
+
+        # Impulse response weights are normalized weights
+        GT = WB / WT[:,:,None]
+
+        # Then we transpose so that the impuolse matrix is (outgoing x incoming x basis)
+        G = np.transpose(GT, [1,0,2])
+
+        # TODO: Decide if this is still necessary
+        for k1 in xrange(self.K):
+            for k2 in xrange(self.K):
+                if G[k1,k2,:].sum() < 1e-2:
+                    G[k1,k2,:] = 1.0/self.B
+        return G
+
+    @property
     def bias(self):
         full_W = np.array([node.w for node in self.nodes])
         return full_W[:,0]
