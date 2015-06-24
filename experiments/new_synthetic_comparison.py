@@ -188,10 +188,10 @@ if __name__ == "__main__":
         harness.fit_network_hawkes_svi
     ]
     inf_args = [
-        {"N_samples": 10, "standard_model": std_model, "time_limit": 20*60*60},
+        {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
         #{"N_samples": 1000, "standard_model": std_model, "time_limit": 16*60*60},
-        {"N_samples": 10, "standard_model": std_model, "time_limit": 20*60*60},
-        {"N_samples": 10, "standard_model": std_model, "time_limit": 20*60*60}
+        {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
+        {"N_samples": 200000, "standard_model": std_model, "time_limit": 20*60*60}
     ]
     model_args = [
         {"basis": basis, "network": copy.deepcopy(network)},
