@@ -653,18 +653,21 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         :param g:
         :return:
         """
-        assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
+        # assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
+        from pyhawkes.standard_models import StandardHawkesProcess
+        assert isinstance(standard_model, StandardHawkesProcess)
         assert standard_model.K == self.K
         assert standard_model.B == self.B
 
-        lambda0 = standard_model.weights[:,0]
+        lambda0 = standard_model.bias
 
         # Get the connection weights
-        Wg = standard_model.weights[:,1:].reshape((self.K, self.K, self.B))
-        # Permute to out x in x basis
-        Wg = np.transpose(Wg, [1,0,2])
-        # Sum to get the total weight
-        W = Wg.sum(axis=2) + 1e-6
+        # Wg = standard_model.weights[:,1:].reshape((self.K, self.K, self.B))
+        # # Permute to out x in x basis
+        # Wg = np.transpose(Wg, [1,0,2])
+        # # Sum to get the total weight
+        # W = Wg.sum(axis=2) + 1e-6
+        W = standard_model.W + 1e-6
 
         # The impulse responses are normalized weights
         g = Wg / W[:,:,None]
@@ -1357,18 +1360,22 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         :param g:
         :return:
         """
-        assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
+        # assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
+        from pyhawkes.standard_models import StandardHawkesProcess
+        assert isinstance(standard_model, StandardHawkesProcess)
         assert standard_model.K == self.K
         assert standard_model.B == self.B
 
-        lambda0 = standard_model.weights[:,0]
+        # lambda0 = standard_model.weights[:,0]
+        lambda0 = standard_model.bias
 
         # Get the connection weights
-        Wg = standard_model.weights[:,1:].reshape((self.K, self.K, self.B))
-        # Permute to out x in x basis
-        Wg = np.transpose(Wg, [1,0,2])
-        # Sum to get the total weight
-        W = Wg.sum(axis=2) + 1e-6
+        # Wg = standard_model.weights[:,1:].reshape((self.K, self.K, self.B))
+        # # Permute to out x in x basis
+        # Wg = np.transpose(Wg, [1,0,2])
+        # # Sum to get the total weight
+        # W = Wg.sum(axis=2) + 1e-6
+        W = standard_model.W + 1e-6
 
         # We need to decide how to set A.
         # The simplest is to initialize it to all ones, but

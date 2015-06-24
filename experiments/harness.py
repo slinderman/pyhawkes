@@ -33,8 +33,6 @@ def fit_homogeneous_pp_model(S, S_test, dt, dt_max, output_path,
     T,K = S.shape
 
     # Check for existing Gibbs results
-    print "Fitting a nonlinear Hawkes model using BFGS"
-
     test_model = HomogeneousPoissonProcess(K=K, dt=dt, dt_max=dt_max, **model_args)
     test_model.add_data(S)
 
