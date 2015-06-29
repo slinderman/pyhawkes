@@ -177,13 +177,13 @@ if __name__ == "__main__":
     # initializing with the standard model
     models = [
         "SS-DTH (Gibbs)",
-        #"SS-CTH (Gibbs)",
+        # "SS-CTH (Gibbs)",
         "MoG-DTH (VB)",
         "MoG-DTH (SVI)"
     ]
     methods = [
         harness.fit_spikeslab_network_hawkes_gibbs,
-        #harness.fit_ct_network_hawkes_gibbs,
+        harness.fit_ct_network_hawkes_gibbs,
         harness.fit_network_hawkes_vb,
         harness.fit_network_hawkes_svi
     ]

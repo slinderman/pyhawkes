@@ -1352,6 +1352,13 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     def impulses(self):
         return self.impulse_model.impulses
 
+    def get_parameters(self):
+        """
+        Get a copy of the parameters of the model
+        :return:
+        """
+        return self.A, self.W, self.lambda0, self.impulses
+
     def initialize_with_standard_model(self, standard_model):
         """
         Initialize with a standard Hawkes model. Typically this will have
@@ -1361,22 +1368,38 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         :param g:
         :return:
         """
-        # assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
+        K = self.K
         from pyhawkes.standard_models import StandardHawkesProcess
         assert isinstance(standard_model, StandardHawkesProcess)
-        assert standard_model.K == self.K
-        assert standard_model.B == self.B
+        assert standard_model.K == K
 
         # lambda0 = standard_model.weights[:,0]
         lambda0 = standard_model.bias
 
         # Get the connection weights
-        # Wg = standard_model.weights[:,1:].reshape((self.K, self.K, self.B))
-        # # Permute to out x in x basis
-        # Wg = np.transpose(Wg, [1,0,2])
-        # # Sum to get the total weight
-        # W = Wg.sum(axis=2) + 1e-6
         W = standard_model.W + 1e-6
+
+        # Get the impulse response parameters
+        G = standard_model.G
+        t_basis = standard_model.basis.dt
+        for k1 in xrange(K):
+            for k2 in xrange(K):
+                std_ir = standard_model.basis.basis.dot(G[k1,k2,:])
+
+                def loss(mutau):
+                    self.impulse_model.mu[k1,k2] = mutau[0]
+                    self.impulse_model.tau[k1,k2] = mutau[1]
+                    ct_ir = self.impulse_model.impulse(t_basis, k1, k2)
+
+                    return ct_ir - std_ir
+
+                from scipy.optimize import leastsq
+                mutau0 = np.array([self.impulse_model.mu[k1,k2],
+                                   self.impulse_model.tau[k1,k2]])
+
+                mutau, _ = leastsq(loss, mutau0)
+                self.impulse_model.mu[k1,k2] = mutau[0]
+                self.impulse_model.tau[k1,k2] = mutau[1]
 
         # We need to decide how to set A.
         # The simplest is to initialize it to all ones, but
@@ -1384,7 +1407,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         # Alternatively, we can start with a sparse matrix
         # of only strong connections. What sparsity? How about the
         # mean under the network model
-        sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
+        # sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
+        sparsity = 1.0
         A = W > np.percentile(W, (1.0 - sparsity) * 100)
 
         # Set the model parameters

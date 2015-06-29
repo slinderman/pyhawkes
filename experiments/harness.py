@@ -281,7 +281,7 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
             print "Loading Gibbs results from ", output_path
             results = cPickle.load(f)
     else:
-        print "Fitting the data with a network Hawkes model using Gibbs sampling"
+        print "Fitting the data with a continuous time network Hawkes model using Gibbs sampling"
 
         test_model = \
             ContinuousTimeNetworkHawkesModel(K, dt_max=dt_max, **model_args)
