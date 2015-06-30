@@ -64,9 +64,13 @@ cpdef ct_resample_Z_logistic_normal_serial(
         # Iterate backward from the most recent to compute probabilities of each parent spike
         for par in range(n-1, -1, -1):
             dt = S[n] - S[par]
+            if dt < 1e-8:
+                p[par] = 0
+                continue
+
             # Since the spikes are sorted, we can stop if we reach a potential
             # parent that occurred greater than dt_max in the past
-            if dt > dt_max:
+            if dt > dt_max - 1e-8:
                 p[par] = 0
                 break
 
@@ -122,9 +126,12 @@ cpdef ct_resample_Z_logistic_normal(
         for par in range(n-1, -1, -1):
             dt = S[n] - S[par]
 
+            if dt < 1e-8:
+                continue
+
             # Since the spikes are sorted, we can stop if we reach a potential
             # parent that occurred greater than dt_max in the past
-            if dt > dt_max:
+            if dt > dt_max-1e-8:
                 break
 
             p = W[C[par], C[n]] * ln_impulse(dt, mu[C[par], C[n]], tau[C[par], C[n]], dt_max)
@@ -139,7 +146,10 @@ cpdef ct_resample_Z_logistic_normal(
         else:
             for par in range(min_par, n):
                 dt = S[n] - S[par]
-                if dt <= dt_max:
+                if dt < 1e-8:
+                    continue
+
+                if dt <= dt_max - 1e-8:
                     p = W[C[par], C[n]] * ln_impulse(dt, mu[C[par], C[n]], tau[C[par], C[n]], dt_max)
                     acc = acc + p / denom
                     if u[n] < acc:
@@ -204,9 +214,12 @@ cpdef compute_rate_at_events(
         for par in range(n-1, -1, -1):
             dt = S[n] - S[par]
 
+            if dt < 1e-8:
+                continue
+
             # Since the spikes are sorted, we can stop if we reach a potential
             # parent that occurred greater than dt_max in the past
-            if dt > dt_max:
+            if dt >= dt_max - 1e-8:
                 break
 
             if W[C[par], C[n]] > 0:
@@ -231,12 +244,12 @@ cpdef compute_weighted_impulses_at_events(
         for par in range(n-1, -1, -1):
             cp = C[par]
             dt = S[n] - S[par]
-            if dt == 0:
+            if dt < 1e-8:
                 continue
 
             # Since the spikes are sorted, we can stop if we reach a potential
             # parent that occurred greater than dt_max in the past
-            if dt >= dt_max:
+            if dt >= dt_max-1e-8:
                 break
 
             lmbda[n, cp] += W[cp, cn] * ln_impulse(dt, mu[cp, cn], tau[cp, cn], dt_max)

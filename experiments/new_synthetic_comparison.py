@@ -191,7 +191,7 @@ if __name__ == "__main__":
     ]
     inf_args = [
         # {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
-        {"N_samples": 100000, "standard_model": std_model, "time_limit": 20*60*60},
+        {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
         # {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
         # {"N_samples": 200000, "standard_model": std_model, "time_limit": 20*60*60}
     ]
