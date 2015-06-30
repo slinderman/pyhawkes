@@ -161,7 +161,7 @@ class LinearHawkesNode(_NonlinearHawkesNodeBase):
 
 class RectLinearHawkesNode(_NonlinearHawkesNodeBase):
     def link(self, psi):
-        return np.log(1.+np.exp(psi))
+        return 1e-16 + np.log(1.+np.exp(psi))
 
     def invlink(self, lam):
         return np.log(np.exp(lam) - 1.)

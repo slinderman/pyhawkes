@@ -57,7 +57,7 @@ def plot_pred_ll_vs_time(models, results, burnin=0,
     # plt.legend(loc="outside right")
 
     # Plot baselines
-    plt.plot([t_start, t_stop], homog_ll*np.ones(2), lw=2, color='k', label="Std.")
+    plt.plot([t_start, t_stop], homog_ll*np.ones(2), lw=2, color='k', label="Homog")
 
     # Plot the standard Hawkes test ll
     plt.plot([t_start, t_stop], std_ll*np.ones(2), lw=2, color=col[len(models)], label="Std.")
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     ]
     inf_args = [
         # {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
-        {"N_samples": 100, "standard_model": std_model, "time_limit": 16*60*60},
+        {"N_samples": 100000, "standard_model": std_model, "time_limit": 20*60*60},
         # {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
         # {"N_samples": 200000, "standard_model": std_model, "time_limit": 20*60*60}
     ]
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     plot_pred_ll_vs_time(models, results, burnin=1,
                          homog_ll=homog_model.heldout_log_likelihood(S_test),
                          std_ll=std_results.samples[-1].heldout_log_likelihood(S_test),
-                         nlin_ll=nlin_results.samples[-1].heldout_log_likelihood(S_test),
+                         # nlin_ll=nlin_results.samples[-1].heldout_log_likelihood(S_test),
                          true_ll=true_model.heldout_log_likelihood(S_test))
 
     # Plot impulse responses

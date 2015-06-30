@@ -1377,11 +1377,12 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         lambda0 = standard_model.bias
 
         # Get the connection weights
-        W = standard_model.W + 1e-6
+        W = np.clip(standard_model.W, 1e-16, np.inf)
 
         # Get the impulse response parameters
         G = standard_model.G
-        t_basis = standard_model.basis.dt
+        t_basis = standard_model.basis.dt * np.arange(standard_model.basis.L)
+        t_basis = np.clip(t_basis, 1e-6, self.dt_max-1e-6)
         for k1 in xrange(K):
             for k2 in xrange(K):
                 std_ir = standard_model.basis.basis.dot(G[k1,k2,:])
@@ -1408,7 +1409,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         # of only strong connections. What sparsity? How about the
         # mean under the network model
         # sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
-        sparsity = 1.0
+        sparsity = self.network.p
         A = W > np.percentile(W, (1.0 - sparsity) * 100)
 
         # Set the model parameters
