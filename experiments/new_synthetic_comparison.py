@@ -63,7 +63,7 @@ def plot_pred_ll_vs_time(models, results, burnin=0,
     plt.plot([t_start, t_stop], std_ll*np.ones(2), lw=2, color=col[len(models)], label="Std.")
 
     # Plot the Nonlinear Hawkes test ll
-    plt.plot([t_start, t_stop], nlin_ll*np.ones(2), lw=2, color=col[len(models)+1], label="Nonlinear")
+    plt.plot([t_start, t_stop], nlin_ll*np.ones(2), lw=2, ls='--', color=col[len(models)+1], label="Nonlinear")
 
     # Plot the true ll
     plt.plot([t_start, t_stop], true_ll*np.ones(2), '--k',  lw=2,label="True")
@@ -124,11 +124,11 @@ def plot_impulse_responses(models, results):
 
 if __name__ == "__main__":
     seed = None
-    run = 4
+    run = 2
     K = 50
     C = 1
     T = 100000
-    T_train = 100000
+    T_train = 10000
     T_test = 1000
     data_path = os.path.join("data", "synthetic", "synthetic_K%d_C%d_T%d.pkl.gz" % (K,C,T))
     test_path = os.path.join("data", "synthetic", "synthetic_test_K%d_C%d_T%d.pkl.gz" % (K,C,T_test))
@@ -178,28 +178,28 @@ if __name__ == "__main__":
     # Now fit the Bayesian models with MCMC or VB,
     # initializing with the standard model
     models = [
-        # "SS-DTH (Gibbs)",
-        "SS-CTH (Gibbs)",
-        # "MoG-DTH (VB)",
-        # "MoG-DTH (SVI)"
+        "SS-DTH (Gibbs)",
+        # "SS-CTH (Gibbs)",
+        "MoG-DTH (VB)",
+        "MoG-DTH (SVI)"
     ]
     methods = [
-        # harness.fit_spikeslab_network_hawkes_gibbs,
-        harness.fit_ct_network_hawkes_gibbs,
-        # harness.fit_network_hawkes_vb,
-        # harness.fit_network_hawkes_svi
+        harness.fit_spikeslab_network_hawkes_gibbs,
+        # harness.fit_ct_network_hawkes_gibbs,
+        harness.fit_network_hawkes_vb,
+        harness.fit_network_hawkes_svi
     ]
     inf_args = [
+        {"N_samples": 10000, "standard_model": std_model, "time_limit": 8*60*60},
         # {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
-        {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
-        # {"N_samples": 10000, "standard_model": std_model, "time_limit": 20*60*60},
-        # {"N_samples": 200000, "standard_model": std_model, "time_limit": 20*60*60}
+        {"N_samples": 10000, "standard_model": std_model, "time_limit": 8*60*60},
+        {"N_samples": 200000, "standard_model": std_model, "time_limit": 8*60*60}
     ]
     model_args = [
-        # {"basis": basis, "network": copy.deepcopy(network)},
-        {"network": copy.deepcopy(network), "impulse_hypers" : {"mu_0": 0., "lmbda_0": 2.0, "alpha_0": 2.0, "beta_0" : 1.0}},
-        # {"basis": basis, "network": copy.deepcopy(network)},
-        # {"basis": basis, "network": copy.deepcopy(network)},
+        {"basis": basis, "network": copy.deepcopy(network)},
+        # {"network": copy.deepcopy(network), "impulse_hypers" : {"mu_0": 0., "lmbda_0": 2.0, "alpha_0": 2.0, "beta_0" : 1.0}},
+        {"basis": basis, "network": copy.deepcopy(network)},
+        {"basis": basis, "network": copy.deepcopy(network)},
     ]
 
     assert len(models) == len(methods) == len(inf_args) == len(model_args)
@@ -213,9 +213,9 @@ if __name__ == "__main__":
     # Plot the reuslts
     # plt.ion()
     plot_pred_ll_vs_time(models, results, burnin=1,
-                         homog_ll=homog_model.heldout_log_likelihood(S_test),
-                         std_ll=std_results.samples[-1].heldout_log_likelihood(S_test),
-                         # nlin_ll=nlin_results.samples[-1].heldout_log_likelihood(S_test),
+                         # homog_ll=homog_model.heldout_log_likelihood(S_test),
+                         std_ll=std_results.test_lls[-1],
+                         # nlin_ll=nlin_results.test_lls[-1],
                          true_ll=true_model.heldout_log_likelihood(S_test))
 
     # Plot impulse responses
