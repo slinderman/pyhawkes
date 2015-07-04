@@ -65,7 +65,7 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
             results = cPickle.load(f)
     else:
         # Split into test and training
-        xv_len      = int(0.01 * len(S))
+        xv_len      = 1000
         S_train = S[:-xv_len]
         S_xv    = S[xv_len:]
 

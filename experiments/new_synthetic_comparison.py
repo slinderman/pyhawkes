@@ -34,49 +34,76 @@ def plot_pred_ll_vs_time(models, results, burnin=0,
                          homog_ll=np.nan,
                          std_ll=np.nan,
                          nlin_ll=np.nan,
-                         true_ll=np.nan):
-    from hips.plotting.layout import create_figure
+                         true_ll=np.nan,
+                         baseline=0,
+                         normalizer=1,
+                         output_dir=".",
+                         xlim=None, ylim=None,
+                         title=None):
+    from hips.plotting.layout import create_figure, create_axis_at_location
     from hips.plotting.colormaps import harvard_colors
 
     # Make the ICML figure
-    fig = create_figure((4,3))
-    ax = fig.add_subplot(111)
+    fig = create_figure((3,2))
+    ax = create_axis_at_location(fig, 0.7, 0.4, 2.25, 1.35)
     col = harvard_colors()
-    plt.grid()
+    ax.grid()
 
     t_start = 0
     t_stop = 0
 
+    def standardize(x):
+        return (x-baseline)/normalizer
+
     for i, (model, result) in enumerate(zip(models, results)):
-        plt.plot(result.timestamps[burnin:], result.test_lls[burnin:], lw=2, color=col[i], label=model)
+        ax.plot(result.timestamps[burnin:],
+                 standardize(result.test_lls[burnin:]),
+                 lw=2, color=col[i], label=model)
 
         # Update time limits
         t_start = min(t_start, result.timestamps[burnin:].min())
         t_stop = max(t_stop, result.timestamps[burnin:].max())
 
+    if xlim is not None:
+        t_start = xlim[0]
+        t_stop = xlim[1]
+
     # plt.legend(loc="outside right")
 
     # Plot baselines
-    plt.plot([t_start, t_stop], homog_ll*np.ones(2), lw=2, color='k', label="Homog")
+    ax.plot([t_start, t_stop], standardize(homog_ll)*np.ones(2),
+             lw=2, color='k', label="Homog")
 
     # Plot the standard Hawkes test ll
-    plt.plot([t_start, t_stop], std_ll*np.ones(2), lw=2, color=col[len(models)], label="Std.")
+    ax.plot([t_start, t_stop], standardize(std_ll)*np.ones(2),
+             lw=2, color=col[len(models)], label="Std.")
 
     # Plot the Nonlinear Hawkes test ll
-    plt.plot([t_start, t_stop], nlin_ll*np.ones(2), lw=2, ls='--', color=col[len(models)+1], label="Nonlinear")
+    ax.plot([t_start, t_stop], standardize(nlin_ll)*np.ones(2),
+             lw=2, ls='--', color=col[len(models)+1], label="Nonlinear")
 
     # Plot the true ll
-    plt.plot([t_start, t_stop], true_ll*np.ones(2), '--k',  lw=2,label="True")
+    ax.plot([t_start, t_stop], standardize(true_ll)*np.ones(2),
+             '--k',  lw=2,label="True")
 
+
+    ax.set_xlabel("time [sec]")
+    ax.set_ylabel("Pred. LL. [nats/event]")
 
     ax.set_xscale("log")
-    ax.set_xlim(t_start, t_stop)
-    ax.set_xlabel("time [sec]")
-    ax.set_ylabel("Pred. Log Lkhd.")
+    if xlim is not None:
+        ax.set_xlim(xlim)
+    else:
+        ax.set_xlim(t_start, t_stop)
+    if ylim is not None:
+        ax.set_ylim(ylim)
 
-    fig.savefig("pred_ll_vs_time.pdf")
+    if title is not None:
+        ax.set_title(title)
+
+    output_file = os.path.join(output_dir, "pred_ll_vs_time.pdf")
+    fig.savefig(output_file)
     plt.show()
-
 
 
 def plot_impulse_responses(models, results):
@@ -211,12 +238,18 @@ if __name__ == "__main__":
                               **iargs))
 
     # Plot the reuslts
-    # plt.ion()
+    # Set the ylim to be consistent across experiments
+    ylim = (0.0076, 0.0086)
     plot_pred_ll_vs_time(models, results, burnin=1,
                          # homog_ll=homog_model.heldout_log_likelihood(S_test),
                          std_ll=std_results.test_lls[-1],
-                         # nlin_ll=nlin_results.test_lls[-1],
-                         true_ll=true_model.heldout_log_likelihood(S_test))
+                         nlin_ll=nlin_results.test_lls[-1],
+                         true_ll=true_model.heldout_log_likelihood(S_test),
+                         baseline=homog_model.heldout_log_likelihood(S_test),
+                         normalizer=float(S_test.sum()),
+                         xlim=(0.1, 20*3600), ylim=ylim,
+                         title="T={:,} bins".format(T_train),
+                         output_dir=output_dir)
 
     # Plot impulse responses
     # plot_impulse_responses(models, results)
