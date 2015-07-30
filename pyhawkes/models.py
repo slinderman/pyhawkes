@@ -19,9 +19,6 @@ from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockMode
 from pyhawkes.utils.basis import CosineBasis
 
 
-from pyhawkes.utils.profiling import line_profiled
-# PROFILING=True
-
 # TODO: Add a simple HomogeneousPoissonProcessModel
 
 class DiscreteTimeStandardHawkesModel(object):
@@ -1050,7 +1047,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         return lp
 
-    def plot(self, fig=None, handles=None, figsize=(6,3), color="#377eb8"):
+    def plot(self, fig=None, handles=None, figsize=(6,4), color="#377eb8",
+             data_index=0, T_slice=None):
         """
         Plot the rates, events, and weights
         :param fig:
@@ -1070,7 +1068,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             # Plot the rates on the right
             axs_rate = [plt.subplot2grid((self.K,4), (k,1), rowspan=1, colspan=rate_width)
                         for k in xrange(self.K)]
-            rate_lns = self.plot_rates(axs=axs_rate, color=color)
+            rate_lns = self.plot_rates(axs=axs_rate, data_index=data_index, T_slice=T_slice, color=color)
 
             plt.subplots_adjust(wspace=1.0)
 
@@ -1079,10 +1077,10 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             net_lns, rate_lns = handles
             # self.plot_adjacency_matrix(im=im)
             self.plot_network(lns=net_lns)
-            self.plot_rates(lns=rate_lns)
+            self.plot_rates(lns=rate_lns, data_index=data_index)
             plt.pause(0.001)
 
-        return net_lns, rate_lns
+        return fig, (net_lns, rate_lns)
 
     def plot_adjacency_matrix(self, im=None, ax=None, cmap="Reds", vmax=None):
         import matplotlib.pyplot as plt
@@ -1135,13 +1133,13 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                         continue
 
                     ln = ax.arrow(irad*np.cos(ths[k1]), irad*np.sin(ths[k1]),
-                                 irad*(np.cos(ths[k2])-np.cos(ths[k1])),
-                                 irad*(np.sin(ths[k2])-np.sin(ths[k1])),
-                                 width=W_eff[k1,k2],
-                                 head_width=1.,
+                                 .8*irad*(np.cos(ths[k2])-np.cos(ths[k1])),
+                                 .8*irad*(np.sin(ths[k2])-np.sin(ths[k1])),
+                                 width=0.3,
+                                 head_width=2.,
                                  color=color,
                                  length_includes_head=True)
-                    ln.set_linewidth(W_eff[k1,k2])
+                    ln.set_linewidth(3*W_eff[k1,k2])
 
                     # Arrow is only visible if there is a connection
                     ln.set_visible(self.A[k1,k2])
@@ -1161,7 +1159,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                     ind += 1
 
                     if self.A[k1,k2]:
-                        ln.set_linewidth(W_eff[k1,k2])
+                        ln.set_linewidth(3*W_eff[k1,k2])
                         ln.set_visible(True)
                     else:
                         ln.set_linewidth(0)
@@ -1169,13 +1167,14 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         return lns
 
-    def plot_rates(self, lns=None, axs=None, draw_events=True, data_index=0, color="#377eb8"):
+    def plot_rates(self, lns=None, axs=None, draw_events=True, data_index=0, T_slice=None, color="#377eb8"):
         import matplotlib.pyplot as plt
         assert len(self.data_list) > data_index
         data = self.data_list[data_index]
         rates = self.compute_rate(data_index)
         S = data.S
-        ymax = np.max(S)
+        T_slice = T_slice if T_slice is not None else (0,data.T)
+        ymax = np.max(S[T_slice[0]:T_slice[1],:])
 
         if lns is None:
             lns = []
@@ -1195,6 +1194,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                 else:
                     axs[k].set_xticks([])
 
+                axs[k].set_xlim(T_slice)
                 axs[k].set_ylim(0,1.1*ymax)
 
                 lns.append(ln)
@@ -1336,7 +1336,6 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         #     p.resample(self.bias_model, self.weight_model, self.impulse_model)
         #     p.meanfieldupdate(self.bias_model, self.weight_model, self.impulse_model)
 
-    @line_profiled
     def meanfield_coordinate_descent_step(self):
         # Update the parents.
         for p in self.data_list:
@@ -1356,7 +1355,6 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
 
         return self.get_vlb()
 
-    @line_profiled
     def get_vlb(self):
         # Compute the variational lower bound
         vlb = 0

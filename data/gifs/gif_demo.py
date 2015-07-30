@@ -11,7 +11,7 @@ from pyhawkes.plotting.plotting import plot_network
 
 np.random.seed(0)
 
-def demo(K=3, T=100, dt_max=20, p=0.25):
+def demo(K=3, T=1000, dt_max=20, p=0.25):
     """
 
     :param K:       Number of nodes
@@ -27,13 +27,20 @@ def demo(K=3, T=100, dt_max=20, p=0.25):
     bkgd_hypers = {"alpha": 1.0, "beta": 20.0}
     true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(
         K=K, dt_max=dt_max, bkgd_hypers=bkgd_hypers, network=network)
+    A_true = np.zeros((K,K))
+    A_true[0,1] = A_true[0,2] = 1
+    W_true = np.zeros((K,K))
+    W_true[0,1] = W_true[0,2] = 1.0
+    true_model.weight_model.A = A_true
+    true_model.weight_model.W = W_true
+    true_model.bias_model.lambda0[0] = 0.2
     assert true_model.check_stability()
 
     # Sample from the true model
     S,R = true_model.generate(T=T, keep=True, print_interval=50)
 
     plt.ion()
-    true_figure, _ = true_model.plot(color="#377eb8")
+    true_figure, _ = true_model.plot(color="#377eb8", T_slice=(0,100))
 
     # Save the true figure
     true_figure.savefig("gifs/true.gif")
@@ -47,7 +54,7 @@ def demo(K=3, T=100, dt_max=20, p=0.25):
     test_model.add_data(S)
 
     # Initialize plots
-    test_figure, test_handles = test_model.plot(color="#e41a1c")
+    test_figure, test_handles = test_model.plot(color="#e41a1c", T_slice=(0,100))
     test_figure.savefig("gifs/test0.gif")
 
     ###########################################################
