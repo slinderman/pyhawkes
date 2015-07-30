@@ -10,9 +10,6 @@ from pybasicbayes.util.text import progprint_xrange
 import pyhawkes.models
 reload(pyhawkes.models)
 
-from pyhawkes.utils.profiling import show_line_stats
-PROFILING=True
-
 
 # Create the model with these parameters
 K = 10
@@ -97,6 +94,3 @@ plt.figure()
 plt.plot(ct_lls, 'b')
 plt.plot(dt_lls, 'r')
 plt.show()
-
-
-show_line_stats()

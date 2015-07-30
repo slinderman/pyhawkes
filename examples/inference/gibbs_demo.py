@@ -2,7 +2,6 @@ import numpy as np
 import os
 import cPickle
 import gzip
-# np.seterr(all='raise')
 
 import matplotlib.pyplot as plt
 

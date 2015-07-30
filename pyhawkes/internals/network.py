@@ -893,13 +893,30 @@ class ErdosRenyiFixedSparsity(GibbsSampling, MeanField):
     """
     An ErdosRenyi model with fixed parameters
     """
-    def __init__(self, K, p, kappa, alpha=1.0, beta=None, v=None, allow_self_connections=True):
+    def __init__(self, K, p, kappa=1.0, alpha=None, beta=None, v=None, allow_self_connections=True):
         self.K = K
         self.p = p
         self.kappa = kappa
-        self.alpha = alpha
-        self.beta  = alpha * K if beta is None else beta
-        self.v = alpha/beta if v is None else v
+
+        # Set the weight scale
+        if alpha is beta is v is None:
+            # If no parameters are specified, set v to be as large as possible
+            # while still being stable with high probability
+            raise NotImplementedError("Set default weight scale")
+        elif v is not None:
+            self.v = v
+            self.alpha = self.beta = None
+        elif alpha is not None:
+            self.alpha = alpha
+            if beta is not None:
+                self.beta= beta
+            else:
+                self.beta = alpha * K
+            self.v = self.alpha / self.beta
+        else:
+            raise NotImplementedError("Invalid v,alpha,beta settings")
+
+
         self.allow_self_connections = allow_self_connections
 
         # Mean field
@@ -959,8 +976,9 @@ class ErdosRenyiFixedSparsity(GibbsSampling, MeanField):
         self.v = np.random.gamma(alpha, 1.0/beta)
 
     def resample(self, data=[]):
-        A,W = data
-        self.resample_v(A, W)
+        if all([self.alpha, self.beta]):
+            A,W = data
+            self.resample_v(A, W)
 
     ### Mean Field
     def expected_p(self):

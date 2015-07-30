@@ -644,7 +644,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
     def impulses(self):
         return self.impulse_model.impulses
 
-    def initialize_with_standard_model(self, standard_model):
+    def initialize_with_standard_model(self, standard_model=None):
         """
         Initialize with a standard Hawkes model. Typically this will have
         been fit by gradient descent or BFGS, and we just want to copy
@@ -653,11 +653,21 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         :param g:
         :return:
         """
-        # assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
-        from pyhawkes.standard_models import StandardHawkesProcess
-        assert isinstance(standard_model, StandardHawkesProcess)
-        assert standard_model.K == self.K
-        assert standard_model.B == self.B
+        if standard_model is None:
+            standard_model = DiscreteTimeStandardHawkesModel(
+                K=self.K, dt=self.dt, dt_max=self.dt_max, B=self.B)
+
+            for data in self.data_list:
+                standard_model.add_data(data.S)
+
+            standard_model.initialize_to_background_rate()
+            standard_model.fit_with_bfgs()
+
+        else:
+            from pyhawkes.standard_models import StandardHawkesProcess
+            assert isinstance(standard_model, StandardHawkesProcess)
+            assert standard_model.K == self.K
+            assert standard_model.B == self.B
 
         lambda0 = standard_model.bias
 
@@ -700,21 +710,20 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.weight_model.W     = W.copy('C')
         self.impulse_model.g    = g.copy('C')
 
-
-        if isinstance(self.network, StochasticBlockModel) and not self.network.fixed:
-            # Cluster the standard model with kmeans in order to initialize the network
-            from sklearn.cluster import KMeans
-
-            features = []
-            for k in xrange(self.K):
-                features.append(np.concatenate((W[:,k], W[k,:])))
-
-            self.network.c = KMeans(n_clusters=self.C).fit(np.array(features)).labels_
-
-            # print "DEBUG: Do not set p and v in init from standard model"
-            self.network.resample_p(self.weight_model.A)
-            self.network.resample_v(self.weight_model.A, self.weight_model.W)
-            self.network.resample_m()
+        # if isinstance(self.network, StochasticBlockModel) and not self.network.fixed:
+        #     # Cluster the standard model with kmeans in order to initialize the network
+        #     from sklearn.cluster import KMeans
+        #
+        #     features = []
+        #     for k in xrange(self.K):
+        #         features.append(np.concatenate((W[:,k], W[k,:])))
+        #
+        #     self.network.c = KMeans(n_clusters=self.C).fit(np.array(features)).labels_
+        #
+        #     # print "DEBUG: Do not set p and v in init from standard model"
+        #     self.network.resample_p(self.weight_model.A)
+        #     self.network.resample_v(self.weight_model.A, self.weight_model.W)
+        #     self.network.resample_m()
 
     def add_data(self, S, F=None, minibatchsize=None):
         """
@@ -1041,7 +1050,170 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         return lp
 
+    def plot(self, fig=None, handles=None, figsize=(6,3), color="#377eb8"):
+        """
+        Plot the rates, events, and weights
+        :param fig:
+        :return:
+        """
+        import matplotlib.pyplot as plt
+        if handles is None:
+            if fig is None:
+                fig = plt.figure(figsize=figsize)
 
+            # Plot network on left
+            rate_width = 3
+            ax_net = plt.subplot2grid((self.K, 1+rate_width), (0,0), rowspan=self.K, colspan=1)
+            # im = self.plot_adjacency_matrix(ax=ax_net)
+            net_lns = self.plot_network(ax=ax_net, color=color)
+
+            # Plot the rates on the right
+            axs_rate = [plt.subplot2grid((self.K,4), (k,1), rowspan=1, colspan=rate_width)
+                        for k in xrange(self.K)]
+            rate_lns = self.plot_rates(axs=axs_rate, color=color)
+
+            plt.subplots_adjust(wspace=1.0)
+
+        else:
+            # Update given handles
+            net_lns, rate_lns = handles
+            # self.plot_adjacency_matrix(im=im)
+            self.plot_network(lns=net_lns)
+            self.plot_rates(lns=rate_lns)
+            plt.pause(0.001)
+
+        return net_lns, rate_lns
+
+    def plot_adjacency_matrix(self, im=None, ax=None, cmap="Reds", vmax=None):
+        import matplotlib.pyplot as plt
+        if vmax is None:
+            vmax = np.max(self.W_effective)
+
+        if im is None:
+            if ax is None:
+                ax = plt.gca()
+
+            im = ax.imshow(self.W_effective, interpolation="none", cmap=cmap, vmin=0, vmax=vmax)
+            ax.set_ylabel('k')
+            ax.set_xlabel('k\'')
+            ax.set_title('W_{k \\to k\'}')
+
+        else:
+            # Update given image
+            im.set_data(self.W_effective)
+
+        return im
+
+    def plot_network(self, lns=None, ax=None, rad=10, color="#377eb8"):
+        import matplotlib.pyplot as plt
+
+        W_eff = self.W_effective
+        ths = np.linspace(0, 2*np.pi, num=self.K, endpoint=False)
+        irad = 0.8*rad
+
+        if lns is None:
+            if ax is None:
+                ax = plt.gca()
+
+            # Hide the x and y axes
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+
+            # Layout the nodes in a circle
+            for k in xrange(self.K):
+                ax.text(rad*np.cos(ths[k]), rad*np.sin(ths[k]), "%d" % (k+1))
+
+            ax.set_xlim(-1.25*rad, 1.35*rad)
+            ax.set_ylim(-1.25*rad, 1.35*rad)
+            ax.set_aspect("equal")
+
+            # Draw lines connecting nodes
+            lns = []
+            for k1 in xrange(self.K):
+                for k2 in xrange(self.K):
+                    if k1 == k2:
+                        continue
+
+                    ln = ax.arrow(irad*np.cos(ths[k1]), irad*np.sin(ths[k1]),
+                                 irad*(np.cos(ths[k2])-np.cos(ths[k1])),
+                                 irad*(np.sin(ths[k2])-np.sin(ths[k1])),
+                                 width=W_eff[k1,k2],
+                                 head_width=1.,
+                                 color=color,
+                                 length_includes_head=True)
+                    ln.set_linewidth(W_eff[k1,k2])
+
+                    # Arrow is only visible if there is a connection
+                    ln.set_visible(self.A[k1,k2])
+
+                    lns.append(ln)
+
+        else:
+            # Update given lns
+            ind = 0
+            for k1 in xrange(self.K):
+                for k2 in xrange(self.K):
+                    if k1 == k2:
+                        continue
+
+                    # Get the corresponding line
+                    ln = lns[ind]
+                    ind += 1
+
+                    if self.A[k1,k2]:
+                        ln.set_linewidth(W_eff[k1,k2])
+                        ln.set_visible(True)
+                    else:
+                        ln.set_linewidth(0)
+                        ln.set_visible(False)
+
+        return lns
+
+    def plot_rates(self, lns=None, axs=None, draw_events=True, data_index=0, color="#377eb8"):
+        import matplotlib.pyplot as plt
+        assert len(self.data_list) > data_index
+        data = self.data_list[data_index]
+        rates = self.compute_rate(data_index)
+        S = data.S
+        ymax = np.max(S)
+
+        if lns is None:
+            lns = []
+            if axs is None:
+                axs = plt.subplots(self.K, 1, sharex=True)
+            else:
+                assert len(axs) == self.K
+
+            for k in xrange(self.K):
+                ln = axs[k].plot(self.dt * np.arange(data.T),
+                                 rates[:,k],
+                                 color=color, lw=2)
+
+                axs[k].set_ylabel('$\\lambda_{%d}$' % (k+1))
+                if k == self.K-1:
+                    axs[k].set_xlabel('time $t$')
+                else:
+                    axs[k].set_xticks([])
+
+                axs[k].set_ylim(0,1.1*ymax)
+
+                lns.append(ln)
+
+            if draw_events:
+                for k in xrange(self.K):
+                    # Get event times and counts
+                    tk = np.nonzero(data.S[:,k])[0]
+                    ck = data.S[tk,k]
+
+                    # Stem plot
+                    axs[k].stem(tk+self.dt/2., ck, '-k', markerfmt="ko", lw=2)
+
+        else:
+            # Update given rate lns
+            for k in xrange(self.K):
+                lns[k][0].set_data((self.dt * np.arange(data.T), rates[:,k]))
+
+        return lns
 
 class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling):
     _weight_class           = SpikeAndSlabGammaWeights
@@ -1152,12 +1324,12 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         self.impulse_model.mf_gamma = 100 * self.impulse_model.g.copy('C')
 
         # Set network mean field parameters
-        if self.C > 1:
-            self.network.mf_m = 0.2 / (self.C-1) * np.ones((self.K, self.C))
-            for c in xrange(self.C):
-                self.network.mf_m[self.network.c == c, c] = 0.8
-        else:
-            self.network.mf_m = np.ones((self.K, self.C))
+        # if self.C > 1:
+        #     self.network.mf_m = 0.2 / (self.C-1) * np.ones((self.K, self.C))
+        #     for c in xrange(self.C):
+        #         self.network.mf_m[self.network.c == c, c] = 0.8
+        # else:
+        #     self.network.mf_m = np.ones((self.K, self.C))
 
         # Update the parents.
         # for _,_,_,p in self.data_list:
