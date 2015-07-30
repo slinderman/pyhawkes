@@ -11,7 +11,7 @@ from pyhawkes.plotting.plotting import plot_network
 
 np.random.seed(0)
 
-def demo(K=3, T=100, dt_max=20, p=0.25):
+def demo(K=3, T=1000, dt_max=20, p=0.25):
     """
 
     :param K:       Number of nodes
@@ -24,9 +24,8 @@ def demo(K=3, T=100, dt_max=20, p=0.25):
     # Generate synthetic data
     ###########################################################
     network = ErdosRenyiFixedSparsity(K, p, v=1., allow_self_connections=False)
-    bkgd_hypers = {"alpha": 1.0, "beta": 20.0}
     true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(
-        K=K, dt_max=dt_max, bkgd_hypers=bkgd_hypers, network=network)
+        K=K, dt_max=dt_max, network=network)
     assert true_model.check_stability()
 
     # Sample from the true model
