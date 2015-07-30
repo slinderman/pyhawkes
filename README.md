@@ -7,8 +7,8 @@ Fully Bayesian inference for discovering latent network structure underlying Haw
 Examples
 ===
 
-![True Model](https://raw.githubusercontent.com/slinderman/pyhawkes/tree/master/data/gifs/true.gif)
-![Inferred Model](https://raw.githubusercontent.com/slinderman/pyhawkes/tree/master/data/gifs/hawkes_inf_anim.gif)
+![True Model](https://raw.githubusercontent.com/slinderman/pyhawkes/master/data/gifs/true.gif)
+![Inferred Model](https://raw.githubusercontent.com/slinderman/pyhawkes/master/data/gifs/hawkes_inf_anim.gif)
 
 
 Installation
