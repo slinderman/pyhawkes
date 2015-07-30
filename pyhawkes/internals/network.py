@@ -923,9 +923,6 @@ class ErdosRenyiFixedSparsity(GibbsSampling, MeanField):
         self.mf_alpha = self.alpha
         self.mf_beta = self.beta
 
-        # HACK: Model expects a stochastic block model with parameter C
-        self.C = 1
-
     @property
     def P(self):
         """

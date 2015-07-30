@@ -8,8 +8,8 @@ We provide a number of classes for building and fitting
 mutually-excitatory point process (aka Hawkes process) models
 with underlying network structure. Let's walk through a simple example
 where  we construct a discrete time model with three nodes, as in `examples/discrete_demo`.
-The nodes are connected via an excitatory network such that a node's events
-increase the likelihood of subsequent events on downstream nodes.
+The nodes are connected via an excitatory network such that each event increases
+the likelihood of subsequent events on downstream nodes.
 ```python
 # Create a simple random network with K nodes a sparsity level of p
 # Each event induces impulse responses of length dt_max on connected nodes
@@ -21,7 +21,7 @@ true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt_max=dt_max, netw
 
 # Generate T time bins of events from the the model
 # S is the TxK event count matrix, R is the TxK rate matrix
-S,R = true_model.generate(T=1000)
+S,R = true_model.generate(T=100)
 true_model.plot()
 ```
 
