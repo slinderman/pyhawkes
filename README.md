@@ -1,15 +1,7 @@
 PyHawkes implements a variety of Bayesian inference algorithms
 for discovering latent network structure
-given excitatory point process observations. This work has been
-published in:
- 
- Linderman, Scott W. and Adams, Ryan P. Discovering Latent Network Structure in Point Process Data. 
- *International Conference on Machine Learning (ICML)*, 2014.
+given excitatory point process observations.
 
-and
-
- Linderman, Scott W., and Adams, Ryan P. Scalable Bayesian Inference for Excitatory Point Process Networks.
- *arXiv preprint arXiv:1507.03228*, 2015.
 Examples
 ===
 We provide a number of classes for building and fitting
@@ -73,4 +65,16 @@ To compile the cython code, run
 This codebase is considerably cleaner than the old CUDA version, and is still
 quite fast with the Cython+OMP extensions and joblib for parallel sampling of
 the adjacency matrix.
-  
+
+
+More Information
+===
+Complete details of this work can be found in:
+
+ Linderman, Scott W. and Adams, Ryan P. Discovering Latent Network Structure in Point Process Data.
+ *International Conference on Machine Learning (ICML)*, 2014.
+
+and
+
+ Linderman, Scott W., and Adams, Ryan P. Scalable Bayesian Inference for Excitatory Point Process Networks.
+ *arXiv preprint arXiv:1507.03228*, 2015.
