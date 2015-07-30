@@ -15,7 +15,7 @@ from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
 from pyhawkes.internals.parents import DiscreteTimeParents
-from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockModelFixedSparsity
+from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockModelFixedSparsity, ErdosRenyiFixedSparsity
 from pyhawkes.utils.basis import CosineBasis
 
 
@@ -525,7 +525,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
     _default_basis_hypers   = {'norm': True, 'allow_instantaneous': False}
 
     _bkgd_class             = GammaBias
-    _default_bkgd_hypers    = {'alpha': 1.0, 'beta': 1.0}
+    _default_bkgd_hypers    = {'alpha': 1.0, 'beta': 10.0}
 
     _impulse_class          = DirichletImpulseResponses
     _default_impulse_hypers = {'gamma' : 1.0}
@@ -601,9 +601,6 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             self.network_hypers.update(network_hypers)
             self.network = self._network_class(K=self.K,
                                                **self.network_hypers)
-
-        # TODO: Remove this hack. Should C be a model parameter?
-        self.C = self.network.C
 
         # Check that the model doesn't allow instantaneous self connections
         assert not (self.basis.allow_instantaneous and
@@ -884,7 +881,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         :return:
         """
         A, W, beta, lambda0, c, p, v, m = params
-        K, B, C = self.K, self.basis.B, self.C
+        K, B, = self.K, self.basis.B
 
         assert isinstance(A, np.ndarray) and A.shape == (K,K), \
             "A must be a KxK adjacency matrix"
@@ -900,22 +897,6 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         assert isinstance(lambda0, np.ndarray) and lambda0.shape == (K,) \
                and np.amin(lambda0) >=0, \
             "lambda0 must be a K-vector of background rates"
-
-        assert isinstance(c, np.ndarray) and c.shape == (K,) \
-                and np.amin(c) >= 0 and np.amax(c) < self.C, \
-            "c must be a K-vector of block assignments"
-
-        assert isinstance(p, np.ndarray) and p.shape == (C,C) \
-                and np.amin(p) >= 0 and np.amax(p) <= 1.0, \
-            "p must be a CxC matrix block connection probabilities"
-
-        assert isinstance(v, np.ndarray) and v.shape == (C,C) \
-                and np.amin(v) >= 0, \
-            "v must be a CxC matrix block weight scales"
-
-        assert isinstance(m, np.ndarray) and m.shape == (C,) \
-                and np.amin(m) >= 0 and np.allclose(m.sum(), 1.0), \
-            "m must be a C vector of block probabilities"
 
         self.weight_model.A = A
         self.weight_model.W = W
@@ -1219,13 +1200,11 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
     _weight_class           = SpikeAndSlabGammaWeights
     _default_weight_hypers  = {}
 
-    _network_class          = StochasticBlockModel
-    _default_network_hypers = {'C': 1, 'c': None,
-                               'p': None, 'tau1': 1.0, 'tau0': 1.0,
+    _network_class          = ErdosRenyiFixedSparsity
+    _default_network_hypers = {'p': 0.5,
                                'allow_self_connections': True,
                                'kappa': 1.0,
-                               'v': None, 'alpha': 5.0, 'beta': 1.0,
-                               'pi': 1.0}
+                               'v': None, 'alpha': None, 'beta': None,}
 
     def resample_model(self):
         """
@@ -1258,28 +1237,26 @@ class DiscreteTimeNetworkHawkesModelSpikeAndSlab(_DiscreteTimeNetworkHawkesModel
             d.resample()
 
 
-class DiscreteTimeNetworkHawkesModelSpikeAndSlabFixedSparsity(DiscreteTimeNetworkHawkesModelSpikeAndSlab):
-    _network_class          = StochasticBlockModelFixedSparsity
+class DiscreteTimeNetworkHawkesModelSpikeAndSlabSBM(DiscreteTimeNetworkHawkesModelSpikeAndSlab):
+    _network_class          = StochasticBlockModel
     _default_network_hypers = {'C': 1, 'c': None,
-                               'p': 0.5,
+                               'p': None, 'tau1': 1.0, 'tau0': 1.0,
                                'allow_self_connections': True,
                                'kappa': 1.0,
-                               'v': None, 'alpha': 1.0, 'beta': 1.0,
+                               'v': None, 'alpha': 5.0, 'beta': 1.0,
                                'pi': 1.0}
+
 
 class DiscreteTimeNetworkHawkesModelGammaMixture(
     _DiscreteTimeNetworkHawkesModelBase, ModelGibbsSampling, ModelMeanField):
     _weight_class           = GammaMixtureWeights
     _default_weight_hypers  = {'kappa_0': 0.1, 'nu_0': 1000.0}
 
-    # This model uses an SBM with beta-distributed sparsity levels
-    _network_class          = StochasticBlockModel
-    _default_network_hypers = {'C': 1, 'c': None,
-                               'p': None, 'tau1': 1.0, 'tau0': 1.0,
+    _network_class          = ErdosRenyiFixedSparsity
+    _default_network_hypers = {'p': 0.5,
                                'allow_self_connections': True,
                                'kappa': 1.0,
-                               'v': None, 'alpha': 1.0, 'beta': 1.0,
-                               'pi': 1.0}
+                               'v': None, 'alpha': None, 'beta': None,}
 
     def resample_model(self, resample_network=True):
         """
@@ -1427,10 +1404,11 @@ class DiscreteTimeNetworkHawkesModelGammaMixture(
         self.network.resample_from_mf()
 
 
-class DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(DiscreteTimeNetworkHawkesModelGammaMixture):
-    _network_class          = StochasticBlockModelFixedSparsity
+class DiscreteTimeNetworkHawkesModelGammaMixtureSBM(DiscreteTimeNetworkHawkesModelGammaMixture):
+    # This model uses an SBM with beta-distributed sparsity levels
+    _network_class          = StochasticBlockModel
     _default_network_hypers = {'C': 1, 'c': None,
-                               'p': 0.5,
+                               'p': None, 'tau1': 1.0, 'tau0': 1.0,
                                'allow_self_connections': True,
                                'kappa': 1.0,
                                'v': None, 'alpha': 1.0, 'beta': 1.0,
@@ -1442,14 +1420,11 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0" : 1.0}
     _default_weight_hypers = {}
 
-    # This model uses an SBM with beta-distributed sparsity levels
-    _network_class          = StochasticBlockModel
-    _default_network_hypers = {'C': 1, 'c': None,
-                               'p': None, 'tau1': 1.0, 'tau0': 1.0,
+    _network_class          = ErdosRenyiFixedSparsity
+    _default_network_hypers = {'p': 0.5,
                                'allow_self_connections': True,
                                'kappa': 1.0,
-                               'v': None, 'alpha': 1.0, 'beta': 1.0,
-                               'pi': 1.0}
+                               'v': None, 'alpha': None, 'beta': None,}
 
     def __init__(self, K, dt_max=10.0,
                  bkgd_hypers={},

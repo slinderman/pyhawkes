@@ -8,9 +8,6 @@ from pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Bernoulli, Gamma
 from pyhawkes.utils.utils import logistic, logit
 
-from pyhawkes.utils.profiling import line_profiled
-PROFILING=True
-
 
 class SpikeAndSlabGammaWeights(GibbsSampling):
     """

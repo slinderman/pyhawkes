@@ -902,7 +902,9 @@ class ErdosRenyiFixedSparsity(GibbsSampling, MeanField):
         if alpha is beta is v is None:
             # If no parameters are specified, set v to be as large as possible
             # while still being stable with high probability
-            raise NotImplementedError("Set default weight scale")
+            # See the original paper for details
+            self.v = K * kappa * p / 0.5
+            self.alpha = self.beta = None
         elif v is not None:
             self.v = v
             self.alpha = self.beta = None
@@ -920,8 +922,9 @@ class ErdosRenyiFixedSparsity(GibbsSampling, MeanField):
         self.allow_self_connections = allow_self_connections
 
         # Mean field
-        self.mf_alpha = self.alpha
-        self.mf_beta = self.beta
+        if self.alpha and self.beta:
+            self.mf_alpha = self.alpha
+            self.mf_beta = self.beta
 
     @property
     def P(self):

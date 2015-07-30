@@ -7,10 +7,6 @@ from pyhawkes.utils.utils import initialize_pyrngs
 from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
 from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
 
-from pyhawkes.utils.profiling import line_profiled
-# PROFILING = True
-
-
 class DiscreteTimeParents(GibbsSampling, MeanField):
     """
     Encapsulates the TxKxKxB array of parent multinomial distributed
@@ -409,7 +405,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
 
         return vlb
 
-    @line_profiled
     def get_vlb_python(self):
         """
         E_q[\ln p(z | \lambda)] - E_q[\ln q(z)]

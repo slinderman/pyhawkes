@@ -1,12 +1,20 @@
 PyHawkes implements a variety of Bayesian inference algorithms
 for discovering latent network structure
-given excitatory point process observations.
+given point process observations. Suppose you observe timestamps
+of Twitter messages, but you
+don't get to see how those users are connected
+to one another.
+You might infer that there is an unobserved connection from
+one user to another if the first user's activity tends to precede the second user's.
+This intuition
+is formalized by combining excitatory point processes
+(aka *Hawkes processes*)  with random network
+models and performing Bayesian inference to discover the latent network.
 
 Examples
 ===
-We provide a number of classes for building and fitting
-mutually-excitatory point process (aka Hawkes process) models
-with underlying network structure. Let's walk through a simple example
+We provide a number of classes for building and fitting such models.
+Let's walk through a simple example
 where  we construct a discrete time model with three nodes, as in `examples/discrete_demo`.
 The nodes are connected via an excitatory network such that each event increases
 the likelihood of subsequent events on downstream nodes.
@@ -16,8 +24,9 @@ the likelihood of subsequent events on downstream nodes.
 K = 3
 p = 0.25
 dt_max = 20
-network = ErdosRenyiFixedSparsity(K, p)
-true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt_max=dt_max, network=network)
+network_hypers = {"p": p, "allow_self_connections": False}
+true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(
+    K=K, dt_max=dt_max, network_hypers=network_hypers)
 
 # Generate T time bins of events from the the model
 # S is the TxK event count matrix, R is the TxK rate matrix
@@ -32,7 +41,8 @@ an impulse response on the rate of nodes two and three.
 Now create a test model and try to infer the network given only the event counts.
 ```python
 # Create the test model, add the event count data, and plot
-test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt_max=dt_max, network=network)
+test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(
+    K=K, dt_max=dt_max, network_hypers=network_hypers)
 test_model.add_data(S)
 fig, handles = test_model.plot(color="#e41a1c")
 
@@ -57,7 +67,7 @@ see how those methods can be used, look in `examples/inference`.
 Installation
 ===
 To check out, run 
-`git clone --recursive git@github.com:slinderman/pyhawkes.git`
+`git clone git@github.com:slinderman/pyhawkes.git`
 
 To compile the cython code, run
 `python setup.py build_ext --inplace`

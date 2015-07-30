@@ -6,8 +6,6 @@ from sklearn.metrics import roc_auc_score
 import pyhawkes.models
 reload(pyhawkes.models)
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
-from pyhawkes.internals.network import ErdosRenyiFixedSparsity
-from pyhawkes.plotting.plotting import plot_network
 
 np.random.seed(0)
 
@@ -23,31 +21,29 @@ def demo(K=3, T=1000, dt_max=20, p=0.25):
     ###########################################################
     # Generate synthetic data
     ###########################################################
-    network = ErdosRenyiFixedSparsity(K, p, v=1., allow_self_connections=False)
+    network_hypers = {"p": p, "allow_self_connections": False}
     true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(
-        K=K, dt_max=dt_max, network=network)
+        K=K, dt_max=dt_max,
+        network_hypers=network_hypers)
     assert true_model.check_stability()
 
     # Sample from the true model
     S,R = true_model.generate(T=T, keep=True, print_interval=50)
 
     plt.ion()
-    true_figure, _ = true_model.plot(color="#377eb8")
-
-    # Save the true figure
-    true_figure.savefig("gifs/true.gif")
+    true_figure, _ = true_model.plot(color="#377eb8", T_slice=(0,100))
 
     ###########################################################
     # Create a test spike and slab model
     ###########################################################
     test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(
-        K=K, dt_max=dt_max, network=network)
+        K=K, dt_max=dt_max,
+        network_hypers=network_hypers)
 
     test_model.add_data(S)
 
     # Initialize plots
-    test_figure, test_handles = test_model.plot(color="#e41a1c")
-    test_figure.savefig("gifs/test0.gif")
+    test_figure, test_handles = test_model.plot(color="#e41a1c", T_slice=(0,100))
 
     ###########################################################
     # Fit the test model with Gibbs sampling
@@ -63,49 +59,11 @@ def demo(K=3, T=1000, dt_max=20, p=0.25):
 
         # Update plots
         test_model.plot(handles=test_handles)
-        test_figure.savefig("gifs/test%d.gif" % (itr+1))
 
-    # ###########################################################
-    # # Analyze the samples
-    # ###########################################################
-    # analyze_samples(true_model, samples, lps)
-
-def initialize_plots(true_model, test_model, S):
-    K = true_model.K
-    C = true_model.C
-    R = true_model.compute_rate(S=S)
-    T = S.shape[0]
-
-    # Plot the true network
-    plt.ion()
-    plot_network(true_model.weight_model.A,
-                 true_model.weight_model.W)
-    plt.pause(0.001)
-
-
-    # Plot the true and inferred firing rate
-    plt.figure(2)
-    plt.plot(np.arange(T), R[:,0], '-k', lw=2)
-    plt.ion()
-    ln = plt.plot(np.arange(T), test_model.compute_rate()[:,0], '-r')[0]
-    plt.show()
-    plt.pause(0.001)
-
-    return ln, im_net
-
-def update_plots(itr, test_model, S, ln, im_net):
-    K = test_model.K
-    C = test_model.C
-    T = S.shape[0]
-    plt.figure(2)
-    ln.set_data(np.arange(T), test_model.compute_rate()[:,0])
-    plt.title("\lambda_{%d}. Iteration %d" % (0, itr))
-    plt.pause(0.001)
-
-    plt.figure(4)
-    plt.title("W: Iteration %d" % itr)
-    im_net.set_data(test_model.weight_model.W_effective)
-    plt.pause(0.001)
+    ###########################################################
+    # Analyze the samples
+    ###########################################################
+    analyze_samples(true_model, samples, lps)
 
 def analyze_samples(true_model, samples, lps):
     N_samples = len(samples)
