@@ -20,4 +20,5 @@ setup(name='pyhawkes',
       url='http://www.github.com/slinderman/pyhawkes',
       ext_modules=ext_modules,
       include_dirs=[np.get_include(),],
+      packages=['pyhawkes', 'pyhawkes.internals', 'pyhawkes.utils']
      )

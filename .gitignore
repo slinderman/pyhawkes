@@ -61,3 +61,5 @@ data/gifs/test*.gif
 
 # PyCharm
 .idea/*
+pyhawkes/internals/continuous_time_helpers.c
+pyhawkes/internals/parent_updates.c
