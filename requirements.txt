@@ -1,6 +1,6 @@
 Cython
 numpy
-gslrandom
+#gslrandom
 joblib
 scikit-learn
 pybasicbayes
