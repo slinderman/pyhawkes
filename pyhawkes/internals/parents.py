@@ -1,7 +1,7 @@
 import numpy as np
 
-from pybasicbayes.distributions import GibbsSampling, MeanField
-from gslrandom import multinomial_par, multinomial
+from pybasicbayes.abstractions import GibbsSampling, MeanField
+from gslrandom import multinomial
 
 from pyhawkes.utils.utils import initialize_pyrngs
 from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
@@ -252,8 +252,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             P = P / P.sum(1)[:,None]
 
             # Sample parents from P with counts S[:,k2]
-            multinomial_par(self.pyrngs, Sk, P, Zk)
-            # multinomial(self.pyrngs[0], Sk, P, out=Zk)
+            multinomial(self.pyrngs, Sk, P, out=Zk)
 
         # DEBUG
         # self._check_Z()
