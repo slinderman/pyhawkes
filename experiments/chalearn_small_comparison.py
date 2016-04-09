@@ -20,7 +20,7 @@ from pyhawkes.utils.basis import IdentityBasis
 from pyhawkes.utils.utils import convert_discrete_to_continuous
 from pyhawkes.models import DiscreteTimeStandardHawkesModel, \
     DiscreteTimeNetworkHawkesModelGammaMixture, \
-    DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity, \
+    DiscreteTimeNetworkHawkesModelGammaMixtureSBM, \
     DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
     ContinuousTimeNetworkHawkesModel
 from pyhawkes.plotting.plotting import plot_network
@@ -498,7 +498,7 @@ def fit_network_hawkes_svi(S, K, C, dt, dt_max,
                           'kappa': kappa, 'alpha': alpha, 'beta': beta,
                           'p': 0.8,
                           'allow_self_connections': False}
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(K=K, dt=dt, dt_max=dt_max,
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixtureSBM(K=K, dt=dt, dt_max=dt_max,
                                                                 basis=test_basis,
                                                                 network_hypers=network_hypers)
         # Initialize with the standard model parameters

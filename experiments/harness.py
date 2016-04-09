@@ -19,7 +19,7 @@ if "DISPLAY" not in os.environ:
 
 from pyhawkes.utils.utils import convert_discrete_to_continuous
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelGammaMixture, \
-    DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity, \
+    DiscreteTimeNetworkHawkesModelGammaMixtureSBM, \
     DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
     ContinuousTimeNetworkHawkesModel
 
@@ -65,7 +65,7 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
             results = cPickle.load(f)
     else:
         # Split into test and training
-        xv_len      = int(0.01 * len(S))
+        xv_len      = 1000
         S_train = S[:-xv_len]
         S_xv    = S[xv_len:]
 
@@ -345,7 +345,7 @@ def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
     else:
         print "Fitting the data with a network Hawkes model using batch VB"
 
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(K=K, dt=dt, dt_max=dt_max,
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixtureSBM(K=K, dt=dt, dt_max=dt_max,
                                                                              **model_args)
         test_model.add_data(S)
 
@@ -420,7 +420,7 @@ def fit_network_hawkes_svi(S, S_test, dt, dt_max, output_path,
     else:
         print "Fitting the data with a network Hawkes model using SVI"
 
-        test_model = DiscreteTimeNetworkHawkesModelGammaMixtureFixedSparsity(K=K, dt=dt, dt_max=dt_max,
+        test_model = DiscreteTimeNetworkHawkesModelGammaMixtureSBM(K=K, dt=dt, dt_max=dt_max,
                                                                              **model_args)
         test_model.add_data(S)
 

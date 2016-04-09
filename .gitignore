@@ -57,3 +57,9 @@ target/
 data/synthetic/results*
 data/**/*.tgz
 data/chalearn/small/*.pkl.gz
+data/gifs/test*.gif
+
+# PyCharm
+.idea/*
+pyhawkes/internals/continuous_time_helpers.c
+pyhawkes/internals/parent_updates.c

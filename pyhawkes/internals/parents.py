@@ -1,15 +1,11 @@
 import numpy as np
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField
-from gslrandom import multinomial_par, multinomial
+from gslrandom import multinomial
 
 from pyhawkes.utils.utils import initialize_pyrngs
 from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
 from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
-
-from pyhawkes.utils.profiling import line_profiled
-# PROFILING = True
-
 
 class DiscreteTimeParents(GibbsSampling, MeanField):
     """
@@ -256,8 +252,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
             P = P / P.sum(1)[:,None]
 
             # Sample parents from P with counts S[:,k2]
-            multinomial_par(self.pyrngs, Sk, P, Zk)
-            # multinomial(self.pyrngs[0], Sk, P, out=Zk)
+            multinomial(self.pyrngs, Sk, P, out=Zk)
 
         # DEBUG
         # self._check_Z()
@@ -409,7 +404,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
 
         return vlb
 
-    @line_profiled
     def get_vlb_python(self):
         """
         E_q[\ln p(z | \lambda)] - E_q[\ln q(z)]
