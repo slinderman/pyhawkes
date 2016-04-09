@@ -28,6 +28,20 @@ def convert_discrete_to_continuous(S, dt):
     C_ct = C_ct[perm]
     return S_ct, C_ct, T
 
+def convert_continuous_to_discrete(S, C, dt, T_min, T_max):
+    bins = np.arange(T_min, T_max, dt)
+    if bins[-1] != T_max:
+        bins = np.hstack((bins, [T_max]))
+    T = bins.size - 1
+
+    K = C.max()+1
+    S_dt = np.zeros((T,K))
+    for k in xrange(K):
+        S_dt[:,k] = np.histogram(S[C==k], bins)[0]
+
+    assert S_dt.sum() == len(S)
+    return S_dt
+
 def get_unique_file_name(filedir, filename):
     """
     Get a unique filename by appending filename with .x, where x

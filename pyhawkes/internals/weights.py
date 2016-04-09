@@ -4,7 +4,7 @@ from scipy.misc import logsumexp
 
 from joblib import Parallel, delayed
 
-from pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
+from pybasicbayes.abstractions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Bernoulli, Gamma
 from pyhawkes.utils.utils import logistic, logit
 

@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.special import gammaln, psi
 
-from pybasicbayes.distributions import GibbsSampling, MeanField, MeanFieldSVI
+from pybasicbayes.abstractions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Dirichlet
 
 class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
