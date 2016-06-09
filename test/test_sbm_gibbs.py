@@ -1,5 +1,3 @@
-import copy
-
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -7,6 +5,8 @@ from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 
 from pyhawkes.internals.network import StochasticBlockModel
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
+
+from pybasicbayes.util.text import progprint_xrange
 
 def test_gibbs_sbm(seed=None):
     """
@@ -50,13 +50,10 @@ def test_gibbs_sbm(seed=None):
     test_model.add_data(S)
 
     # Gibbs sample
-    N_samples = 10
+    N_samples = 100
     c_samples = []
     lps = []
-
-    for itr in xrange(N_samples):
-        if itr % 5 == 0:
-            print "Iteration: ", itr
+    for itr in progprint_xrange(N_samples):
         c_samples.append(test_network.c.copy())
         lps.append(test_model.log_probability())
 
