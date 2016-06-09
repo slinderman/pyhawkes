@@ -1039,3 +1039,32 @@ class ErdosRenyiFixedSparsity(GibbsSampling, MeanField):
         :return:
         """
         self.v = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)
+
+
+class LatentDistanceAdjacencyModel(ErdosRenyiModel):
+    """
+    Network model with probability of connection given by
+    a latent distance model. Depends on graphistician package.
+    """
+    def __init__(self, K, dim=2,
+                 v=None, alpha=1.0, beta=1.0,
+                 kappa=1.0):
+        super(LatentDistanceAdjacencyModel, self).\
+            __init__(K=K, v=v, alpha=alpha, beta=beta, kappa=kappa)
+
+        # Create a latent distance model for adjacency matrix
+        from graphistician.adjacency import LatentDistanceAdjacencyDistribution
+        self.A_dist = LatentDistanceAdjacencyDistribution(K, dim=dim)
+
+    @property
+    def P(self):
+        return self.A_dist.P
+
+    @property
+    def L(self):
+        return self.A_dist.L
+
+    def resample(self, data=[]):
+        A,W = data
+        self.resample_v(A, W)
+        self.A_dist.resample(A)
