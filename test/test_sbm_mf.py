@@ -7,7 +7,6 @@ from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
                             DiscreteTimeNetworkHawkesModelGammaMixture
-from pyhawkes.plotting.plotting import plot_network
 
 def test_sbm_mf(seed=None):
     """
@@ -15,6 +14,8 @@ def test_sbm_mf(seed=None):
 
     :return:
     """
+    raise NotImplementedError("This test needs to be updated.")
+
     if seed is None:
         seed = np.random.randint(2**32)
 

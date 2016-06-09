@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 
+from pyhawkes.internals.network import StochasticBlockModel
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
-from pyhawkes.plotting.plotting import plot_network
 
 def test_gibbs_sbm(seed=None):
     """
@@ -20,53 +20,54 @@ def test_gibbs_sbm(seed=None):
     print "Setting seed to ", seed
     np.random.seed(seed)
 
-    C = 10
+    C = 2
     K = 100
+    c = np.arange(C).repeat(np.ceil(K/float(C)))[:K]
     T = 1000
     dt = 1.0
     B = 3
 
     # Generate from a true model
-    network_hypers = {'C': C, 'beta': 1.0/K}
-    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, B=B,
-                                                            network_hypers=network_hypers)
-    # S,R = true_model.generate(T=T)
-    c = true_model.network.c
-    perm = np.argsort(c)
+    true_p = np.random.rand(C,C) * 0.25
+    true_network = StochasticBlockModel(K, C, c=c, p=true_p, v=10.0)
+    true_model = \
+        DiscreteTimeNetworkHawkesModelSpikeAndSlab(
+                K=K, dt=dt, B=B, network=true_network)
+
+    S,R = true_model.generate(T)
 
     # Plot the true network
     plt.ion()
-    plot_network(true_model.weight_model.A[np.ix_(perm, perm)],
-                 true_model.weight_model.W[np.ix_(perm, perm)])
+    true_im = true_model.plot_adjacency_matrix()
     plt.pause(0.001)
 
 
     # Make a new model for inference
-    network_hypers = {'C': C, 'beta': 1.0/K}
-    test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, B=B,
-                                                            network_hypers=network_hypers)
-    # test_model.add_data(S)
+    test_network = StochasticBlockModel(K, C, beta=1./K)
+    test_model = \
+        DiscreteTimeNetworkHawkesModelSpikeAndSlab(
+                K=K, dt=dt, B=B, network=test_network)
+    test_model.add_data(S)
 
     # Gibbs sample
     N_samples = 10
-    samples = []
+    c_samples = []
     lps = []
+
     for itr in xrange(N_samples):
         if itr % 5 == 0:
             print "Iteration: ", itr
-        samples.append(copy.deepcopy(test_model.get_parameters()))
-
+        c_samples.append(test_network.c.copy())
         lps.append(test_model.log_probability())
 
         # Resample the network only
         test_model.network.resample((true_model.weight_model.A,
                                      true_model.weight_model.W))
 
+    c_samples = np.array(c_samples)
     plt.ioff()
 
     # Compute sample statistics for second half of samples
-    c_samples       = np.array([c for _,_,_,_,c,_,_,_ in samples])
-
     print "True c: ", true_model.network.c
     print "Test c: ", c_samples[-10:, :]
 
