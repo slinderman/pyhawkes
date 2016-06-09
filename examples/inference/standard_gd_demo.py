@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab, DiscreteTimeStandardHawkesModel
-from pyhawkes.plotting.plotting import plot_network
 
 def demo(seed=None):
     """
@@ -10,6 +9,8 @@ def demo(seed=None):
 
     :return:
     """
+    raise NotImplementedError("This example needs to be updated.")
+
     if seed is None:
         seed = np.random.randint(2**32)
 

@@ -7,18 +7,16 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import roc_auc_score
 
+from pybasicbayes.util.text import progprint_xrange
+
 from pyhawkes.models import \
     DiscreteTimeNetworkHawkesModelGammaMixture, \
     DiscreteTimeStandardHawkesModel
 
-def demo(seed=None):
-    """
-    Fit a weakly sparse
-    :return:
-    """
-    if seed is None:
-        seed = np.random.randint(2**32)
 
+if __name__ == "__main__":
+
+    seed = 11223344
     print "Setting seed to ", seed
     np.random.seed(seed)
 
@@ -64,8 +62,7 @@ def demo(seed=None):
                                                             basis_hypers=true_model.basis_hypers,
                                                             bkgd_hypers=true_model.bkgd_hypers,
                                                             impulse_hypers=true_model.impulse_hypers,
-                                                            weight_hypers=true_model.weight_hypers,
-                                                            network_hypers=network_hypers)
+                                                            weight_hypers=true_model.weight_hypers)
     test_model.add_data(S)
 
     # Initialize with the standard model parameters
@@ -79,16 +76,9 @@ def demo(seed=None):
     N_samples = 500
     samples = []
     lps = []
-    # plls = []
-    for itr in xrange(N_samples):
+    for itr in progprint_xrange(N_samples):
         lps.append(test_model.log_probability())
-        # plls.append(test_model.heldout_log_likelihood(S_test, F=F_test))
         samples.append(test_model.copy_sample())
-
-        print ""
-        print "Gibbs iteration ", itr
-        print "LP: ", lps[-1]
-
         test_model.resample_model()
 
     ###########################################################
@@ -138,5 +128,3 @@ def demo(seed=None):
     plt.ioff()
     plt.show()
 
-
-demo(11223344)

@@ -8,18 +8,26 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import roc_auc_score
 
+from pyhawkes.internals.network import StochasticBlockModel
+
 from pyhawkes.models import \
     DiscreteTimeNetworkHawkesModelGammaMixture, \
     DiscreteTimeStandardHawkesModel
 
 init_with_map = True
-do_plot = False
 
 def demo(seed=None):
     """
     Fit a weakly sparse
     :return:
     """
+    import warnings
+    warnings.warn("This test runs but the parameters need to be tuned. "
+                  "Right now, the SVI algorithm seems to walk away from "
+                  "the MAP estimate and yield suboptimal results. "
+                  "I'm not convinced the variational inference with the "
+                  "gamma mixture provides the best estimates of the sparsity.")
+
     if seed is None:
         seed = np.random.randint(2**32)
 
@@ -30,7 +38,7 @@ def demo(seed=None):
     # Load some example data.
     # See data/synthetic/generate.py to create more.
     ###########################################################
-    data_path = os.path.join("data", "synthetic", "synthetic_K4_C1_T1000.pkl.gz")
+    data_path = os.path.join("data", "synthetic", "synthetic_K20_C4_T10000.pkl.gz")
     with gzip.open(data_path, 'r') as f:
         S, true_model = cPickle.load(f)
 
@@ -61,15 +69,20 @@ def demo(seed=None):
 
     # Copy the network hypers.
     # Give the test model p, but not c, v, or m
-    network_hypers = true_model.network_hypers.copy()
+    # network_hypers = true_model.network_hypers.copy()
+    # network_hypers['c'] = None
+    # network_hypers['v'] = None
+    # network_hypers['m'] = None
+    # test_network = StochasticBlockModel(K=K, **network_hypers)
+    test_network = StochasticBlockModel(K=K, C=1)
     test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max, B=B,
                                                             basis_hypers=true_model.basis_hypers,
                                                             bkgd_hypers=true_model.bkgd_hypers,
                                                             impulse_hypers=true_model.impulse_hypers,
                                                             weight_hypers=true_model.weight_hypers,
-                                                            network_hypers=network_hypers)
+                                                            network=test_network
+                                                            )
     test_model.add_data(S)
-    # F_test = test_model.basis.convolve_with_basis(S_test)
 
     # Initialize with the standard model parameters
     if init_model is not None:

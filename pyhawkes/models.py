@@ -133,6 +133,20 @@ class DiscreteTimeStandardHawkesModel(object):
     def bias(self):
         return self.weights[:,0]
 
+    @property
+    def G(self):
+        G = self.weights[:,1:].reshape((self.K,self.K, self.B))
+
+        # Weight matrix is summed over impulse response functions
+        W = G.sum(axis=2, keepdims=True)
+
+        # Then we transpose so that the weight matrix is (outgoing x incoming)
+        G /= W
+        G = np.transpose(G, [1,0,2])
+
+        return G
+
+
     def add_data(self, S, F=None, minibatchsize=None):
         """
         Add a data set to the list of observations.
@@ -658,8 +672,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             standard_model.fit_with_bfgs()
 
         else:
-            from pyhawkes.standard_models import StandardHawkesProcess
-            assert isinstance(standard_model, StandardHawkesProcess)
+            assert isinstance(standard_model, DiscreteTimeStandardHawkesModel)
             assert standard_model.K == self.K
             assert standard_model.B == self.B
 
@@ -674,17 +687,9 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         W = standard_model.W + 1e-6
 
         # The impulse responses are normalized weights
-        # g = Wg / W[:,:,None]
-        # for k1 in xrange(self.K):
-        #     for k2 in xrange(self.K):
-        #         if g[k1,k2,:].sum() < 1e-2:
-        #             g[k1,k2,:] = 1.0/self.B
-        g = standard_model.G
-
         # Clip g to make sure it is stable for MF updates
+        g = standard_model.G
         g = np.clip(g, 1e-2, np.inf)
-
-        # Make sure g is normalized
         g = g / g.sum(axis=2)[:,:,None]
 
 
@@ -695,7 +700,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         # of only strong connections. What sparsity? How about the
         # mean under the network model
         # sparsity = self.network.tau1 / (self.network.tau0 + self.network.tau1)
-        sparsity = self.network.p
+        sparsity = np.mean(self.network.p)
         A = W > np.percentile(W, (1.0 - sparsity) * 100)
 
         # Set the model parameters
@@ -703,21 +708,6 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         self.weight_model.A     = A.copy('C')
         self.weight_model.W     = W.copy('C')
         self.impulse_model.g    = g.copy('C')
-
-        # if isinstance(self.network, StochasticBlockModel) and not self.network.fixed:
-        #     # Cluster the standard model with kmeans in order to initialize the network
-        #     from sklearn.cluster import KMeans
-        #
-        #     features = []
-        #     for k in xrange(self.K):
-        #         features.append(np.concatenate((W[:,k], W[k,:])))
-        #
-        #     self.network.c = KMeans(n_clusters=self.C).fit(np.array(features)).labels_
-        #
-        #     # print "DEBUG: Do not set p and v in init from standard model"
-        #     self.network.resample_p(self.weight_model.A)
-        #     self.network.resample_v(self.weight_model.A, self.weight_model.W)
-        #     self.network.resample_m()
 
     def add_data(self, S, F=None, minibatchsize=None):
         """

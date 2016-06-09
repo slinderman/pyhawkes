@@ -9,12 +9,12 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import adjusted_mutual_info_score, \
     adjusted_rand_score, roc_auc_score
 
+
+from pyhawkes.internals.network import StochasticBlockModel
+
 from pyhawkes.models import \
     DiscreteTimeNetworkHawkesModelSpikeAndSlab, \
     DiscreteTimeStandardHawkesModel
-
-from pyhawkes.plotting.plotting import plot_network
-
 
 def demo(seed=None):
     """
@@ -68,12 +68,13 @@ def demo(seed=None):
     network_hypers['c'] = None
     network_hypers['v'] = None
     network_hypers['m'] = None
+    test_network = StochasticBlockModel(K=K, **network_hypers)
     test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max, B=B,
                                                             basis_hypers=true_model.basis_hypers,
                                                             bkgd_hypers=true_model.bkgd_hypers,
                                                             impulse_hypers=true_model.impulse_hypers,
                                                             weight_hypers=true_model.weight_hypers,
-                                                            network_hypers=network_hypers)
+                                                            network=test_network)
     test_model.add_data(S)
     # F_test = test_model.basis.convolve_with_basis(S_test)
 
@@ -87,7 +88,7 @@ def demo(seed=None):
     ###########################################################
     # Fit the test model with Gibbs sampling
     ###########################################################
-    N_samples = 5
+    N_samples = 50
     samples = []
     lps = []
     # plls = []
@@ -113,16 +114,20 @@ def demo(seed=None):
 
 def initialize_plots(true_model, test_model, S):
     K = true_model.K
-    C = true_model.C
+    C = true_model.network.C
     R = true_model.compute_rate(S=S)
     T = S.shape[0]
+
     # Plot the true network
+    # Figure 1
+    plt.figure(1)
+    ax = plt.subplot(111)
     plt.ion()
-    plot_network(true_model.weight_model.A,
-                 true_model.weight_model.W)
+    true_model.plot_adjacency_matrix(ax=ax, vmax=0.25)
     plt.pause(0.001)
 
 
+    # Figure 2
     # Plot the true and inferred firing rate
     plt.figure(2)
     plt.plot(np.arange(T), R[:,0], '-k', lw=2)
@@ -130,6 +135,7 @@ def initialize_plots(true_model, test_model, S):
     ln = plt.plot(np.arange(T), test_model.compute_rate()[:,0], '-r')[0]
     plt.show()
 
+    # Firgure 3
     # Plot the block affiliations
     plt.figure(3)
     KC = np.zeros((K,C))
@@ -138,7 +144,10 @@ def initialize_plots(true_model, test_model, S):
                     interpolation="none", cmap="Greys",
                     aspect=float(C)/K)
 
-    im_net = plot_network(np.ones((K,K)), test_model.weight_model.W_effective, vmax=0.5)
+    # Figure 4
+    plt.figure(4)
+    ax = plt.subplot(111)
+    im_net = test_model.plot_adjacency_matrix(ax=ax, vmax=0.25)
     plt.pause(0.001)
 
     plt.show()
@@ -148,8 +157,9 @@ def initialize_plots(true_model, test_model, S):
 
 def update_plots(itr, test_model, S, ln, im_clus, im_net):
     K = test_model.K
-    C = test_model.C
+    C = test_model.network.C
     T = S.shape[0]
+
     plt.figure(2)
     ln.set_data(np.arange(T), test_model.compute_rate()[:,0])
     plt.title("\lambda_{%d}. Iteration %d" % (0, itr))
@@ -254,7 +264,5 @@ def analyze_samples(true_model, init_model, samples, lps):
     plt.ioff()
     plt.show()
 
-# demo(2203329564)
-# demo(2728679796)
 
 demo(11223344)

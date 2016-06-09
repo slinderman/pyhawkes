@@ -9,20 +9,27 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import adjusted_mutual_info_score, \
     adjusted_rand_score, roc_auc_score
 
+from pyhawkes.internals.network import StochasticBlockModel
+
 from pyhawkes.models import \
     DiscreteTimeNetworkHawkesModelGammaMixture, \
     DiscreteTimeStandardHawkesModel
 
-from pyhawkes.plotting.plotting import plot_network
 
-init_with_map = False
-do_plot = False
+init_with_map = True
 
 def demo(seed=None):
     """
     Fit a weakly sparse
     :return:
     """
+    import warnings
+    warnings.warn("This test runs but the parameters need to be tuned. "
+                  "Right now, the SVI algorithm seems to walk away from "
+                  "the MAP estimate and yield suboptimal results. "
+                  "I'm not convinced the variational inference with the "
+                  "gamma mixture provides the best estimates of the sparsity.")
+
     if seed is None:
         seed = np.random.randint(2**32)
 
@@ -33,7 +40,7 @@ def demo(seed=None):
     # Load some example data.
     # See data/synthetic/generate.py to create more.
     ###########################################################
-    data_path = os.path.join("data", "synthetic", "synthetic_K4_C1_T1000.pkl.gz")
+    data_path = os.path.join("data", "synthetic", "synthetic_K20_C4_T10000.pkl.gz")
     with gzip.open(data_path, 'r') as f:
         S, true_model = cPickle.load(f)
 
@@ -65,15 +72,17 @@ def demo(seed=None):
     # Copy the network hypers.
     # Give the test model p, but not c, v, or m
     network_hypers = true_model.network_hypers.copy()
+    network_hypers['C'] = 1
     network_hypers['c'] = None
     network_hypers['v'] = None
     network_hypers['m'] = None
+    test_network = StochasticBlockModel(K=K, **network_hypers)
     test_model = DiscreteTimeNetworkHawkesModelGammaMixture(K=K, dt=dt, dt_max=dt_max, B=B,
                                                             basis_hypers=true_model.basis_hypers,
                                                             bkgd_hypers=true_model.bkgd_hypers,
                                                             impulse_hypers=true_model.impulse_hypers,
                                                             weight_hypers=true_model.weight_hypers,
-                                                            network_hypers=network_hypers)
+                                                            network=test_network)
     test_model.add_data(S)
     # F_test = test_model.basis.convolve_with_basis(S_test)
 
@@ -81,15 +90,11 @@ def demo(seed=None):
     if init_model is not None:
         test_model.initialize_with_standard_model(init_model)
 
-    # Initialize plots
-    if do_plot:
-        ln, im_net, im_clus = initialize_plots(true_model, test_model, S)
-
     ###########################################################
     # Fit the test model with stochastic variational inference
     ###########################################################
     N_iters = 500
-    minibatchsize = 100
+    minibatchsize = 1000
     delay = 1.0
     forgetting_rate = 0.5
     stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
@@ -100,15 +105,12 @@ def demo(seed=None):
         test_model.resample_from_mf()
         samples.append(test_model.copy_sample())
 
-        # Update plot
-        if itr % 1 == 0 and do_plot:
-            update_plots(itr, test_model, S, ln, im_clus, im_net)
-
     ###########################################################
     # Analyze the samples
     ###########################################################
     analyze_samples(true_model, init_model, samples)
 
+# TODO: Update the plotting code as in the Gibbs demo
 def initialize_plots(true_model, test_model, S):
     K = true_model.K
     C = true_model.C
