@@ -1,0 +1,256 @@
+% !TEX program = pdflatex
+\input{preamble/preamble.tex}
+\input{preamble/preamble_math.tex}
+
+\usepackage{macros}
+
+% \linenumbers
+
+\title{Latent Hawkes Processes}
+\author{Scott W Linderman}
+\date{November 1, 2016}
+
+\begin{document}
+\maketitle
+
+\section{Model}
+Consider a scenario in which the data we observe is driven by
+a set of hidden events,
+\begin{align}
+  \mcH &= \{s_j, m_j, \theta_j\}_{j=1}^J,
+\end{align}
+where~$s_j \in [0,T]$ is the time of the~$j$-th hidden
+event,~${m_j \in \{1, \ldots, M\}}$ is the latent node on which it
+occurred, and~$\theta_j$ is a set of properties associated with that
+event. For example, the latent nodes could be unobserved neurons in
+the brain, the timestamps could correspond to the spikes fired by
+those neurons, and the parameters could correspond to some relevant
+properties of those spikes. Alternatively, perhaps there is only one
+latent node ($M=1$) which roughly captures things that happen in the
+outside world, where the timestamps reflect the timestamps of those
+real-world events and the parameters represent properties of the
+event.
+
+We will assume that these hidden events are sampled from a
+marked point process with independent rates,~$\lambda_m(s,\theta)$
+for each latent node~$m$. The set~$\mcH$ is then the union of
+events from all latent nodes. In the simplest case, we will assume
+that,
+\begin{align}
+  \lambda_m(s, \theta) = b_m \cdot p(\theta),
+\end{align}
+where~$b_m$ is a homogeneous background rate and~$p(\theta)$ is
+the density of a prior distribution over properties~$\theta$. 
+
+The observed data is a set of events on~$N$ visible nodes.
+In this model, the~$j$-th latent event gives rise to a set of child
+events, which we denote by,
+\begin{align}
+  \mcD_j &= \{(t_k, n_k, x_k)\}_{k=1}^{K_j},
+\end{align}
+where~$K_j$ is the number of observed events induced by the latent
+event~$j$,~$t_k \in (s_j,T]$ is the time of the induced event (note
+that the system is causal), and~$x_k$ is the content of the observed
+event. We will further refine this notation by defining,
+\begin{align}
+  \mcD_{j,n} &= \{(t_k, x_k): n_k = n\},
+\end{align}
+such that~$\mcD_j = \cup_{n=1}^N \mcD_{j,n}$.
+Furthermore, assume that there is a static background model
+that gives rise to an additional set of events on each node,
+\begin{align}
+ \mcD_0 &= \{(t_k, n_k, x_k)\}_{k=1}^{K_0},
+\end{align}
+with~$\mcD_{0,n}$ defined analogously to~$\mcD_{j,n}$. With this
+notation in place, we can now define the observed data as
+the union of all of these sets,
+\begin{align}
+  \mcD &= \bigcup_{n=1}^N \mcD_{0,n} \bigcup_{j=1}^J \mcD_{j,n}.
+\end{align}
+Let~$K=K_0 + \sum_{j=1}^J K_j$ denote the total number of observed events.
+
+To make this concrete, the observed events may be cables sent by a
+collection of~$N$ embassies, and the mark,~$x_k \in \naturals^V$ may
+be the word counts of the~$k$-th message (with vocabulary
+size~$V$). The latent events correspond to things happening in the
+outside world, which have an associated distribution over
+words,~$\theta_j$.
+
+In another setting,~$x_k \in \reals$ may be an associated event
+amplitude, like the size of a post-synaptic potential in a recording
+of a neuron's voltage. These events are induced by either the
+background rate (noise) or by one of a set of hiddent events, like
+spikes on pre-synaptic neurons.
+
+\begin{figure}[t!]
+\includegraphics[width=5in]{latent_hawkes_example.pdf}
+\caption{An example of a draw from a latent Hawkes process
+a single latent node ($M=1$) which gives emits the ~$J=25$ hidden
+events denoted by black dots. Each latent event has a time
+stamp,~$s_j$, from a homogeneous Poisson process and a
+parameter~$\theta_j \sim \distNormal(0,1)$, marked by the height of
+the dot. These latent events influence the conditional intensity of
+the marked point processes for each of the~$N=3$ observed nodes. In
+this case, there are different weights~$w_{1 \to n}$ for each of the
+three node, but all have the same background rate,~$b_n=0.5$. The
+observed events are either drawn from the background model with
+standard Gaussian content,~$x_k$, or from an impulse response induced
+by a latent event. If the latter, the time is drawn from~$t_k =
+s_{z_k} + \mcE(1)$ and the content is drawn from
+$x_k \sim \distNormal(\theta_{z_k}, 0.5^2)$. Our goal is to infer the
+times and parameters of the black dots given observations of the blue
+and red dots.}
+\end{figure}
+
+To relate the hidden and observed events,
+we consider a model in which the observed datasets follow a marked
+point process,
+\begin{align}
+  \mcD_{j,n} &\sim \mcP(\lambda_{j,n}(t, x)),
+\end{align}
+where~$\lambda_{j,n}(t, x): [0,T] \times \mcX \to \reals_+$ denotes
+the conditional intensity function of events on node~$n$ induced by
+the~$j$-th hidden event.  We further assume that this conditional
+intensity function simplifies to,
+\begin{align}
+  \lambda_{j,n}(t, x)
+  &= w_{m_j \to n} \, g(t-s_j; \theta_j) \, h(x; \theta_j) \, \bbI[t > s_j],
+\end{align}
+where $w_{m \to n} \in \reals_+$ is the weight of influence hidden
+node~$m$ has on observed node~$n$; ${g(\Delta
+t; \theta_j): \reals_+ \to \reals_+}$ is a normalized impulse response
+function (i.e.~$\int_0^\infty g(\tau; \theta_j) \, \mathrm{d}\tau =
+1$); and~$h(x; \theta_j)$ is a probability density on the space~$\mcX$
+parameterized by~$\theta_j$.
+
+Likewise, define the background intensity of node~$n$ as,
+\begin{align}
+  \lambda_{0,n}(t,x) &= b_n \, h(x; \theta_n),
+\end{align}
+where~$b_n$ is the time-homogeneous rate of events
+and~$h(x; \theta_n)$ is a probability density over event content
+specific to node~$n$ (permitting a slight overloading of the indices
+for the background parameters,~$\theta_n$).
+
+Since the observed
+data is the union of sets of events drawn from independent marked point processes,
+the total conditional intensity for node~$n$ is given by,
+\begin{align}
+  \lambda_n(t, x) &= b_n \, h(x; \theta_n) + \sum_{j=1}^J w_{m_j \to n} \, g(t-s_j; \theta_j) \, h(x; \theta_j) \, \bbI[t > s_j].
+\end{align}
+\TODO{This is the critical step -- I'm pretty sure that this
+is right, but we should discuss.}
+In other words, the events follow a marked Hawkes process.
+
+
+\section{Inference}
+The log likelihood is,
+\begin{align}
+  \log p(\mcD \given \mcH) &= -\sum_{n=1}^N \left[\int \lambda_n(t,x) \, \mathrm{d}t \, \mathrm{d}x \right] + \sum_{k=1}^K \log \lambda_{n_k}(t_k, x_k) \\
+  &= -\sum_{n=1}^N \left[b_n T + \sum_{j=1}^J w_{m_j \to n} \right] + \sum_{k=1}^K \log \lambda_{n_k} (t_k, x_k),
+  \label{eq:loglkhd}
+\end{align}
+ignoring edge effects in the integral. 
+
+From the generative process described above, we see that there is an
+additional unobserved variable, namely, the parent event~$j$ that gave
+rise to the event~$k$.  To perform inference, we can reinstantiate
+this latent variable. Let ~$z_k \in \{0, \ldots, J\}$ indicate which
+of the additive components of the conditional intensity function gave
+rise to the~$k$-th event. With these parent variables, the
+``complete data'' log likelihood decomposes into a sum,
+\begin{multline}
+  \log p(\{(t_k, n_k, x_k, z_k)\}_{k=1}^K \given \mcH) =
+  -\sum_{n=0}^N \left[ b_n T + \sum_{j=1}^J w_{m_j \to n} \right] \\
+  + \sum_{k=1}^K \bbI[z_k=0] \log b_{n_k} 
+  + \sum_{j=1}^J \bbI[z_k=j] \log \left(w_{m_j \to n_k} \, g(t_k-s_j; \theta_j) \, h(x_k; \theta_j) \, \bbI[t_k > s_j] \right)
+\end{multline}
+
+Given these parent variables, and given times of the latent
+events~$\{s_j\}_{j=1}^J$, inference of the remaining parameters is
+relatively straightforward. The weights and background rates have
+conjugate gamma priors.
+
+If~$\theta_j = (\tau_j, \eta_j)$, where~$\tau_j$
+parameterizes the temporal density,~$g$, and~$\eta_j$ governs
+the content density,~$h$, then in some cases we can choose conjugate
+exponential family distributions. For the temporal kernel,
+$g(\Delta t; \tau_j) = \mathrm{Exp}(\Delta t; \tau_j)$,
+the likelihood is conjugate with a gamma prior on~$\tau_j$.
+For Gaussian content, a normal inverse-gamma prior, and for
+multinomial distributed content, a Dirichlet prior on~$\eta_j$,
+are natural choices.
+
+Moreover, the conditional distribution of the parent variables is given by,
+\begin{align}
+  z_k &\sim
+  \begin{bmatrix}
+        \pi_{k,0}, & \pi_{k,1}, & \ldots, &\pi_{k,J}
+  \end{bmatrix}  \\
+  \pi_{k,0} &\propto b_{n_k} h(x_k; \theta_{n_k}) \\
+  \pi_{k,j} &\propto w_{m_j \to n_k} \, g(t_k - s_j; \theta_j) \, h(x_k ; \theta_j) \, \bbI[t_k > s_j]; \qquad \text{for }j>0.
+\end{align}
+These could be sampled in parallel, or we could sample them
+serially, collapsing out the parameters~$\theta$ based on
+the assignments of events~$k' \neq k$ (as long~$g$ and~$h$ are conjugate
+with the prior on~$\theta$). This ties all of the observed
+events together and forces a serial updating of the~$K$ events.
+In practice, this may lead to slower mixing than a parallel
+implementation of an ``un-collapsed'' Gibbs sampler. 
+
+\subsection{Inferring the latent event times}
+The more challenging problem is that of updating the
+set of latent event times. If we hold the parent assignments
+fixed, then we have hard constraints on the time of the
+~$j$-th event --- it is limited by the earliest time of
+the events it gives rise to. Moreover, we cannot remove
+a parent event if any children belong to it. To circumvent
+this issue, we propose to marginalize out the parent
+variables and directly evaluate the log likelihood of a
+candidate set of hidden events,~$\mcH$, using Eq.~\eqref{eq:loglkhd}.
+
+We could design as simple MCMC algorithm with a set of
+Metropolis-Hastings transition operators to jitter, add,
+and remove latent events. In each case, we can evaluate
+the marginal likelihood in Eq.~\eqref{eq:loglkhd} as
+well as the prior,~$p(\mcH)$, which is also a point
+process likelihood.
+
+Alternatively, we could consider joint updates of the
+latent event sequences. Imagine binning time into~$T$
+windows of width one.  We can write the log likelihood
+as a sum over these time bins:
+\begin{align}
+\log p(\mcD \given \mcH) &=
+\sum_{i=1}^T \left(
+  -\sum_{n=1}^N \sum_{j: s_j \in [i, i+1)} w_{m_j \to n} 
+  + \sum_{k: t_k \in [i, i+1)} \log \lambda_{n_k}(t_k, x_k) 
+\right) + c \\
+&= \sum_{i=1}^T \log p\big(\mcD[i] \, \big| \, \mcH[1:i]\big) + c,
+\end{align}
+where~$c=-\sum_{n=1}^N b_nT$ is constant wrt~$\mcH$; $\mcD[i]$
+denotes the data in the~$i$-th time bin, and~$\mcH[1:i]$ denotes
+the set of hidden events up to and including the~$i$-th time bin.
+If we assume that the prior factorizes in a similar way, then the
+conditional distribution,~$p(\mcH \given \mcD)$ will also factor
+in this causal way. This suggests that we could estimate the
+conditional distribution of~$\mcH$ using sequential Monte
+Carlo\footnote{Or some other smoothing algorithm for non-linear non-Gaussian
+time series}. Moreover, we could incorporate the inference of~$\mcH$
+into a Markov chain using particle MCMC. Our proposal distributions
+would be interesting --- we would probably want something like,
+\begin{align}
+  q(\{s_j, m_j=m, \theta_j\}) &= \mcP(\nu(s, \theta)),
+\end{align} 
+where~$\nu$ is a proposal measure on the time interval~$[i, i+1)$ and
+the sapce of parameters. That is, in our SMC algorithm, we propose
+a set of latent events for the next time interval, evaluate the
+proposal probability, and then evaluate the joint probability of
+the data (in that time bin) given the history of events through time~$i+1$. 
+
+
+
+\bibliographystyle{apa}
+\bibliography{refs.bib}
+
+\end{document}
