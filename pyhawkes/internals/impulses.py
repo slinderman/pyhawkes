@@ -3,6 +3,7 @@ from scipy.special import gammaln, psi
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField, MeanFieldSVI
 from pyhawkes.internals.distributions import Dirichlet
+from pyhawkes.utils.utils import logistic
 
 class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
     """
@@ -371,13 +372,25 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
         Z = dt * (dt_max - dt)/dt_max * np.sqrt(2*np.pi/tau)
         return 1./Z * np.exp(-tau/2. * (logit(dt/dt_max) - mu)**2)
 
-    def rvs(self, size=[]):
+    def rvs(self, size, s_pa, x_pa, c_pa, c_ch):
         """
-        Sample random variables from the Dirichlet impulse response distribution.
+        Sample random events
         :param size:
         :return:
         """
-        pass
+        mu, tau, dt_max = self.mu, self.tau, self.dt_max
+
+        # Sample normal RVs and take the logistic of them. This is equivalent
+        # to sampling uniformly from the inverse CDF
+        v_ch = mu[c_pa, c_ch] + np.sqrt(1. / tau[c_pa, c_ch]) * np.random.randn(size)
+
+        # Event times are logistic transformation of x
+        s_ch = s_pa + dt_max * logistic(v_ch)
+
+        # No event marks here
+        x_ch = np.array([None] * size)
+
+        return s_ch, x_ch
 
     def log_likelihood(self, x):
         '''

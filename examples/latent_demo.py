@@ -5,12 +5,11 @@ np.random.seed(1111)
 np.seterr(over="raise")
 import matplotlib.pyplot as plt
 
-from pybasicbayes.util.general import ibincount
 from pybasicbayes.util.text import progprint_xrange
 
 import pyhawkes.models
 importlib.reload(pyhawkes.models)
-from pyhawkes.models import ContinuousTimeNetworkHawkesModel, ContinuousTimeLatentHawkesModel
+from pyhawkes.continuous_models import ContinuousTimeNetworkHawkesModel, ContinuousTimeLatentHawkesModel
 
 # Create the model with these parameters
 K_obs = 3
@@ -31,7 +30,7 @@ assert true_model.check_stability()
 true_model.bias_model.lambda0[-1] = 0.1
 true_model.weight_model.W[-1,:] = 2.0
 
-S, C = true_model.generate(T)
+S, X, C = true_model.generate(T)
 true_ll = true_model.log_likelihood()
 print("Sampled dataset with ", len(S), "events")
 print("True Log likelihood: ", true_ll)
@@ -40,27 +39,24 @@ print("True Log likelihood: ", true_ll)
 i_latent = np.where(C >= K_obs)[0]
 S_hid = S[i_latent]
 C_hid = C[i_latent]
+X_hid = X[i_latent]
 S_obs = np.delete(S, i_latent)
 C_obs = np.delete(C, i_latent)
+X_obs = np.delete(X, i_latent)
 assert np.all(C_obs <= K_obs)
 
 # Create a latent Hawkes model for inferring the latent events
 latent_model = ContinuousTimeLatentHawkesModel(
     K_obs, H, dt_max=dt_max, network_hypers=network_hypers)
-latent_model.add_data(S_obs, C_obs, T)
 
-# Hard code parameters
+# Test: Give it the right parameters -- just learn the hidden events
 latent_model.bias_model.lambda0 = true_model.bias_model.lambda0.copy()
 latent_model.weight_model.A = true_model.weight_model.A.copy()
 latent_model.weight_model.W = true_model.weight_model.W.copy()
 latent_model.impulse_model.mu = true_model.impulse_model.mu.copy()
 latent_model.impulse_model.tau = true_model.impulse_model.tau.copy()
 
-# DEBUG: Start with the right set of latent events
-import copy
-latent_model.data_list[0] = copy.deepcopy(true_model.data_list[0])
-print("Initial heldout log lkhd: ", latent_model.heldout_log_likelihood(S_obs, C_obs, T))
-# print("Initial latent log lkhd:  ", latent_model.log_likelihood())
+latent_model.add_data(S_obs, C_obs, T, X=X_obs)
 
 # Fit the latent Hawkes model
 def evaluate(model):
@@ -70,7 +66,8 @@ def evaluate(model):
     return ll, S_latent
 
 def update(model):
-    model.resample_latent_events_mh()
+    model.data_list[0].resample_latent_events_mh()
+    # model.resample_model()
     return evaluate(model)
 
 N_samples = 10000

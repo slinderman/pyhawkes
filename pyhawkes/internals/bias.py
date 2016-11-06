@@ -137,7 +137,6 @@ class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
         self.lambda0 = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)
 
 
-
 class ContinuousTimeGammaBias(GibbsSampling):
     """
     Encapsulates the vector of K gamma-distributed bias variables.
@@ -170,8 +169,23 @@ class ContinuousTimeGammaBias(GibbsSampling):
     def log_probability(self):
         return self.log_likelihood(self.lambda0)
 
-    def rvs(self,size=[]):
-        return np.random.gamma(self.alpha, 1.0/self.beta, size=(self.K,))
+    def rvs(self, T):
+        # Sample the background model ( no locations here)
+        S, X, C = [], [], []
+        for k in np.arange(self.K):
+            N = np.random.poisson(self.lambda0[k] * T)
+            S_bkgd = np.random.rand(N) * T
+            X_bkgd = [None] * N
+            C_bkgd = k * np.ones(N, dtype=np.int)
+            S.append(S_bkgd)
+            X.append(X_bkgd)
+            C.append(C_bkgd)
+
+        S, X, C = [np.concatenate(a) for a in (S, X, C)]
+        perm = np.argsort(S)
+        S, X, C = [a[perm] for a in (S, X, C)]
+
+        return S, X, C
 
     ### Gibbs Sampling
     def _get_suff_statistics(self, data):
@@ -206,6 +220,6 @@ class ContinuousTimeGammaBias(GibbsSampling):
         alpha_post = self.alpha + ss[0,:]
         beta_post  = self.beta + ss[1,:]
 
-        self.lambda0 = np.array(np.random.gamma(alpha_post,
-                                                1.0/beta_post)).reshape((self.K, ))
+        self.lambda0 = np.array(
+            np.random.gamma(alpha_post, 1.0/beta_post)).reshape((self.K, ))
 

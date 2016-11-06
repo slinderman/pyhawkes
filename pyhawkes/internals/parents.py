@@ -1,11 +1,12 @@
 import numpy as np
+from scipy.stats import norm
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField
 from gslrandom import multinomial
 
 from pyhawkes.utils.utils import initialize_pyrngs
 from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
-from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
+from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats, compute_rate_at_events
 
 class DiscreteTimeParents(GibbsSampling, MeanField):
     """
@@ -468,32 +469,101 @@ class ContinuousTimeParents(GibbsSampling):
     elapsed between parent. For completeness, we also
     keep track of the index of the parent.
     """
-    def __init__(self, model, S, C, T, K, dt_max):
+    def __init__(self, model, S, C, X, T):
         """
         :param S: Length N array of event times
         :param C: Length N array of process indices
         :param K: The number of processes
         """
         self.model = model
+        self.K = model.K
+        self.dt_max = model.dt_max
 
         assert S.ndim == 1 and S.shape == C.shape
-        assert C.dtype == np.int and (len(C) == 0 or (C.min() >= 0 and C.max() < K))
+        assert C.dtype == np.int and (len(C) == 0 or (C.min() >= 0 and C.max() < self.K))
         self.S = S
         self.C = C
+        self.X = X
         self.T = T
-        self.K = K
         self.N = S.size
         self.Ns = np.bincount(C, minlength=self.K)
-        self.dt_max = dt_max
 
         # Initialize parent arrays for Gibbs sampling
         self.Z = -1 * np.ones((self.N,), dtype=np.int)
         self.bkgd_ss = self.Ns.copy()
         self.weight_ss = np.zeros((self.K, self.K))
-        self.imp_ss = np.zeros((self.K, self.K))
+        self.imp_ss = np.zeros((3, self.K, self.K))
 
-    def log_likelihood(self, x):
-        pass
+    def log_likelihood(self):
+        return self._log_likelihood(self.S, self.X, self.C)
+
+    def _log_likelihood(self, S, X, C):
+        ll = -1. * self._compute_integrated_rate(S, X, C).sum()
+        ll += np.log(self._compute_rate_at_events(S, X, C)).sum()
+        return ll
+
+    def _compute_rate_at_events(self, S, X, C):
+        # Compute the instantaneous rate at the individual events
+        dt_max = self.dt_max
+        N = S.shape[0]
+        lambda0 = self.model.bias_model.lambda0
+        W = self.model.weight_model.W_effective
+        mu, tau = self.model.impulse_model.mu, self.model.impulse_model.tau
+
+        # Call cython function to evaluate instantaneous rate
+        lmbda = np.zeros(N)
+        compute_rate_at_events(S, C, dt_max, lambda0, W, mu, tau, lmbda)
+
+        # from pyhawkes.internals.continuous_time_helpers import compute_rate_at_events_python
+        # lmbda_manual = compute_rate_at_events(
+        #     S, C, dt_max, lambda0, W, self.impulse_model.impulse)
+        # assert np.allclose(lmbda_manual, lmbda)
+
+        return lmbda
+
+    def _compute_integrated_rate(self, S, X, C):
+        """
+        We can approximate this by ignoring events within dt_max of the end.
+        Since each event induces an impulse response with area W, we
+        simply need to count events
+        :param index:
+        :param proc:
+        :return:
+        """
+        T = self.T
+        W = self.model.weight_model.W_effective
+        lmbda0 = self.model.bias_model.lambda0
+
+        # Compute Ns
+        Ns = np.bincount(C, minlength=self.K)
+
+        # Compute the integral (W is send x recv)
+        int_lmbda = lmbda0 * T
+        int_lmbda += W.T.dot(Ns)
+        assert int_lmbda.shape == (self.K,)
+        return int_lmbda
+
+    def compute_rate(self, S, C, T, dt=1.0):
+        # TODO: Write a cythonized version of this
+        # Compute rate for each process at intervals of dt
+        t = np.concatenate([np.arange(0, T, step=dt), [T]])
+        rate = np.zeros((t.size, self.K))
+        for k in range(self.K):
+            rate[:,k] += self.model.bias_model.lambda0[k]
+
+            # Get the deltas between the time points and the spikes
+            # Warning: this can be huge!
+            deltas = t[:,None]-S[None,:]
+            t_deltas, n_deltas = np.where((deltas>0) & (deltas < self.dt_max))
+
+            # Find the process the impulse came from
+            senders = C[n_deltas]
+
+            # Compute the impulse responses onto process k for each delta
+            imps = self.model.impulse_model.impulse(deltas[t_deltas, n_deltas], senders, k)
+            rate[t_deltas, k] += imps
+
+        return rate, t
 
     def rvs(self, data=[]):
         raise NotImplementedError("No prior for parents to sample from.")
@@ -517,8 +587,7 @@ class ContinuousTimeParents(GibbsSampling):
         self.bkgd_ss = np.zeros(self.K)
         self.weight_ss = np.zeros((self.K, self.K))
         self.imp_ss = np.zeros((3, self.K, self.K))
-        ct_compute_suff_stats(S, C, Z, dt_max,
-                              self.bkgd_ss, self.weight_ss, self.imp_ss)
+        ct_compute_suff_stats(S, C, Z, dt_max, self.bkgd_ss, self.weight_ss, self.imp_ss)
 
         assert (self.bkgd_ss + self.weight_ss.sum(0) == self.Ns).all()
 
@@ -621,3 +690,149 @@ class ContinuousTimeParents(GibbsSampling):
 
 
         return self.imp_ss
+
+
+class LatentContinuousTimeParents(ContinuousTimeParents):
+    def __init__(self, model, S, C, X, T):
+        self.K_obs, self.H = model.K_obs, model.H
+        super(LatentContinuousTimeParents, self).__init__(model, S, C, X, T)
+
+    def resample(self):
+        self.resample_latent_events_mh()
+        super(LatentContinuousTimeParents, self).resample()
+
+    def resample_latent_events_mh(self, n_steps=1, sigma_jitter=1.0):
+        """
+        Resample the latent event sequences via a set of
+        Metropolis-Hastings transition operators. Namely:
+        - Add:     add an event to a random process at a random time
+        - Remove:  remove a randomly chosen event from a random process
+        - Jitter:  move an event from time t to time t+eps, where eps is random normal
+
+        The probability of proposing to add a random event is
+
+            p(add (s',c')) = 1/3 * 1/H * 1/T      [uniform]
+
+        The probability of removing an event is
+
+            p(rem (s',c')) = 1/3 * 1/N_hidden
+
+        The probability of jittering an event is
+
+            p(jit (s',c')) = 1/3 * N(s' - s'' | 0, sigma)
+
+        The reverse of adding is removing and the reverse of jittering
+        is jittering. This makes it easy to compute the reversal
+        probabilities.
+
+        After each proposal, we calculate the log likelihood of the new dataset.
+
+        :param n_steps: Number of MH steps to take
+        """
+        # Enumerate operations
+        ADD, REMOVE, JITTER = 0, 1, 2
+
+        # Initialize
+        ll_prev = self.log_likelihood()
+
+        for i in range(n_steps):
+            # Select a random operation
+            op = np.random.choice([ADD, REMOVE, JITTER])
+            if op == ADD:
+                # Draw a random event time and process, add it to the data
+                s = np.random.rand() * self.T
+                c = self.K_obs + np.random.randint(self.H)
+                # x = ... # Random sample from background model
+                x = None
+
+                # Evaluate proposal probability
+                q_fwd = 1./3 * 1./self.H * 1./self.T
+
+                # Evaluate reverse probability
+                N_hidden = self.Ns[-self.H:].sum()
+                q_bwd = 1./3 * 1./(N_hidden+1)
+
+                # Construct a new dataset
+                i_ins = np.searchsorted(self.S, s)
+                S_new = np.insert(self.S, i_ins, s)
+                X_new = np.insert(self.X, i_ins, x, axis=0)
+                C_new = np.insert(self.C, i_ins, c)
+
+                # Evaluate the new log likelihood
+                ll_new = self._log_likelihood(S_new, X_new, C_new)
+
+            elif op == REMOVE:
+                # Select a random latent event to remove
+                i_latent = np.where(self.C >= self.K_obs)[0]
+                if len(i_latent) == 0:
+                    continue
+
+                i_rem = np.random.choice(i_latent)
+
+                # Evaluate proposal probability
+                q_fwd = 1./3 * 1./len(i_latent)
+
+                # Evaluate reverse probability
+                q_bwd = 1./3 * 1./self.H * 1./self.T
+
+                # Construct a new dataset
+                S_new = np.delete(self.S, i_rem)
+                X_new = np.delete(self.X, i_rem, axis=0)
+                C_new = np.delete(self.C, i_rem)
+
+                # Evaluate the new log likelihood
+                ll_new = self._log_likelihood(S_new, X_new, C_new)
+
+            elif op == JITTER:
+                # Select a random latent event to remove
+                i_latent = np.where(self.C >= self.K_obs)[0]
+                if len(i_latent) == 0:
+                    continue
+
+                i_jit = np.random.choice(i_latent)
+
+                # Propose a jittered time
+                t_jit = sigma_jitter * np.random.randn()
+                # Propose a jittered location
+                # x_jit = ... # Jitter the locations of the latent events
+
+                # Evaluate proposal probability
+                q_fwd = 1./3 * norm.pdf(t_jit, 0, sigma_jitter)
+
+                # Evaluate reverse probability
+                q_bwd = 1./3 * norm.pdf(-t_jit, 0, sigma_jitter)
+
+                # Construct a new dataset
+                s_jit = self.S[i_jit] + t_jit
+                # x_jit = self.X[i_jit] + x_jit
+                x_jit = None
+
+                # Automatically reject if invalid timestamp
+                if s_jit < 0 or s_jit > self.T:
+                    continue
+
+                c_jit = self.C[i_jit]
+                S_new = np.delete(self.S, i_jit)
+                X_new = np.delete(self.X, i_jit, axis=0)
+                C_new = np.delete(self.C, i_jit)
+                i_ins = np.searchsorted(S_new, s_jit)
+                S_new = np.insert(S_new, i_ins, s_jit)
+                X_new = np.insert(X_new, i_ins, x_jit, axis=0)
+                C_new = np.insert(C_new, i_ins, c_jit)
+
+                # Evaluate the new log likelihood
+                ll_new = self._log_likelihood(S_new, X_new, C_new)
+
+            else:
+                raise Exception("Invalid MH operation.")
+
+            # Accept or reject the proposal
+            # NOTE: We can ignore the prior terms since we are only changing the data.
+            p_accept = min(1, q_bwd / q_fwd * np.exp(ll_new - ll_prev))
+            if np.random.rand() < p_accept:
+                self.S = S_new
+                self.X = X_new
+                self.C = C_new
+                self.Ns = np.bincount(self.C, minlength=self.K)
+                ll_prev = ll_new
+

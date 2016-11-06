@@ -225,6 +225,32 @@ cpdef compute_rate_at_events(
             if W[C[par], C[n]] > 0:
                 lmbda[n] += W[C[par], C[n]] * ln_impulse(dt, mu[C[par], C[n]], tau[C[par], C[n]], dt_max)
 
+def compute_rate_at_events_python(S, C, dt_max, lambda0, W, impulse):
+    # Compute the rate at each event in python
+    N = len(S)
+    lmbda = np.zeros(N)
+    for n in range(N):
+        # First parent is just the background rate of this process
+        lmbda[n] += lambda0[C[n]]
+
+        # Iterate backward from the most recent to compute probabilities of each parent spike
+        for par in range(n-1, -1, -1):
+            dt = S[n] - S[par]
+
+            if dt < 1e-8:
+                continue
+
+            # Since the spikes are sorted, we can stop if we reach a potential
+            # parent that occurred greater than dt_max in the past
+            if dt > dt_max - 1e-8:
+                break
+
+            Wparn = W[C[par], C[n]]
+            if Wparn > 0:
+                lmbda[n] += Wparn * impulse(dt, C[par], C[n])
+
+    return lmbda
+
 
 cpdef compute_weighted_impulses_at_events(
     double[::1] S, long[::1] C, long[::1] Z, double dt_max,
