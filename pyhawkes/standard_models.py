@@ -10,11 +10,10 @@ from autograd import grad
 
 
 ### Nodes
-class _NonlinearHawkesNodeBase(object):
+class _NonlinearHawkesNodeBase(object, metaclass=abc.ABCMeta):
     """
     A single node of a nonlinear Hawkes process.
     """
-    __metaclass__ = abc.ABCMeta
 
     constrained = False
 
@@ -112,7 +111,7 @@ class _NonlinearHawkesNodeBase(object):
         itr = [0]
         def callback(w):
             if itr[0] % 10 == 0:
-                print "Iteration: %03d\t LP: %.5f" % (itr[0], self.objective(w))
+                print("Iteration: %03d\t LP: %.5f" % (itr[0], self.objective(w)))
             itr[0] = itr[0] + 1
 
         itr[0] = 0
@@ -188,11 +187,10 @@ class HomogeneousPoissonNode(_NonlinearHawkesNodeBase):
         self.w[1:] = 0
 
 
-class _NonlinearHawkesProcessBase(object):
+class _NonlinearHawkesProcessBase(object, metaclass=abc.ABCMeta):
     """
     Discrete time nonlinear Hawkes process, i.e. Poisson GLM
     """
-    __metaclass__ = abc.ABCMeta
 
     _node_class = None
 
@@ -226,7 +224,7 @@ class _NonlinearHawkesProcessBase(object):
         self.nodes = \
             [self._node_class(self.K, self.B, dt=self.dt,
                               sigma=self.sigma, lmbda=self.lmbda)
-             for _ in xrange(self.K)]
+             for _ in range(self.K)]
 
     def initialize_to_background_rate(self):
         for node in self.nodes:
@@ -259,8 +257,8 @@ class _NonlinearHawkesProcessBase(object):
         G = np.transpose(GT, [1,0,2])
 
         # TODO: Decide if this is still necessary
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 if G[k1,k2,:].sum() < 1e-2:
                     G[k1,k2,:] = 1.0/self.B
         return G
@@ -336,8 +334,8 @@ class _NonlinearHawkesProcessBase(object):
     def fit_with_bfgs(self):
         # TODO: This can be parallelized
         for k, node in enumerate(self.nodes):
-            print ""
-            print "Fitting Node ", k
+            print("")
+            print("Fitting Node ", k)
             node.fit_with_bfgs()
 
 

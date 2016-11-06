@@ -5,17 +5,16 @@ import abc
 import copy
 
 import numpy as np
-from scipy.special import gammaln
 from scipy.optimize import minimize
 
-from pybasicbayes.models import ModelGibbsSampling, ModelMeanField
+from pybasicbayes.abstractions import ModelGibbsSampling, ModelMeanField
 from pybasicbayes.util.text import progprint_xrange
 
 from pyhawkes.internals.bias import GammaBias
 from pyhawkes.internals.weights import SpikeAndSlabGammaWeights, GammaMixtureWeights
 from pyhawkes.internals.impulses import DirichletImpulseResponses
-from pyhawkes.internals.parents import DiscreteTimeParents
-from pyhawkes.internals.network import StochasticBlockModel, StochasticBlockModelFixedSparsity, ErdosRenyiFixedSparsity
+from pyhawkes.internals.parents import DiscreteTimeParents, ContinuousTimeParents
+from pyhawkes.internals.network import StochasticBlockModel, ErdosRenyiFixedSparsity
 from pyhawkes.utils.basis import CosineBasis
 
 
@@ -75,7 +74,7 @@ class DiscreteTimeStandardHawkesModel(object):
         self.data_list = []
 
     def _remove_self_weights(self):
-        for k in xrange(self.K):
+        for k in range(self.K):
                 self.weights[k,1+(k*self.B):1+(k+1)*self.B] = 1e-32
 
     def initialize_with_gibbs_model(self, gibbs_model):
@@ -93,7 +92,7 @@ class DiscreteTimeStandardHawkesModel(object):
         Weff = gibbs_model.weight_model.W_effective
         g = gibbs_model.impulse_model.g
 
-        for k in xrange(self.K):
+        for k in range(self.K):
             self.weights[k,0]  = lambda0[k]
             self.weights[k,1:] = (Weff[:,k][:,None] * g[:,k,:]).ravel()
 
@@ -427,11 +426,11 @@ class DiscreteTimeStandardHawkesModel(object):
         itr = [0]
         def callback(x):
             if itr[0] % 10 == 0:
-                print "Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior())
+                print("Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior()))
             itr[0] = itr[0] + 1
 
-        for k in xrange(self.K):
-            print "Optimizing process ", k
+        for k in range(self.K):
+            print("Optimizing process ", k)
             itr[0] = 0
             x0 = np.log(self.weights[k,:])
             res = minimize(objective,           # Objective function
@@ -463,11 +462,11 @@ class DiscreteTimeStandardHawkesModel(object):
         itr = [0]
         def callback(x):
             if itr[0] % 10 == 0:
-                print "Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior())
+                print("Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior()))
             itr[0] = itr[0] + 1
 
-        for k in xrange(self.K):
-            print "Optimizing process ", k
+        for k in range(self.K):
+            print("Optimizing process ", k)
             itr[0] = 0
             x0 = self.weights[k,:]
             res = minimize(objective,           # Objective function
@@ -482,7 +481,7 @@ class DiscreteTimeStandardHawkesModel(object):
         grad = np.zeros((self.K, 1+self.K*self.B))
 
         # Compute gradient and take a step for each process
-        for k in xrange(self.K):
+        for k in range(self.K):
             d_W_d_log_W = self._d_W_d_logW(k)
             grad[k,:] = self.compute_gradient(k).dot(d_W_d_log_W)
             self.weights[k,:] = np.exp(np.log(self.weights[k,:]) + stepsz * grad[k,:])
@@ -508,7 +507,7 @@ class DiscreteTimeStandardHawkesModel(object):
         T = self.data_list[mb][0].shape[0]
 
         # Compute gradient and take a step for each process
-        for k in xrange(self.K):
+        for k in range(self.K):
             d_W_d_log_W = self._d_W_d_logW(k)
             grad[k,:] = self.compute_gradient(k, indices=[mb]).dot(d_W_d_log_W) / T
             velocity[k,:] = momentum * prev_velocity[k,:] + learning_rate * grad[k,:]
@@ -525,14 +524,12 @@ class DiscreteTimeStandardHawkesModel(object):
         return self.weights, ll, velocity
 
 
-class _DiscreteTimeNetworkHawkesModelBase(object):
+class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
     """
     Discrete time network Hawkes process model with support for
     Gibbs sampling inference, variational inference (TODO), and
     stochastic variational inference (TODO).
     """
-
-    __metaclass__ = abc.ABCMeta
 
     # Define the model components and their default hyperparameters
     _basis_class            = CosineBasis
@@ -766,7 +763,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             maxeig = eigs(self.weight_model.W_effective, k=1)[0]
 
         if verbose:
-            print "Max eigenvalue: ", maxeig
+            print("Max eigenvalue: ", maxeig)
 
         return maxeig < 1.0
 
@@ -819,7 +816,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         # Add the background rate
         R += self.bias_model.lambda0[None,:]
 
-        iterator = progprint_xrange(T, perline=print_interval) if verbose else xrange(T)
+        iterator = progprint_xrange(T, perline=print_interval) if verbose else range(T)
 
         # Iterate over time bins
         for t in iterator:
@@ -837,7 +834,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             # Check Spike limit
             if np.any(S[t,:] >= 1000):
-                print "More than 1000 events in one time bin!"
+                print("More than 1000 events in one time bin!")
                 import pdb; pdb.set_trace()
 
         # Only keep the first T time bins
@@ -934,7 +931,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             H = np.transpose(H, [2,0,1])
 
-            for k2 in xrange(self.K):
+            for k2 in range(self.K):
                 R[:,k2] += np.tensordot(F, H[:,:,k2], axes=([2,1], [0,1]))
 
             return R
@@ -1038,7 +1035,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             # Plot the rates on the right
             axs_rate = [plt.subplot2grid((self.K,4), (k,1), rowspan=1, colspan=rate_width)
-                        for k in xrange(self.K)]
+                        for k in range(self.K)]
             rate_lns = self.plot_rates(axs=axs_rate, data_index=data_index, T_slice=T_slice, color=color)
 
             plt.subplots_adjust(wspace=1.0)
@@ -1089,7 +1086,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             ax.get_yaxis().set_visible(False)
 
             # Layout the nodes in a circle
-            for k in xrange(self.K):
+            for k in range(self.K):
                 ax.text(rad*np.cos(ths[k]), rad*np.sin(ths[k]), "%d" % (k+1))
 
             ax.set_xlim(-1.25*rad, 1.35*rad)
@@ -1098,8 +1095,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             # Draw lines connecting nodes
             lns = []
-            for k1 in xrange(self.K):
-                for k2 in xrange(self.K):
+            for k1 in range(self.K):
+                for k2 in range(self.K):
                     if k1 == k2:
                         continue
 
@@ -1120,8 +1117,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         else:
             # Update given lns
             ind = 0
-            for k1 in xrange(self.K):
-                for k2 in xrange(self.K):
+            for k1 in range(self.K):
+                for k2 in range(self.K):
                     if k1 == k2:
                         continue
 
@@ -1154,7 +1151,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             else:
                 assert len(axs) == self.K
 
-            for k in xrange(self.K):
+            for k in range(self.K):
                 ln = axs[k].plot(self.dt * np.arange(data.T),
                                  rates[:,k],
                                  color=color, lw=2)
@@ -1171,7 +1168,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                 lns.append(ln)
 
             if draw_events:
-                for k in xrange(self.K):
+                for k in range(self.K):
                     # Get event times and counts
                     tk = np.nonzero(data.S[:,k])[0]
                     ck = data.S[tk,k]
@@ -1181,7 +1178,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         else:
             # Update given rate lns
-            for k in xrange(self.K):
+            for k in range(self.K):
                 lns[k][0].set_data((self.dt * np.arange(data.T), rates[:,k]))
 
         return lns
@@ -1444,7 +1441,6 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
             ContinuousTimeImpulseResponses(self, **self.impulse_hypers)
 
         # Initialize the network model
-        # Initialize the network model
         if network is not None:
             assert network.K == self.K
             self.network = network
@@ -1518,8 +1514,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         G = standard_model.G
         t_basis = standard_model.basis.dt * np.arange(standard_model.basis.L)
         t_basis = np.clip(t_basis, 1e-6, self.dt_max-1e-6)
-        for k1 in xrange(K):
-            for k2 in xrange(K):
+        for k1 in range(K):
+            for k2 in range(K):
                 std_ir = standard_model.basis.basis.dot(G[k1,k2,:])
 
                 def loss(mutau):
@@ -1560,7 +1556,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
         :param S: length N array of event times
         :param C: length N array of process id's for each event
-        :param T: max time of
+        :param T: max time. data is in [0,T)
         """
         assert isinstance(T, float), "T must be a float"
         if len(S) > 0:
@@ -1579,7 +1575,6 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
                    "C must be a N array of parent indices"
 
         # Instantiate corresponding parent object
-        from pyhawkes.internals.parents import ContinuousTimeParents
         parents = ContinuousTimeParents(self, S, C, T, self.K, self.dt_max)
 
         # Add to the data list
@@ -1676,7 +1671,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
             from scipy.sparse.linalg import eigs
             maxeig = eigs(self.weight_model.W_effective, k=1)[0]
 
-        print "Max eigenvalue: ", maxeig
+        print("Max eigenvalue: ", maxeig)
         if maxeig < 1.0:
             return True
         else:
@@ -1711,20 +1706,23 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         W = self.weight_model.W_effective
         mu, tau = self.impulse_model.mu, self.impulse_model.tau
 
+        # Compute the rate at each event in python
         # lmbda_manual = np.zeros(N)
         # impulse = self.impulse_model.impulse
-        # # Resample parents
-        # for n in xrange(N):
+        # for n in range(N):
         #     # First parent is just the background rate of this process
         #     lmbda_manual[n] += lambda0[C[n]]
         #
         #     # Iterate backward from the most recent to compute probabilities of each parent spike
-        #     for par in xrange(n-1, -1, -1):
+        #     for par in range(n-1, -1, -1):
         #         dt = S[n] - S[par]
+        #
+        #         if dt < 1e-8:
+        #             continue
         #
         #         # Since the spikes are sorted, we can stop if we reach a potential
         #         # parent that occurred greater than dt_max in the past
-        #         if dt > dt_max:
+        #         if dt > dt_max - 1e-8:
         #             break
         #
         #         Wparn = W[C[par], C[n]]
@@ -1789,9 +1787,10 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
 
         # Get the likelihood of the datasets
         for d in data:
-            # ll += -gammaln(d.N+1)
             ll -= self.compute_integrated_rate(d).sum()
+            # print(-1*self.compute_integrated_rate(d).sum())
             ll += np.log(self.compute_rate_at_events(d)).sum()
+            # print(np.log(self.compute_rate_at_events(d)).sum())
 
         return ll
 
@@ -1815,14 +1814,13 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         # Compute rate for each process at intervals of dt
         t = np.concatenate([np.arange(0, T, step=dt), [T]])
         rate = np.zeros((t.size, self.K))
-        for k in xrange(self.K):
+        for k in range(self.K):
             rate[:,k] += self.bias_model.lambda0[k]
 
             # Get the deltas between the time points and the spikes
             # Warning: this can be huge!
             deltas = t[:,None]-S[None,:]
             t_deltas, n_deltas = np.where((deltas>0) & (deltas < self.dt_max))
-            N_deltas = t_deltas.size
 
             # Find the process the impulse came from
             senders = C[n_deltas]
@@ -1839,8 +1837,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     def compute_impulses(self, dt=1.0):
         dt = np.concatenate([np.arange(0, self.dt_max, step=dt), [self.dt_max]])
         ir = np.zeros((dt.size, self.K, self.K))
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 ir[:,k1,k2] = self.impulse_model.impulse(dt, k1, k2)
         return ir, dt
 
@@ -1869,3 +1867,184 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         self.weight_model.resample(self.data_list)
 
 
+class ContinuousTimeLatentHawkesModel(ContinuousTimeNetworkHawkesModel):
+    """
+    A Hawkes process with latent nodes.
+    """
+    def __init__(self, K, H, **kwargs):
+        """
+        Same as the ContinuousTimeNetworkHawkesModel, but also specify
+        the number of hidden nodes.
+
+        :param K:  Number of observed nodes.
+        :param H:  Number of hidden nodes
+        """
+        self.H = H
+        self.K_obs = K
+        super(ContinuousTimeLatentHawkesModel, self).__init__(K=K+H, **kwargs)
+
+    def add_data(self, S, C, T, includes_hidden=False):
+        # If the data already has spikes for the "hidden" nodes,
+        # include them. Otherwise, sample from the background rate.
+        if not includes_hidden:
+            S_hidden, C_hidden = [], []
+            for h in range(self.H):
+                Nh = np.random.poisson(T * self.bias_model.lambda0[self.K_obs+h])
+                Sh = np.random.rand(Nh) * T
+                Ch = (self.K_obs + h) * np.ones(Nh, dtype=int)
+
+                S_hidden.append(Sh)
+                C_hidden.append(Ch)
+
+            S_full = np.concatenate([S] + S_hidden)
+            C_full = np.concatenate([C] + C_hidden)
+
+            # Sort
+            perm = np.argsort(S_full)
+            S_full = S_full[perm]
+            C_full = C_full[perm]
+
+        else:
+            S_full, C_full = S, C
+
+        super(ContinuousTimeLatentHawkesModel, self).add_data(S_full, C_full, T)
+
+    def resample_model(self):
+        # Run all of the steps of the standard model, but also
+        # Update the latent events
+        super(ContinuousTimeLatentHawkesModel, self).resample_model()
+        self.resample_latent_events_mh(n_steps=10)
+
+    def resample_latent_events_mh(self, n_steps=1, sigma_jitter=1.0):
+        """
+        Resample the latent event sequences via a set of
+        Metropolis-Hastings transition operators. Namely:
+        - Add:     add an event to a random process at a random time
+        - Remove:  remove a randomly chosen event from a random process
+        - Jitter:  move an event from time t to time t+eps, where eps is random normal
+
+        The probability of proposing to add a random event is
+
+            p(add (s',c')) = 1/3 * 1/H * 1/T      [uniform]
+
+        The probability of removing an event is
+
+            p(rem (s',c')) = 1/3 * 1/N_hidden
+
+        The probability of jittering an event is
+
+            p(jit (s',c')) = 1/3 * N(s' - s'' | 0, sigma)
+
+        The reverse of adding is removing and the reverse of jittering
+        is jittering. This makes it easy to compute the reversal
+        probabilities.
+
+        After each proposal, we calculate the log likelihood of the new dataset.
+
+        :param n_steps: Number of MH steps to take
+        """
+
+        # Enumerate operations
+        ADD, REMOVE, JITTER = 0, 1, 2
+
+        # Initialize
+        # TODO: Make an event sequence class to replace Parents
+        # TODO: This function should go in the Event class
+        assert len(self.data_list) == 1
+        data = self.data_list[0]
+        ll_prev = self.log_likelihood(data)
+
+        for i in range(n_steps):
+            # Select a random operation
+            op = np.random.choice([ADD, REMOVE, JITTER])
+            if op == ADD:
+                # Draw a random event time and process, add it to the data
+                s = np.random.rand() * data.T
+                c = self.K_obs + np.random.randint(self.H)
+
+                # Evaluate proposal probability
+                q_fwd = 1./3 * 1./self.H * 1./data.T
+
+                # Evaluate reverse probability
+                N_hidden = data.Ns[-self.H:].sum()
+                q_bwd = 1./3 * 1./(N_hidden+1)
+
+                # Construct a new dataset
+                i_ins = np.searchsorted(data.S, s)
+                S_new = np.insert(data.S, i_ins, s)
+                C_new = np.insert(data.C, i_ins, c)
+                new_data = ContinuousTimeParents(self, S_new, C_new, data.T, self.K, self.dt_max)
+
+                # Evaluate the new log likelihood
+                ll_new = self.log_likelihood(new_data)
+
+            elif op == REMOVE:
+                # Select a random latent event to remove
+                i_latent = np.where(data.C >= self.K_obs)[0]
+                if len(i_latent) == 0:
+                    continue
+
+                i_rem = np.random.choice(i_latent)
+
+                # Evaluate proposal probability
+                q_fwd = 1./3 * 1./len(i_latent)
+
+                # Evaluate reverse probability
+                q_bwd = 1./3 * 1./self.H * 1./data.T
+
+                # Construct a new dataset
+                S_new = np.delete(data.S, i_rem)
+                C_new = np.delete(data.C, i_rem)
+                new_data = ContinuousTimeParents(self, S_new, C_new, data.T, self.K, self.dt_max)
+
+                # Evaluate the new log likelihood
+                ll_new = self.log_likelihood(new_data)
+
+            elif op == JITTER:
+                # Select a random latent event to remove
+                i_latent = np.where(data.C >= self.K_obs)[0]
+                if len(i_latent) == 0:
+                    continue
+
+                i_jit = np.random.choice(i_latent)
+
+                # Propose a jitter
+                t_jit = sigma_jitter * np.random.randn()
+
+                # Evaluate proposal probability
+                from scipy.stats import norm
+                q_fwd = 1./3 * norm.pdf(t_jit, 0, sigma_jitter)
+
+                # Evaluate reverse probability
+                q_bwd = 1./3 * norm.pdf(-t_jit, 0, sigma_jitter)
+
+                # Construct a new dataset
+                s_jit = data.S[i_jit] + t_jit
+
+                if s_jit > 0 and s_jit < data.T:
+                    c_jit = data.C[i_jit]
+                    S_new = np.delete(data.S, i_jit)
+                    C_new = np.delete(data.C, i_jit)
+                    i_ins = np.searchsorted(S_new, s_jit)
+                    S_new = np.insert(S_new, i_ins, s_jit)
+                    C_new = np.insert(C_new, i_ins, c_jit)
+
+                    new_data = ContinuousTimeParents(self, S_new, C_new, data.T, self.K, self.dt_max)
+
+                    # Evaluate the new log likelihood
+                    ll_new = self.log_likelihood(new_data)
+                else:
+                    new_data = None
+                    ll_new = -np.inf
+
+            else:
+                raise Exception("Invalid MH operation.")
+
+            # Accept or reject the proposal
+            # NOTE: We can ignore the prior terms since we are only changing the data.
+            p_accept = min(1, q_bwd / q_fwd * np.exp(ll_new - ll_prev))
+            if np.random.rand() < p_accept:
+                data = new_data
+                ll_prev = ll_new
+
+        self.data_list[0] = data

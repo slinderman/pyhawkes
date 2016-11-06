@@ -1,6 +1,6 @@
 import numpy as np
 import os
-import cPickle
+import pickle
 import gzip
 # np.seterr(all='raise')
 
@@ -33,7 +33,7 @@ def demo(seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     ###########################################################
@@ -42,7 +42,7 @@ def demo(seed=None):
     ###########################################################
     data_path = os.path.join("data", "synthetic", "synthetic_K20_C4_T10000.pkl.gz")
     with gzip.open(data_path, 'r') as f:
-        S, true_model = cPickle.load(f)
+        S, true_model = pickle.load(f)
 
     T      = S.shape[0]
     K      = true_model.K
@@ -55,7 +55,7 @@ def demo(seed=None):
     ###########################################################
     if init_with_map:
         init_len   = T
-        print "Initializing with BFGS on first ", init_len, " time bins."
+        print("Initializing with BFGS on first ", init_len, " time bins.")
         init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B,
                                                      alpha=1.0, beta=1.0)
         init_model.add_data(S[:init_len, :])
@@ -99,8 +99,8 @@ def demo(seed=None):
     forgetting_rate = 0.5
     stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
     samples = []
-    for itr in xrange(N_iters):
-        print "SVI Iter: ", itr, "\tStepsize: ", stepsize[itr]
+    for itr in range(N_iters):
+        print("SVI Iter: ", itr, "\tStepsize: ", stepsize[itr])
         test_model.sgd_step(minibatchsize=minibatchsize, stepsize=stepsize[itr])
         test_model.resample_from_mf()
         samples.append(test_model.copy_sample())
@@ -187,17 +187,17 @@ def analyze_samples(true_model, init_model, samples):
     v_mean       = v_samples[offset:, ...].mean(axis=0)
 
 
-    print "A true:        ", true_model.weight_model.A
-    print "W true:        ", true_model.weight_model.W
-    print "g true:        ", true_model.impulse_model.g
-    print "lambda0 true:  ", true_model.bias_model.lambda0
-    print ""
-    print "A mean:        ", A_mean
-    print "W mean:        ", W_mean
-    print "g mean:        ", g_mean
-    print "lambda0 mean:  ", lambda0_mean
-    print "v mean:        ", v_mean
-    print "p mean:        ", p_mean
+    print("A true:        ", true_model.weight_model.A)
+    print("W true:        ", true_model.weight_model.W)
+    print("g true:        ", true_model.impulse_model.g)
+    print("lambda0 true:  ", true_model.bias_model.lambda0)
+    print("")
+    print("A mean:        ", A_mean)
+    print("W mean:        ", W_mean)
+    print("g mean:        ", g_mean)
+    print("lambda0 mean:  ", lambda0_mean)
+    print("v mean:        ", v_mean)
+    print("p mean:        ", p_mean)
 
     # # Predictive log likelihood
     # pll_init = init_model.heldout_log_likelihood(S_test)

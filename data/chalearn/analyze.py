@@ -1,7 +1,7 @@
 """
 Perform some basic analyses on the preprocessed connectomics data.
 """
-import cPickle
+import pickle
 import os
 import gzip
 import pprint
@@ -21,7 +21,7 @@ from sklearn.metrics import roc_auc_score
 data_path = os.path.join("data", "chalearn", "small", "network1_oopsi.pkl.gz")
 
 with gzip.open(data_path, 'r') as f:
-    P, F, Cf, network, pos = cPickle.load(f)
+    P, F, Cf, network, pos = pickle.load(f)
     S_full = (P > 0.1).astype(np.int)
 
 # Cast to int
@@ -38,12 +38,12 @@ B      = 3
 dt     = 0.02
 dt_max = 0.08
 
-print "Num conns: ", network.sum()
-print "Sparsity: ", float(network.sum()) / network.size
+print("Num conns: ", network.sum())
+print("Sparsity: ", float(network.sum()) / network.size)
 
 
 # Compute the cross correlation to estimate the connectivity
-print "Estimating network via cross correlation"
+print("Estimating network via cross correlation")
 # W_xcorr = infer_net_from_xcorr(F[:10000,:], dtmax=3)
 
 # Compute the cross correlation to estimate the connectivity

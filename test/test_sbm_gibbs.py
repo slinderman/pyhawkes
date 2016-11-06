@@ -17,7 +17,7 @@ def test_gibbs_sbm(seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     C = 2
@@ -65,8 +65,8 @@ def test_gibbs_sbm(seed=None):
     plt.ioff()
 
     # Compute sample statistics for second half of samples
-    print "True c: ", true_model.network.c
-    print "Test c: ", c_samples[-10:, :]
+    print("True c: ", true_model.network.c)
+    print("Test c: ", c_samples[-10:, :])
 
     # Compute the adjusted mutual info score of the clusterings
     amis = []

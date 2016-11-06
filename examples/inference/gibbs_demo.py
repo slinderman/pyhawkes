@@ -1,6 +1,6 @@
 import numpy as np
 import os
-import cPickle
+import pickle
 import gzip
 
 import matplotlib.pyplot as plt
@@ -17,7 +17,7 @@ from pyhawkes.models import \
 if __name__ == "__main__":
 
     seed = 11223344
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     ###########################################################
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     ###########################################################
     data_path = os.path.join("data", "synthetic", "synthetic_K20_C4_T10000.pkl.gz")
     with gzip.open(data_path, 'r') as f:
-        S, true_model = cPickle.load(f)
+        S, true_model = pickle.load(f)
 
     T      = S.shape[0]
     K      = true_model.K
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     init_with_map = True
     if init_with_map:
         init_len   = T
-        print "Initializing with BFGS on first ", init_len, " time bins."
+        print("Initializing with BFGS on first ", init_len, " time bins.")
         init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B,
                                                      alpha=1.0, beta=1.0)
         init_model.add_data(S[:init_len, :])

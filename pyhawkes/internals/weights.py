@@ -116,8 +116,8 @@ class SpikeAndSlabGammaWeights(GibbsSampling):
         :return:
         """
         p = self.network.P
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 if self.model is None:
                     ll0 = 0
                     ll1 = 0
@@ -540,12 +540,12 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
 
         # Initialize matrix of weighted impulses from each process
         lmbda = np.zeros((self.K, N))
-        for n in xrange(N):
+        for n in range(N):
             # First parent is just the background rate of this process
             # lmbda[self.K, n] += lambda0[C[n]]
 
             # Iterate backward from the most recent to compute probabilities of each parent spike
-            for par in xrange(n-1, -1, -1):
+            for par in range(n-1, -1, -1):
                 dt = S[n] - S[par]
                 if dt == 0:
                     continue
@@ -576,7 +576,7 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
         update of z | A, W.
         :return:
         """
-        # Precompute weightedi impulse responses for each event
+        # Precompute weighted impulse responses for each event
         lmbda_irs = [self._compute_weighted_impulses_at_events(d) for d in data]
 
         # lmbda_irs_manual = [self._compute_weighted_impulses_at_events_manual(d) for d in data]
@@ -600,10 +600,10 @@ class SpikeAndSlabContinuousTimeGammaWeights(GibbsSampling):
 
         # TODO: Write a Cython function to sample this more efficiently
         p = self.network.P
-        for k1 in xrange(self.K):
+        for k1 in range(self.K):
             # sys.stdout.write('.')
             # sys.stdout.flush()
-            for k2 in xrange(self.K):
+            for k2 in range(self.K):
                 # Handle deterministic cases
                 if p[k1,k2] == 0.:
                     self.A[k1,k2] = 0

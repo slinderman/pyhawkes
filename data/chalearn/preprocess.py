@@ -7,7 +7,7 @@ lacking in useful comments.
 """
 import os
 import sys
-import cPickle
+import pickle
 import gzip
 import numpy as np
 
@@ -91,7 +91,7 @@ def process_dataset(K=100,
     plt.show()
 
     with gzip.open(os.path.join(dir, outfile + ".gz"), 'w') as f:
-        cPickle.dump((S, F, C, network, pos), f, protocol=-1)
+        pickle.dump((S, F, C, network, pos), f, protocol=-1)
 
 
 def parse_fluorescence_file(filename, K, delimiter=','):
@@ -150,7 +150,7 @@ def parse_position_file(filename, K):
     pos = np.zeros((K,2))
 
     with open(filename, 'r') as f:
-        for k in xrange(K):
+        for k in range(K):
             line = f.readline()
             # Read the line
             x,y = line.rstrip().split(',')
@@ -172,8 +172,8 @@ def extract_spike_oopsi(F, dt):
     """
     D = np.zeros_like(F)
     C = np.zeros_like(F)
-    for k in xrange(F.shape[1]):
-        print "Running oopsi on neuron ", k
+    for k in range(F.shape[1]):
+        print("Running oopsi on neuron ", k)
         D[:,k], C[:,k] = oopsi.fast(F[:,k], dt=dt, iter_max=6)
 
     # Cast D to an integer matrix
@@ -228,7 +228,7 @@ def discretize_fluorescence(F,
         edges = np.zeros((K, nbins+1))
         bins_given = False
 
-    for k in xrange(K):
+    for k in range(K):
         if not bins_given:
             edges[k,:] = np.linspace(F_min[k]-1e-3, F_max[k]+1e-3, num=nbins+1)
 
@@ -247,7 +247,7 @@ def discretize_fluorescence(F,
             # Add an event handler to get the threshold
             def onclick(event):
                 edges[k,1] = event.xdata
-                print "Neuron: ", k, "\tThreshold: %.3f" % edges[k,1]
+                print("Neuron: ", k, "\tThreshold: %.3f" % edges[k,1])
                 plt.close()
 
             fig.canvas.mpl_connect('button_press_event', onclick)
@@ -277,6 +277,6 @@ def remove_double_spikes(D):
     return Dhat
 
 for i in [1,4]:
-    print "Processing network ", i
+    print("Processing network ", i)
     process_dataset(suffix="_iNet1_Size100_CC0%dinh.txt" % i,
                     outfile="network%d_oopsi.pkl" % i)

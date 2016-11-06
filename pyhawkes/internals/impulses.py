@@ -82,8 +82,8 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         ss = np.zeros((self.K, self.K, self.B)) + \
              sum([d.compute_ir_ss() for d in data])
 
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 alpha_post = self.gamma + ss[k1, k2, :]
                 self.g[k1,k2,:] = np.random.dirichlet(alpha_post)
 
@@ -98,7 +98,7 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
 
         # \psi(\sum_{b} \gamma_b)
         trm2 = psi(self.mf_gamma.sum(axis=2))
-        for b in xrange(self.B):
+        for b in range(self.B):
             E_lng[:,:,b] = psi(self.mf_gamma[:,:,b]) - trm2
 
         return E_lng
@@ -147,8 +147,8 @@ class DirichletImpulseResponses(GibbsSampling, MeanField, MeanFieldSVI):
         :return:
         """
         self.g = np.zeros((self.K, self.K, self.B))
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 self.g[k1,k2,:] = np.random.dirichlet(self.mf_gamma[k1,k2,:])
 
 
@@ -248,8 +248,8 @@ class SBMDirichletImpulseResponses(GibbsSampling):
 
 
         ss = self._get_suff_statistics(data)
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 alpha_post = self.gamma + ss[k1, k2, :]
                 self.g[k1,k2,:] = np.random.dirichlet(alpha_post)
 
@@ -274,7 +274,7 @@ class SBMDirichletImpulseResponses(GibbsSampling):
 
         # \psi(\sum_{b} \gamma_b)
         trm2 = psi(self.mf_gamma.sum(axis=2))
-        for b in xrange(self.B):
+        for b in range(self.B):
             E_lng[:,:,b] = psi(self.mf_gamma[:,:,b]) - trm2
 
         return E_lng
@@ -323,8 +323,8 @@ class SBMDirichletImpulseResponses(GibbsSampling):
         """
         raise NotImplementedError()
         self.g = np.zeros((self.K, self.K, self.B))
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 self.g[k1,k2,:] = np.random.dirichlet(self.mf_gamma[k1,k2,:])
 
 
@@ -355,8 +355,8 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
         N_pts = 50
         t = np.linspace(0, self.dt_max, N_pts)
         ir = np.zeros((N_pts, self.K, self.K))
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 ir[:,k1,k2] = self.impulse(t, k1, k2)
         return t, ir
 

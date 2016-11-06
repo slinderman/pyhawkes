@@ -1,8 +1,9 @@
 import time
 import numpy as np
+import imp
 np.random.seed(1111)
 np.seterr(over="raise")
-import cPickle, os
+import pickle, os
 
 from hips.plotting.layout import create_figure
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ from pybasicbayes.util.general import ibincount
 from pybasicbayes.util.text import progprint_xrange
 
 import pyhawkes.models
-reload(pyhawkes.models)
+imp.reload(pyhawkes.models)
 
 # Set globals
 K = 10
@@ -40,7 +41,7 @@ def generate_dataset(bias=1.):
 
     S_dt,_ = dt_model.generate(T=int(np.ceil(T/dt)), keep=False)
 
-    print "sampled dataset with ", S_dt.sum(), "events"
+    print("sampled dataset with ", S_dt.sum(), "events")
 
     # Convert S_dt to continuous time
     S_ct = dt * np.concatenate([ibincount(S) for S in S_dt.T]).astype(float)
@@ -92,9 +93,9 @@ if __name__ == "__main__":
     res_file = os.path.join("results", "run_time_vs_rate_2.pkl")
 
     if os.path.exists(res_file):
-        print "Loading results from ", res_file
+        print("Loading results from ", res_file)
         with open(res_file, "r") as f:
-            events_per_bin, dt_times, ct_times = cPickle.load(f)
+            events_per_bin, dt_times, ct_times = pickle.load(f)
     else:
         biases = np.linspace(10**-1,3**1, num=5)
         N_runs_per_bias = 5
@@ -104,15 +105,15 @@ if __name__ == "__main__":
         dt_times = []
         ct_times = []
         for bias in biases:
-            for iter in xrange(N_runs_per_bias):
-                print "Bias ", bias, " Run (%d/%d)" % (iter, N_runs_per_bias)
+            for iter in range(N_runs_per_bias):
+                print("Bias ", bias, " Run (%d/%d)" % (iter, N_runs_per_bias))
                 S_dt, S_ct, C_ct = generate_dataset(bias)
                 events_per_bin.append(S_dt.sum() / float(S_dt.size))
                 dt_times.append(fit_discrete_time_model_gibbs(S_dt, N_samples))
                 ct_times.append(fit_continuous_time_model_gibbs(S_ct, C_ct, N_samples))
 
         with open(res_file, "w") as f:
-            cPickle.dump((events_per_bin, dt_times, ct_times), f, protocol=-1)
+            pickle.dump((events_per_bin, dt_times, ct_times), f, protocol=-1)
 
     events_per_bin = np.array(events_per_bin)
     dt_times = np.array(dt_times)

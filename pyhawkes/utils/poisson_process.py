@@ -57,17 +57,14 @@ def sampleInhomogeneousPoissonProc(tt, lam):
         
     return S
 
-def approximateFiringRate(S,(T_start,T_stop),N_bins):
+def approximateFiringRate(S, xxx_todo_changeme,N_bins):
     """
     Approximate the firing rate of a set of spikes by binning into equispaced
     bins and dividing by the bin width. Smooth with a Gaussian kernel.
     
     TODO: This could be improved with equimass bins as opposed to equispaced bins.
     """
-#    assert np.all(S >= T_start), "ERROR: S lies below range [%f, %f]:\n%s" % (T_start,T_stop,str(S))
-#    assert np.all(S <= T_stop), "ERROR: S lies above range [%f, %f]:\n%s" % (T_start,T_stop,str(S))
-    
-    # Bin predicted spikes to achieve firing rate
+    (T_start,T_stop) = xxx_todo_changeme
     bin_edges = np.linspace(T_start,T_stop,N_bins+1)
     bin_width = (T_stop-T_start)/N_bins
     

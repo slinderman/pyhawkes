@@ -6,9 +6,7 @@ import scipy.linalg
 import scipy.signal as sig
 
 # TODO: Clean up this interface
-class Basis(object):
-
-    __metaclass__ = abc.ABCMeta
+class Basis(object, metaclass=abc.ABCMeta):
 
     def __init__(self, B, dt, dt_max,
                  orth=False,

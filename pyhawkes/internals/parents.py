@@ -43,7 +43,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         self.Ns = []
         self.Ss = []
         self.Fs = []
-        for k in xrange(self.K):
+        for k in range(self.K):
             # Find the rows where S[:,k] is nonzero
                 tk = np.where(S[:,k])[0]
                 self.ts.append(tk)
@@ -106,7 +106,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         the instantaneous rate at the time of spikes.
         """
         ll = 0
-        for k in xrange(self.K):
+        for k in range(self.K):
             ll += self.log_likelihood_single_process(k)
         return ll
 
@@ -538,7 +538,7 @@ class ContinuousTimeParents(GibbsSampling):
         self.imp_ss = np.zeros((self.K, self.K))
 
         # Resample parents
-        for n in xrange(self.N):
+        for n in range(self.N):
 
             if n == 0:
                 Z[n] = -1
@@ -554,7 +554,7 @@ class ContinuousTimeParents(GibbsSampling):
             denom += p_bkgd
 
             # Iterate backward from the most recent to compute probabilities of each parent spike
-            for par in xrange(n-1, -1, -1):
+            for par in range(n-1, -1, -1):
                 dt = S[n] - S[par]
 
                 # Since the spikes are sorted, we can stop if we reach a potential

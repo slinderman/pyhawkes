@@ -35,7 +35,7 @@ def demo(seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     C = 1       # Number of clusters in the true data
@@ -61,19 +61,19 @@ def demo(seed=None):
 
     test_model.fit_with_bfgs()
 
-    print "W true:        ", true_model.weight_model.A * true_model.weight_model.W
-    print "lambda0 true:  ", true_model.bias_model.lambda0
-    print "ll true:       ", true_model.log_likelihood()
-    print ""
-    print "W test:        ", test_model.W
-    print "lambda0 test   ", test_model.bias
-    print "ll test:       ", test_model.log_likelihood()
+    print("W true:        ", true_model.weight_model.A * true_model.weight_model.W)
+    print("lambda0 true:  ", true_model.bias_model.lambda0)
+    print("ll true:       ", true_model.log_likelihood())
+    print("")
+    print("W test:        ", test_model.W)
+    print("lambda0 test   ", test_model.bias)
+    print("ll test:       ", test_model.log_likelihood())
 
     plot_network(np.ones((K,K)), test_model.W, vmax=0.5)
 
     # Plot the rates
     plt.figure()
-    for k in xrange(3):
+    for k in range(3):
         plt.subplot(3,1,k+1)
         plt.plot(np.arange(T) * dt, true_model.compute_rate(proc=k), '-b')
         plt.plot(np.arange(T) * dt, test_model.compute_rate(ks=k), '-r')

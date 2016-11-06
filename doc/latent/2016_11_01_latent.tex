@@ -14,7 +14,7 @@
 \maketitle
 
 \section{Model}
-Consider a scenario in which the data we observe is driven by
+Consider a scenario in which the data we observe is actually driven by
 a set of hidden events,
 \begin{align}
   \mcH &= \{s_j, m_j, \theta_j\}_{j=1}^J,
@@ -29,7 +29,7 @@ properties of those spikes. Alternatively, perhaps there is only one
 latent node ($M=1$) which roughly captures things that happen in the
 outside world, where the timestamps reflect the timestamps of those
 real-world events and the parameters represent properties of the
-event.
+events.
 
 We will assume that these hidden events are sampled from a
 marked point process with independent rates,~$\lambda_m(s,\theta)$
@@ -42,8 +42,8 @@ that,
 where~$b_m$ is a homogeneous background rate and~$p(\theta)$ is
 the density of a prior distribution over properties~$\theta$. 
 
-The observed data is a set of events on~$N$ visible nodes.
-In this model, the~$j$-th latent event gives rise to a set of child
+The observed data is a set of events on the~$N$ visible nodes.
+In this model, the~$j$-th latent event gives rise to a set of observed child
 events, which we denote by,
 \begin{align}
   \mcD_j &= \{(t_k, n_k, x_k)\}_{k=1}^{K_j},
@@ -79,14 +79,15 @@ words,~$\theta_j$.
 In another setting,~$x_k \in \reals$ may be an associated event
 amplitude, like the size of a post-synaptic potential in a recording
 of a neuron's voltage. These events are induced by either the
-background rate (noise) or by one of a set of hiddent events, like
+background rate (noise) or by one of a set of hidden events, like
 spikes on pre-synaptic neurons.
 
 \begin{figure}[t!]
 \includegraphics[width=5in]{latent_hawkes_example.pdf}
 \caption{An example of a draw from a latent Hawkes process
 a single latent node ($M=1$) which gives emits the ~$J=25$ hidden
-events denoted by black dots. Each latent event has a time
+events denoted by black dots.  Note that these are the same in
+all three panels. Each latent event has a time
 stamp,~$s_j$, from a homogeneous Poisson process and a
 parameter~$\theta_j \sim \distNormal(0,1)$, marked by the height of
 the dot. These latent events influence the conditional intensity of
@@ -138,8 +139,6 @@ the total conditional intensity for node~$n$ is given by,
 \begin{align}
   \lambda_n(t, x) &= b_n \, h(x; \theta_n) + \sum_{j=1}^J w_{m_j \to n} \, g(t-s_j; \theta_j) \, h(x; \theta_j) \, \bbI[t > s_j].
 \end{align}
-\TODO{This is the critical step -- I'm pretty sure that this
-is right, but we should discuss.}
 In other words, the events follow a marked Hawkes process.
 
 
@@ -175,7 +174,7 @@ If~$\theta_j = (\tau_j, \eta_j)$, where~$\tau_j$
 parameterizes the temporal density,~$g$, and~$\eta_j$ governs
 the content density,~$h$, then in some cases we can choose conjugate
 exponential family distributions. For the temporal kernel,
-$g(\Delta t; \tau_j) = \mathrm{Exp}(\Delta t; \tau_j)$,
+$g(\Delta t; \tau_j) = \mcE(\Delta t; \tau_j)$,
 the likelihood is conjugate with a gamma prior on~$\tau_j$.
 For Gaussian content, a normal inverse-gamma prior, and for
 multinomial distributed content, a Dirichlet prior on~$\eta_j$,
@@ -240,9 +239,10 @@ time series}. Moreover, we could incorporate the inference of~$\mcH$
 into a Markov chain using particle MCMC. Our proposal distributions
 would be interesting --- we would probably want something like,
 \begin{align}
-  q(\{s_j, m_j=m, \theta_j\}) &= \mcP(\nu(s, \theta)),
+  q(\{s_j, m_j, \theta_j\}) &= \mcP(\nu(s, m, \theta)),
 \end{align} 
-where~$\nu$ is a proposal measure on the time interval~$[i, i+1)$ and
+where~$\nu$ is a proposal measure on the time interval~$[i, i+1)$,
+the set of latent nodes, and
 the sapce of parameters. That is, in our SMC algorithm, we propose
 a set of latent events for the next time interval, evaluate the
 proposal probability, and then evaluate the joint probability of
@@ -250,7 +250,7 @@ the data (in that time bin) given the history of events through time~$i+1$.
 
 
 
-\bibliographystyle{apa}
-\bibliography{refs.bib}
+%\bibliographystyle{apa}
+%\bibliography{refs.bib}
 
 \end{document}

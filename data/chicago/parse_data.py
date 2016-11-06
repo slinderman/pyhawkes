@@ -2,7 +2,7 @@ import os
 import datetime
 import numpy as np
 import pandas as pd
-import cPickle
+import pickle
 import scipy.io
 
 data_file = 'data.txt'
@@ -70,7 +70,7 @@ def parse_file():
             data[i] = data_line
             
 
-    print "Parsed %d records" % N
+    print("Parsed %d records" % N)
     data = data[:N]
 
     # Convert into a pandas dataframe
@@ -86,7 +86,7 @@ def extract_gang_related_incidents(df):
     df_gangs = df[df.gang==1]
     df_gangs = df_gangs[df_gangs.location <= 77]
 
-    print "Found %d gang-related incidents" % len(df_gangs)
+    print("Found %d gang-related incidents" % len(df_gangs))
 
     return df_gangs
 
@@ -133,7 +133,7 @@ def run():
 
     # Save the data frame
     with open(pickle_file, 'w') as f:
-        cPickle.dump(df, f)
+        pickle.dump(df, f)
 
     # Convert the gang-related incidents into a .mat file format
     mat = dataframe_to_mat(df_gangs)

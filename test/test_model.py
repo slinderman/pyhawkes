@@ -10,12 +10,12 @@ def test_compute_rate():
                                                             network_hypers=network_hypers)
     S,R = true_model.generate(T=T)
 
-    print "Expected number of events: ", np.trapz(R, dt * np.arange(T), axis=0)
-    print "Actual number of events:   ", S.sum(axis=0)
+    print("Expected number of events: ", np.trapz(R, dt * np.arange(T), axis=0))
+    print("Actual number of events:   ", S.sum(axis=0))
 
-    print "Lambda0:  ", true_model.bias_model.lambda0
-    print "W:        ", true_model.weight_model.W
-    print ""
+    print("Lambda0:  ", true_model.bias_model.lambda0)
+    print("W:        ", true_model.weight_model.W)
+    print("")
 
     R_test = true_model.compute_rate()
     assert np.allclose(R, R_test)
@@ -36,8 +36,8 @@ def test_generate_statistics():
     assert np.all(N >= E_N - 3*std_N), "N less than 3std below mean"
     assert np.all(N <= E_N + 3*std_N), "N more than 3std above mean"
 
-    print "Expected number of events: ", E_N
-    print "Actual number of events:   ", S.sum(axis=0)
+    print("Expected number of events: ", E_N)
+    print("Actual number of events:   ", S.sum(axis=0))
 
 test_compute_rate()
 test_generate_statistics()
