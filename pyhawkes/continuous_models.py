@@ -6,22 +6,21 @@ import copy
 import numpy as np
 from scipy.optimize import leastsq
 from scipy.sparse.linalg import eigs
-from scipy.stats import norm
 
 from pybasicbayes.abstractions import ModelGibbsSampling
 from pyhawkes.standard_models import StandardHawkesProcess
-from pyhawkes.internals.parents import ContinuousTimeParents, LatentContinuousTimeParents
+from pyhawkes.internals.parents import ContinuousTimeParents, SpatioTemporalParents
 from pyhawkes.internals.network import ErdosRenyiFixedSparsity
-from pyhawkes.internals.bias import ContinuousTimeGammaBias
-from pyhawkes.internals.impulses import ContinuousTimeImpulseResponses
+from pyhawkes.internals.bias import ContinuousTimeGammaBias, SpatioTemporalBkgd
+from pyhawkes.internals.impulses import ContinuousTimeImpulseResponses, SpatioTemporalImpulseResponses
 from pyhawkes.internals.weights import SpikeAndSlabContinuousTimeGammaWeights
 
 
 class _ContinuousTimeNetworkHawkesModelBase(ModelGibbsSampling):
+    _parent_class = None
 
     _bkgd_class = None
     _default_bkgd_hypers = {}
-
 
     _impulse_class = None
     _default_impulse_hypers = {}
@@ -31,7 +30,9 @@ class _ContinuousTimeNetworkHawkesModelBase(ModelGibbsSampling):
     _network_class          = None
     _default_network_hypers = {}
 
-    def __init__(self, K, dt_max=10.0,
+    def __init__(self, K_obs,
+                 H=0,
+                 dt_max=10.0,
                  bkgd_hypers={},
                  impulse_hypers={},
                  weight_hypers={},
@@ -39,13 +40,14 @@ class _ContinuousTimeNetworkHawkesModelBase(ModelGibbsSampling):
         """
         Initialize a discrete time network Hawkes model with K processes.
 
-        :param K:  Number of processes
+        :param K_obs:  Number of observed processes
         """
-        self.K      = K
+        self.K_obs = K_obs
+        self.H = H
+        self.K = K_obs + H
         self.dt_max = dt_max
 
-        # Initialize the bias
-        # Use the given basis hyperparameters
+        # Initialize the bias with the given basis hyperparameters
         self.bkgd_hypers = copy.deepcopy(self._default_bkgd_hypers)
         self.bkgd_hypers.update(bkgd_hypers)
         self.bias_model = self._bkgd_class(self, self.K, **self.bkgd_hypers)
@@ -159,7 +161,7 @@ class _ContinuousTimeNetworkHawkesModelBase(ModelGibbsSampling):
         self.weight_model.A     = A.copy('C')
         self.weight_model.W     = W.copy('C')
 
-    def add_data(self, S, C, T, X=None):
+    def add_data(self, S, C, T, X=None, includes_hidden=False):
         """
         Add a data set to the list of observations.
         First, filter the data with the impulse response basis,
@@ -170,6 +172,25 @@ class _ContinuousTimeNetworkHawkesModelBase(ModelGibbsSampling):
         :param T: max time. data is in [0,T)
         :param X: marks associated with each event
         """
+        X = X if X is not None else [None] * len(S)
+        # If the data already has spikes for the "hidden" nodes,
+        # include them. Otherwise, sample from the background rate.
+        if self.H > 0 and not includes_hidden:
+            S_bkgd, X_bkgd, C_bkgd = self.bias_model.rvs(T)
+            i_hidden = np.where(C_bkgd >= self.K_obs)[0]
+            S_hidden, X_hidden, C_hidden = [a[i_hidden] for a in (S_bkgd, X_bkgd, C_bkgd)]
+
+            S = np.concatenate((S, S_hidden))
+            C = np.concatenate((C, C_hidden))
+            X = np.concatenate((X, X_hidden))
+
+            # Sort
+            perm = np.argsort(S)
+            S = S[perm]
+            C = C[perm]
+            X = X[perm]
+
+
         assert isinstance(T, float), "T must be a float"
         if len(S) > 0:
             assert isinstance(S, np.ndarray) and S.ndim == 1 \
@@ -384,44 +405,20 @@ class ContinuousTimeNetworkHawkesModel(_ContinuousTimeNetworkHawkesModelBase):
 
     _parents_class = ContinuousTimeParents
 
-class ContinuousTimeLatentHawkesModel(ContinuousTimeNetworkHawkesModel):
-    """
-    A Hawkes process with latent nodes.
-    """
-    _parents_class = LatentContinuousTimeParents
 
-    def __init__(self, K, H, **kwargs):
-        """
-        Same as the ContinuousTimeNetworkHawkesModel, but also specify
-        the number of hidden nodes.
+class SpatioTemporalHawkesModel(_ContinuousTimeNetworkHawkesModelBase):
+    _bkgd_class = SpatioTemporalBkgd
+    _default_bkgd_hypers = {"alpha": 1.0, "beta": 1.0, 'mu': 0.0, 'sigma': 1.0}
 
-        :param K:  Number of observed nodes.
-        :param H:  Number of hidden nodes
-        """
-        self.H = H
-        self.K_obs = K
-        super(ContinuousTimeLatentHawkesModel, self).__init__(K=K+H, **kwargs)
+    _impulse_class = SpatioTemporalImpulseResponses
+    _default_impulse_hypers = {"mu_0": 0., "lmbda_0": 1.0, "alpha_0": 1.0, "beta_0": 1.0, 'sigma': 1.0}
 
-    def add_data(self, S, C, T, X=None, includes_hidden=False):
-        X = X if X is not None else [None] * len(S)
-        # If the data already has spikes for the "hidden" nodes,
-        # include them. Otherwise, sample from the background rate.
-        if not includes_hidden:
-            S_bkgd, X_bkgd, C_bkgd = self.bias_model.rvs(T)
-            i_hidden = np.where(C_bkgd>=self.K_obs)[0]
-            S_hidden, X_hidden, C_hidden = [a[i_hidden] for a in (S_bkgd, X_bkgd, C_bkgd)]
+    _default_weight_hypers = {}
 
-            S_full = np.concatenate((S, S_hidden))
-            C_full = np.concatenate((C, C_hidden))
-            X_full = np.concatenate((X, X_hidden))
+    _network_class = ErdosRenyiFixedSparsity
+    _default_network_hypers = {'p': 0.5,
+                               'allow_self_connections': True,
+                               'kappa': 1.0,
+                               'v': None, 'alpha': None, 'beta': None,}
 
-            # Sort
-            perm = np.argsort(S_full)
-            S_full = S_full[perm]
-            C_full = C_full[perm]
-            X_full = X_full[perm]
-
-        else:
-            S_full, C_full, X_full = S, C, X
-
-        super(ContinuousTimeLatentHawkesModel, self).add_data(S_full, C_full, T, X=X_full)
+    _parents_class = SpatioTemporalParents

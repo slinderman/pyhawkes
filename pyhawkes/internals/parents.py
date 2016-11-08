@@ -6,7 +6,7 @@ from gslrandom import multinomial
 
 from pyhawkes.utils.utils import initialize_pyrngs
 from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
-from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats, compute_rate_at_events
+from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats, compute_rate_at_events, compute_spatiotemporal_rate_at_events
 
 class DiscreteTimeParents(GibbsSampling, MeanField):
     """
@@ -461,7 +461,7 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         return vlb
 
 
-class ContinuousTimeParents(GibbsSampling):
+class _ContinuousTimeParentsBase(GibbsSampling):
     """
     Implementation of spike and slab categorical parents
     (one for each event). We only need to keep track of
@@ -692,14 +692,16 @@ class ContinuousTimeParents(GibbsSampling):
         return self.imp_ss
 
 
-class LatentContinuousTimeParents(ContinuousTimeParents):
+class _LatentHawkesMixin(_ContinuousTimeParentsBase):
     def __init__(self, model, S, C, X, T):
         self.K_obs, self.H = model.K_obs, model.H
-        super(LatentContinuousTimeParents, self).__init__(model, S, C, X, T)
+        super(_LatentHawkesMixin, self).__init__(model, S, C, X, T)
 
     def resample(self):
-        self.resample_latent_events_mh()
-        super(LatentContinuousTimeParents, self).resample()
+        if self.H > 0:
+            self.resample_latent_events_mh()
+
+        super(_LatentHawkesMixin, self).resample()
 
     def resample_latent_events_mh(self, n_steps=1, sigma_jitter=1.0):
         """
@@ -836,3 +838,173 @@ class LatentContinuousTimeParents(ContinuousTimeParents):
                 self.Ns = np.bincount(self.C, minlength=self.K)
                 ll_prev = ll_new
 
+
+class _SpatioTemporalParentsMixin(_ContinuousTimeParentsBase):
+    """
+    Support marked Hawkes processes with Gaussian events.
+    """
+    def _compute_rate_at_events(self, S, X, C):
+        # Compute the instantaneous rate at the individual events
+        dt_max = self.dt_max
+        N = S.shape[0]
+        lambda0, sigma0 = self.model.bias_model.lambda0, self.model.bias_model.sigma
+        W = self.model.weight_model.W_effective
+        mu, tau, sigma = self.model.impulse_model.mu, self.model.impulse_model.tau, self.model.impulse_model.sigma
+
+        # Call cython function to evaluate instantaneous rate
+        lmbda = np.zeros(N)
+        compute_spatiotemporal_rate_at_events(S, X, C, dt_max, lambda0, sigma0, W, mu, tau, sigma, lmbda)
+
+        assert np.all(np.isfinite(lmbda))
+        return lmbda
+
+    def resample(self):
+        raise NotImplementedError
+
+    # TODO: Make methods to reduce code duplication!!
+    def resample_latent_events_mh(self, n_steps=1, sigma_jitter=1.0, sigma_x_jitter=0.05):
+        """
+        Resample the latent event sequences via a set of
+        Metropolis-Hastings transition operators. Namely:
+        - Add:     add an event to a random process at a random time
+        - Remove:  remove a randomly chosen event from a random process
+        - Jitter:  move an event from time t to time t+eps, where eps is random normal
+
+        The probability of proposing to add a random event is
+
+            p(add (s',c')) = 1/3 * 1/H * 1/T      [uniform]
+
+        The probability of removing an event is
+
+            p(rem (s',c')) = 1/3 * 1/N_hidden
+
+        The probability of jittering an event is
+
+            p(jit (s',c')) = 1/3 * N(s' - s'' | 0, sigma)
+
+        The reverse of adding is removing and the reverse of jittering
+        is jittering. This makes it easy to compute the reversal
+        probabilities.
+
+        After each proposal, we calculate the log likelihood of the new dataset.
+
+        :param n_steps: Number of MH steps to take
+        """
+        sigma0 = self.model.bias_model.sigma
+
+        # Enumerate operations
+        ADD, REMOVE, JITTER = 0, 1, 2
+
+        # Initialize
+        ll_prev = self.log_likelihood()
+
+        for i in range(n_steps):
+            # Select a random operation
+            op = np.random.choice([ADD, REMOVE, JITTER])
+            if op == ADD:
+                # Draw a random event time and process, add it to the data
+                s = np.random.rand() * self.T
+                c = self.K_obs + np.random.randint(self.H)
+                x = sigma0[c] * np.random.randn()
+
+                # Evaluate proposal probability
+                q_fwd = 1./3 * 1./self.H * 1./self.T * norm.pdf(x, 0, sigma0[c])
+
+                # Evaluate reverse probability
+                N_hidden = self.Ns[-self.H:].sum()
+                q_bwd = 1./3 * 1./(N_hidden+1)
+
+                # Construct a new dataset
+                i_ins = np.searchsorted(self.S, s)
+                S_new = np.insert(self.S, i_ins, s)
+                X_new = np.insert(self.X, i_ins, x, axis=0)
+                C_new = np.insert(self.C, i_ins, c)
+
+                # Evaluate the new log likelihood
+                ll_new = self._log_likelihood(S_new, X_new, C_new)
+
+            elif op == REMOVE:
+                # Select a random latent event to remove
+                i_latent = np.where(self.C >= self.K_obs)[0]
+                if len(i_latent) == 0:
+                    continue
+
+                i_rem = np.random.choice(i_latent)
+                x_rem = self.X[i_rem]
+                c_rem = self.C[i_rem]
+
+                # Evaluate proposal probability
+                q_fwd = 1./3 * 1./len(i_latent)
+
+                # Evaluate reverse probability
+                q_bwd = 1./3 * 1./self.H * 1./self.T * norm.pdf(x_rem, 0, sigma0[c_rem])
+
+                # Construct a new dataset
+                S_new = np.delete(self.S, i_rem)
+                X_new = np.delete(self.X, i_rem, axis=0)
+                C_new = np.delete(self.C, i_rem)
+
+                # Evaluate the new log likelihood
+                ll_new = self._log_likelihood(S_new, X_new, C_new)
+
+            elif op == JITTER:
+                # Select a random latent event to remove
+                i_latent = np.where(self.C >= self.K_obs)[0]
+                if len(i_latent) == 0:
+                    continue
+
+                i_jit = np.random.choice(i_latent)
+
+                # Propose a jittered time
+                dt_jit = sigma_jitter * np.random.randn()
+                # Propose a jittered location
+                dx_jit = sigma_x_jitter * np.random.randn()
+
+                # Evaluate proposal probability
+                q_fwd = 1./3 * norm.pdf(dt_jit, 0, sigma_jitter) * norm.pdf(dx_jit, 0, sigma_x_jitter)
+
+                # Evaluate reverse probability
+                q_bwd = 1./3 * norm.pdf(-dt_jit, 0, sigma_jitter) * norm.pdf(-dx_jit, 0, sigma_x_jitter)
+
+                # Construct a new dataset
+                s_jit = self.S[i_jit] + dt_jit
+                x_jit = self.X[i_jit] + dx_jit
+
+                # Automatically reject if invalid timestamp
+                if s_jit < 0 or s_jit > self.T:
+                    continue
+
+                c_jit = self.C[i_jit]
+                S_new = np.delete(self.S, i_jit)
+                X_new = np.delete(self.X, i_jit, axis=0)
+                C_new = np.delete(self.C, i_jit)
+                i_ins = np.searchsorted(S_new, s_jit)
+                S_new = np.insert(S_new, i_ins, s_jit)
+                X_new = np.insert(X_new, i_ins, x_jit, axis=0)
+                C_new = np.insert(C_new, i_ins, c_jit)
+
+                # Evaluate the new log likelihood
+                ll_new = self._log_likelihood(S_new, X_new, C_new)
+
+            else:
+                raise Exception("Invalid MH operation.")
+
+            # Accept or reject the proposal
+            # NOTE: We can ignore the prior terms since we are only changing the data.
+            p_accept = min(1, q_bwd / q_fwd * np.exp(ll_new - ll_prev))
+            if np.random.rand() < p_accept:
+                assert np.all(np.isfinite(X_new))
+                self.S = S_new
+                self.X = X_new
+                self.C = C_new
+                self.Ns = np.bincount(self.C, minlength=self.K)
+                ll_prev = ll_new
+
+
+
+class ContinuousTimeParents(_LatentHawkesMixin, _ContinuousTimeParentsBase):
+    pass
+
+
+class SpatioTemporalParents(_SpatioTemporalParentsMixin, _LatentHawkesMixin):
+    pass

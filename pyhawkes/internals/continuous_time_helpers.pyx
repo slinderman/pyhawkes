@@ -34,6 +34,13 @@ cdef inline double ln_impulse(double dt, double mu, double tau, double dt_max) n
     cdef double Z = dt * (dt_max - dt)/dt_max * SQRT_2PI / sqrt(tau)
     return exp(-tau/2. * (logit(dt/dt_max) - mu)**2) / Z
 
+cdef inline double gaussian_impulse(double dx, double sigma) nogil:
+    """
+    Spatial Gaussian impulse response.
+    """
+    return 1./SQRT_2PI / sigma * exp(-0.5 * dx**2 / sigma**2)
+
+
 cpdef ct_resample_Z_logistic_normal_serial(
     double[::1] S, long[::1] C, long[::1] Z, double dt_max,
     double[::1] lambda0, double[:,::1] W, double[:,::1] mu, double[:,::1] tau):
@@ -224,6 +231,42 @@ cpdef compute_rate_at_events(
 
             if W[C[par], C[n]] > 0:
                 lmbda[n] += W[C[par], C[n]] * ln_impulse(dt, mu[C[par], C[n]], tau[C[par], C[n]], dt_max)
+
+
+cpdef compute_spatiotemporal_rate_at_events(
+    double[::1] S, double[::1] X, long[::1] C, double dt_max,
+    double[::1] lambda0, double[::1] sigma0, double[:,::1] W,
+    double[:,::1] mu, double[:,::1] tau, double[:,::1] sigma,
+    double[::1] lmbda):
+
+    # Compute the instantaneous rate at the individual events
+    # Sum over potential parents.
+
+    cdef int N = S.shape[0]
+
+    cdef int par, n
+    cdef double dt, dx
+
+    # Compute rate at each event!
+    for n in prange(N, nogil=True):
+        # First parent is just the spatiotemporal background rate of this process
+        lmbda[n] += lambda0[C[n]] * gaussian_impulse(X[n], sigma0[C[n]])
+
+        # Iterate backward from the most recent to compute probabilities of each parent spike
+        for par in range(n-1, -1, -1):
+            dt = S[n] - S[par]
+            dx = X[n] - X[par]
+
+            if dt < 1e-8:
+                continue
+
+            # Since the spikes are sorted, we can stop if we reach a potential
+            # parent that occurred greater than dt_max in the past
+            if dt >= dt_max - 1e-8:
+                break
+
+            if W[C[par], C[n]] > 0:
+                lmbda[n] += W[C[par], C[n]] * ln_impulse(dt, mu[C[par], C[n]], tau[C[par], C[n]], dt_max) * gaussian_impulse(dx, sigma[C[par], C[n]])
 
 def compute_rate_at_events_python(S, C, dt_max, lambda0, W, impulse):
     # Compute the rate at each event in python

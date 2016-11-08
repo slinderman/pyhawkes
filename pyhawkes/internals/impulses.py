@@ -435,3 +435,56 @@ class ContinuousTimeImpulseResponses(GibbsSampling):
         assert np.isfinite(self.mu).all()
         assert np.isfinite(self.tau).all()
 
+class SpatioTemporalImpulseResponses(ContinuousTimeImpulseResponses):
+    """
+    Extend the simple temporal impulse response with a Gaussian kernel
+    in space. I.e.
+
+        h(t, x | t', x') = h(t - t') g(x - x')
+
+    where h(t-t') is the standard temporal kernel, and g(x-x') is a
+    stationary Gaussian kernel. That is,
+
+       g(x - x') = N(x - x' | 0, sigma)
+
+    """
+
+    def __init__(self, model, sigma=0.5, **kwargs):
+        super(SpatioTemporalImpulseResponses, self).__init__(model, **kwargs)
+        self.sigma = sigma * np.ones((self.K, self.K))
+
+    def impulse(self, dt, dx, k1, k2):
+        """
+        Impulse response induced by an event on process k1 on
+        the rate of process k2 at lag dt
+        """
+        from pyhawkes.utils.utils import logit
+        mu, tau, dt_max, sigma = self.mu[k1, k2], self.tau[k1, k2], self.dt_max, self.sigma[k1,k2]
+        Z = dt * (dt_max - dt) / dt_max * np.sqrt(2 * np.pi / tau)
+        p_dt = 1. / Z * np.exp(-tau / 2. * (logit(dt / dt_max) - mu) ** 2)
+
+        p_dx = 1./np.sqrt(2 * np.pi * sigma**2) * np.exp(-0.5 * dx**2 / sigma**2)
+
+        return p_dt * p_dx
+
+    def rvs(self, size, s_pa, x_pa, c_pa, c_ch):
+        """
+        Sample random events
+        :param size:
+        :return:
+        """
+        mu, tau, dt_max = self.mu, self.tau, self.dt_max
+
+        # Sample normal RVs and take the logistic of them. This is equivalent
+        # to sampling uniformly from the inverse CDF
+        v_ch = mu[c_pa, c_ch] + np.sqrt(1. / tau[c_pa, c_ch]) * np.random.randn(size)
+
+        # Event times are logistic transformation of x
+        s_ch = s_pa + dt_max * logistic(v_ch)
+
+        # No event marks here
+        x_ch = x_pa + self.sigma[c_pa, c_ch] * np.random.randn(size)
+
+        return s_ch, x_ch
+
+    # TODO: Resample kernel parameters

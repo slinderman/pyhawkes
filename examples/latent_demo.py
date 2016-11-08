@@ -9,7 +9,7 @@ from pybasicbayes.util.text import progprint_xrange
 
 import pyhawkes.models
 importlib.reload(pyhawkes.models)
-from pyhawkes.continuous_models import ContinuousTimeNetworkHawkesModel, ContinuousTimeLatentHawkesModel
+from pyhawkes.continuous_models import ContinuousTimeNetworkHawkesModel
 
 # Create the model with these parameters
 K_obs = 3
@@ -46,8 +46,8 @@ X_obs = np.delete(X, i_latent)
 assert np.all(C_obs <= K_obs)
 
 # Create a latent Hawkes model for inferring the latent events
-latent_model = ContinuousTimeLatentHawkesModel(
-    K_obs, H, dt_max=dt_max, network_hypers=network_hypers)
+latent_model = ContinuousTimeNetworkHawkesModel(
+    K_obs, H=H, dt_max=dt_max, network_hypers=network_hypers)
 
 # Test: Give it the right parameters -- just learn the hidden events
 latent_model.bias_model.lambda0 = true_model.bias_model.lambda0.copy()

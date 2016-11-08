@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import gammaln, psi
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField, MeanFieldSVI
+from pybasicbayes.distributions import ScalarGaussianNIX
 from pyhawkes.internals.distributions import Gamma
 
 class GammaBias(GibbsSampling, MeanField, MeanFieldSVI):
@@ -223,3 +224,102 @@ class ContinuousTimeGammaBias(GibbsSampling):
         self.lambda0 = np.array(
             np.random.gamma(alpha_post, 1.0/beta_post)).reshape((self.K, ))
 
+
+
+class SpatioTemporalBkgd(GibbsSampling):
+    """
+    A spatiotemporal background model with
+
+        \lambda_0(t, x) = b * N(x | mu, sigma)
+
+    I.e. homogeneous in time and Gaussian in space.
+
+    We use the following priors:
+
+        b ~ Gam(alpha, beta)
+        mu, sigma ~ NIG(mu_0, kappa_0, alpha_0, beta_0)
+
+    """
+    def __init__(self, model, K, alpha, beta, mu, sigma):
+        """
+        Initialize a bias vector for each of the K processes.
+
+        :param K:       Number of processes
+        :param dt:      Bin size. This is required to put lambda0 in the right units.
+        :param alpha:   Shape parameter of the gamma prior
+        :param beta:    Scale parameter of the gamma prior
+        """
+        self.model = model
+        self.K = K
+        self.alpha = alpha
+        self.beta = beta
+        self.mu = mu * np.ones(self.K)
+        self.sigma = sigma * np.ones(self.K)
+
+        # Initialize lambda0
+        self.lambda0 = np.empty(self.K)
+        self.resample()
+
+    def log_likelihood(self, x):
+        assert isinstance(x, np.ndarray) and x.shape == (self.K,), \
+            "x must be a K-vector of background rates"
+
+        return self.K * (self.alpha * np.log(self.beta) - gammaln(self.alpha)) + \
+               ((self.alpha-1) * np.log(x) - self.beta * x).sum()
+
+    def log_probability(self):
+        return self.log_likelihood(self.lambda0)
+
+    def rvs(self, T):
+        # Sample the background model ( no locations here)
+        S, X, C = [], [], []
+        for k in np.arange(self.K):
+            N = np.random.poisson(self.lambda0[k] * T)
+            S_bkgd = np.random.rand(N) * T
+            X_bkgd = self.mu[k] + self.sigma[k] * np.random.randn(N)
+            C_bkgd = k * np.ones(N, dtype=np.int)
+            S.append(S_bkgd)
+            X.append(X_bkgd)
+            C.append(C_bkgd)
+
+        S, X, C = [np.concatenate(a) for a in (S, X, C)]
+        perm = np.argsort(S)
+        S, X, C = [a[perm] for a in (S, X, C)]
+
+        return S, X, C
+
+    # TODO: Gibbs Sampling
+    def _get_suff_statistics(self, data):
+        """
+        Compute the sufficient statistics from the data set.
+        :param Z0: a TxK array of event counts assigned to the background process
+        :return:
+        """
+        ss = np.zeros((2, self.K))
+
+        for d in data:
+            # ss[0,k] = sum_t Z0[t,k]
+            ss[0,:] = d.bkgd_ss
+            # ss[1,k] = T
+            ss[1,:] = d.T
+
+        return ss
+
+    def resample(self,data=[]):
+        """
+        Resample the background rate from its gamma conditional distribution.
+
+        :param data: Z0, a TxK matrix of events assigned to the background.
+        """
+        assert isinstance(data, list)
+        # assert len(data) == 0 or (isinstance(data, np.ndarray)
+        #                           and data.ndim == 2
+        #                           and data.shape[1] == self.K), \
+        #     "Data must be a TxK array of event counts assigned to the background"
+
+        ss = self._get_suff_statistics(data)
+        alpha_post = self.alpha + ss[0,:]
+        beta_post  = self.beta + ss[1,:]
+
+        self.lambda0 = np.array(
+            np.random.gamma(alpha_post, 1.0/beta_post)).reshape((self.K, ))
