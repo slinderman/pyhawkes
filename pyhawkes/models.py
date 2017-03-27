@@ -8,7 +8,7 @@ import numpy as np
 from scipy.special import gammaln
 from scipy.optimize import minimize
 
-from pybasicbayes.models import ModelGibbsSampling, ModelMeanField
+from pybasicbayes.abstractions import ModelGibbsSampling, ModelMeanField
 from pybasicbayes.util.text import progprint_xrange
 
 from pyhawkes.internals.bias import GammaBias
