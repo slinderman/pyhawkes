@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score
 
 import pyhawkes.models
-import imp
-imp.reload(pyhawkes.models)
+import importlib
+importlib.reload(pyhawkes.models)
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
 
 np.random.seed(0)

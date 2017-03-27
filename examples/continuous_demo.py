@@ -1,6 +1,5 @@
 
 import numpy as np
-import imp
 np.random.seed(1111)
 np.seterr(over="raise")
 import matplotlib.pyplot as plt
@@ -9,7 +8,9 @@ from pybasicbayes.util.general import ibincount
 from pybasicbayes.util.text import progprint_xrange
 
 import pyhawkes.models
-imp.reload(pyhawkes.models)
+
+import importlib
+importlib.reload(pyhawkes.models)
 
 
 # Create the model with these parameters
