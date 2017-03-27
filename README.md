@@ -66,17 +66,21 @@ see how those methods can be used, look in `examples/inference`.
 
 Installation
 ===
-To check out, run 
-`git clone git@github.com:slinderman/pyhawkes.git`
+To check out, run
 
-To compile the cython code, run
-`python setup.py build_ext --inplace`
-  
+    git clone git@github.com:slinderman/pyhawkes.git
+
+To perform a basic installation, run
+
+    pip install -e .
+
+This will be rather slow, however, since the default version does not do
+any multi-threading.  For advanced installation instructions to support
+multithreading, see [MULTITHREADING.md](MULTITHREADING.md).
+
 This codebase is considerably cleaner than the old CUDA version, and is still
 quite fast with the Cython+OMP extensions and joblib for parallel sampling of
 the adjacency matrix.
-
-For installing on OSX see the [INSTALL_OSX.md](INSTALL_OSX.md) file.
 
 
 More Information

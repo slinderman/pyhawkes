@@ -1,7 +1,0 @@
-Cython
-numpy
-#gslrandom
-joblib
-scikit-learn
-pybasicbayes
-matplotlib

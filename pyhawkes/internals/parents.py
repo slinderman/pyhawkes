@@ -1,9 +1,8 @@
+import os
 import numpy as np
+from warnings import warn
 
 from pybasicbayes.abstractions import GibbsSampling, MeanField
-from gslrandom import multinomial
-
-from pyhawkes.utils.utils import initialize_pyrngs
 from pyhawkes.internals.parent_updates import mf_update_Z, mf_vlb
 from pyhawkes.internals.continuous_time_helpers import ct_resample_Z_logistic_normal, ct_compute_suff_stats
 
@@ -61,7 +60,25 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         self._EZ = None
 
         # Initialize GSL RNGs for resampling Z
-        self.pyrngs = initialize_pyrngs()
+        try:
+            from gslrandom import PyRNG, get_omp_num_threads
+            if "OMP_NUM_THREADS" in os.environ:
+                num_threads = os.environ["OMP_NUM_THREADS"]
+            else:
+                num_threads = get_omp_num_threads()
+            assert num_threads > 0
+
+            # Choose random seeds
+            seeds = np.random.randint(2 ** 16, size=num_threads)
+            self.pyrngs = [PyRNG(seed) for seed in seeds]
+            self.USE_GSL = True
+        except:
+            warn("Failed to import gslrandom for parallel multinomial sampling. "
+                 "Defaulting to pure python instead. "
+                 "This will have a significant impact on performance. "
+                 "To install gslrandom, see https://github.com/slinderman/gslrandom")
+            self.USE_GSL = False
+
 
     @property
     def Z(self):
@@ -206,7 +223,6 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         bias_model, weight_model, impulse_model = \
             self.model.bias_model, self.model.weight_model, self.model.impulse_model
 
-        # TODO: This can all be done with multinomial_par!
         for k2, (Sk, Fk, Zk) in enumerate(zip(self.Ss, self.Fs, self.Z)):
             for st,ft,zt in zip(Sk, Fk, Zk):
                 assert st > 0
@@ -236,9 +252,11 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         :param impulse_model:
         :return:
         """
+        from gslrandom import multinomial
         bias_model, weight_model, impulse_model = \
             self.model.bias_model, self.model.weight_model, self.model.impulse_model
         K, B = self.K, self.B
+
         # Make a big matrix of size T x (K*B + 1)
         for k2, (Sk, Fk, Tk, Zk) in enumerate(zip(self.Ss, self.Fs, self.Ts, self.Z)):
             P = np.zeros((Tk, 1+self.K * self.B))
@@ -257,9 +275,11 @@ class DiscreteTimeParents(GibbsSampling, MeanField):
         # DEBUG
         # self._check_Z()
 
-    def resample(self,data=[]):
-        # self._resample_Z_python()
-        self._resample_Z_gsl()
+    def resample(self, data=[]):
+        if self.USE_GSL:
+            self._resample_Z_gsl()
+        else:
+            self._resample_Z_python()
 
     ### Mean Field
     def expected_log_likelihood(self,x):
