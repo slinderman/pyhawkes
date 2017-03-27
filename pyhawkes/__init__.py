@@ -1,2 +1,2 @@
 
-from . import models, standard_models
+from pyhawkes import models, standard_models

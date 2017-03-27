@@ -10,10 +10,12 @@ from autograd import grad
 
 
 ### Nodes
-class _NonlinearHawkesNodeBase(object, metaclass=abc.ABCMeta):
+class _NonlinearHawkesNodeBase(object):
     """
     A single node of a nonlinear Hawkes process.
     """
+
+    __metaclass__ = abc.ABCMeta
 
     constrained = False
 
@@ -187,10 +189,11 @@ class HomogeneousPoissonNode(_NonlinearHawkesNodeBase):
         self.w[1:] = 0
 
 
-class _NonlinearHawkesProcessBase(object, metaclass=abc.ABCMeta):
+class _NonlinearHawkesProcessBase(object):
     """
     Discrete time nonlinear Hawkes process, i.e. Poisson GLM
     """
+    __metaclass__ = abc.ABCMeta
 
     _node_class = None
 

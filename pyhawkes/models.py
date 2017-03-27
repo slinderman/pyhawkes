@@ -525,12 +525,14 @@ class DiscreteTimeStandardHawkesModel(object):
         return self.weights, ll, velocity
 
 
-class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
+class _DiscreteTimeNetworkHawkesModelBase(object):
     """
     Discrete time network Hawkes process model with support for
     Gibbs sampling inference, variational inference (TODO), and
     stochastic variational inference (TODO).
     """
+
+    __metaclass__ = abc.ABCMeta
 
     # Define the model components and their default hyperparameters
     _basis_class            = CosineBasis

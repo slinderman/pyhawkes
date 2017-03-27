@@ -40,7 +40,7 @@ from pyhawkes.internals.distributions import Discrete, Bernoulli, \
 #         """
 #         pass
 
-class _StochasticBlockModelBase(BayesianDistribution, metaclass=abc.ABCMeta):
+class _StochasticBlockModelBase(BayesianDistribution):
     """
     A stochastic block model is a clustered network model with
     K:          Number of nodes in the network
@@ -55,6 +55,8 @@ class _StochasticBlockModelBase(BayesianDistribution, metaclass=abc.ABCMeta):
     alpha:      Shape parameter of gamma prior over v
     beta:       Scale parameter of gamma prior over v
     """
+
+    __metaclass__ = abc.ABCMeta
 
     def __init__(self, K, C,
                  c=None, m=None, pi=1.0,

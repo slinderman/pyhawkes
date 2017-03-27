@@ -1,11 +1,10 @@
+from __future__ import print_function
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import roc_auc_score
 
-import pyhawkes.models
-import importlib
-importlib.reload(pyhawkes.models)
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
 
 np.random.seed(0)
@@ -105,4 +104,5 @@ def analyze_samples(true_model, samples, lps):
     plt.ioff()
     plt.show()
 
-demo()
+if __name__ == "__main__":
+    demo()
