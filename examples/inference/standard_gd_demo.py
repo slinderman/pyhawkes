@@ -14,7 +14,7 @@ def demo(seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     C = 1
@@ -56,7 +56,7 @@ def demo(seed=None):
     # Gradient descent
     N_steps = 10000
     lls = []
-    for itr in xrange(N_steps):
+    for itr in range(N_steps):
         W,ll,grad = test_model.gradient_descent_step(stepsz=0.001)
         lls.append(ll)
 
@@ -68,13 +68,13 @@ def demo(seed=None):
 
     plt.ioff()
 
-    print "W true:        ", true_model.weight_model.A * true_model.weight_model.W
-    print "lambda0 true:  ", true_model.bias_model.lambda0
-    print "ll true:       ", true_model.log_likelihood()
-    print ""
-    print "W test:        ", test_model.W
-    print "lambda0 test   ", test_model.bias
-    print "ll test:       ", test_model.log_likelihood()
+    print("W true:        ", true_model.weight_model.A * true_model.weight_model.W)
+    print("lambda0 true:  ", true_model.bias_model.lambda0)
+    print("ll true:       ", true_model.log_likelihood())
+    print("")
+    print("W test:        ", test_model.W)
+    print("lambda0 test   ", test_model.bias)
+    print("ll test:       ", test_model.log_likelihood())
 
 
     plt.figure()

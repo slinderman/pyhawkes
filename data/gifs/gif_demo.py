@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score
 
 import pyhawkes.models
-reload(pyhawkes.models)
+import imp
+imp.reload(pyhawkes.models)
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab
 from pyhawkes.internals.network import ErdosRenyiFixedSparsity
 from pyhawkes.plotting.plotting import plot_network
@@ -63,8 +64,8 @@ def demo(K=3, T=1000, dt_max=20, p=0.25):
     N_samples = 100
     samples = []
     lps = []
-    for itr in xrange(N_samples):
-        print "Gibbs iteration ", itr
+    for itr in range(N_samples):
+        print("Gibbs iteration ", itr)
         test_model.resample_model()
         lps.append(test_model.log_probability())
         samples.append(test_model.copy_sample())

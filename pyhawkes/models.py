@@ -75,7 +75,7 @@ class DiscreteTimeStandardHawkesModel(object):
         self.data_list = []
 
     def _remove_self_weights(self):
-        for k in xrange(self.K):
+        for k in range(self.K):
                 self.weights[k,1+(k*self.B):1+(k+1)*self.B] = 1e-32
 
     def initialize_with_gibbs_model(self, gibbs_model):
@@ -93,7 +93,7 @@ class DiscreteTimeStandardHawkesModel(object):
         Weff = gibbs_model.weight_model.W_effective
         g = gibbs_model.impulse_model.g
 
-        for k in xrange(self.K):
+        for k in range(self.K):
             self.weights[k,0]  = lambda0[k]
             self.weights[k,1:] = (Weff[:,k][:,None] * g[:,k,:]).ravel()
 
@@ -427,11 +427,11 @@ class DiscreteTimeStandardHawkesModel(object):
         itr = [0]
         def callback(x):
             if itr[0] % 10 == 0:
-                print "Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior())
+                print("Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior()))
             itr[0] = itr[0] + 1
 
-        for k in xrange(self.K):
-            print "Optimizing process ", k
+        for k in range(self.K):
+            print("Optimizing process ", k)
             itr[0] = 0
             x0 = np.log(self.weights[k,:])
             res = minimize(objective,           # Objective function
@@ -463,11 +463,11 @@ class DiscreteTimeStandardHawkesModel(object):
         itr = [0]
         def callback(x):
             if itr[0] % 10 == 0:
-                print "Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior())
+                print("Iteration: %03d\t LP: %.1f" % (itr[0], self.log_posterior()))
             itr[0] = itr[0] + 1
 
-        for k in xrange(self.K):
-            print "Optimizing process ", k
+        for k in range(self.K):
+            print("Optimizing process ", k)
             itr[0] = 0
             x0 = self.weights[k,:]
             res = minimize(objective,           # Objective function
@@ -482,7 +482,7 @@ class DiscreteTimeStandardHawkesModel(object):
         grad = np.zeros((self.K, 1+self.K*self.B))
 
         # Compute gradient and take a step for each process
-        for k in xrange(self.K):
+        for k in range(self.K):
             d_W_d_log_W = self._d_W_d_logW(k)
             grad[k,:] = self.compute_gradient(k).dot(d_W_d_log_W)
             self.weights[k,:] = np.exp(np.log(self.weights[k,:]) + stepsz * grad[k,:])
@@ -508,7 +508,7 @@ class DiscreteTimeStandardHawkesModel(object):
         T = self.data_list[mb][0].shape[0]
 
         # Compute gradient and take a step for each process
-        for k in xrange(self.K):
+        for k in range(self.K):
             d_W_d_log_W = self._d_W_d_logW(k)
             grad[k,:] = self.compute_gradient(k, indices=[mb]).dot(d_W_d_log_W) / T
             velocity[k,:] = momentum * prev_velocity[k,:] + learning_rate * grad[k,:]
@@ -525,14 +525,12 @@ class DiscreteTimeStandardHawkesModel(object):
         return self.weights, ll, velocity
 
 
-class _DiscreteTimeNetworkHawkesModelBase(object):
+class _DiscreteTimeNetworkHawkesModelBase(object, metaclass=abc.ABCMeta):
     """
     Discrete time network Hawkes process model with support for
     Gibbs sampling inference, variational inference (TODO), and
     stochastic variational inference (TODO).
     """
-
-    __metaclass__ = abc.ABCMeta
 
     # Define the model components and their default hyperparameters
     _basis_class            = CosineBasis
@@ -766,7 +764,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             maxeig = eigs(self.weight_model.W_effective, k=1)[0]
 
         if verbose:
-            print "Max eigenvalue: ", maxeig
+            print("Max eigenvalue: ", maxeig)
 
         return maxeig < 1.0
 
@@ -819,7 +817,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         # Add the background rate
         R += self.bias_model.lambda0[None,:]
 
-        iterator = progprint_xrange(T, perline=print_interval) if verbose else xrange(T)
+        iterator = progprint_xrange(T, perline=print_interval) if verbose else range(T)
 
         # Iterate over time bins
         for t in iterator:
@@ -837,7 +835,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             # Check Spike limit
             if np.any(S[t,:] >= 1000):
-                print "More than 1000 events in one time bin!"
+                print("More than 1000 events in one time bin!")
                 import pdb; pdb.set_trace()
 
         # Only keep the first T time bins
@@ -934,7 +932,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             H = np.transpose(H, [2,0,1])
 
-            for k2 in xrange(self.K):
+            for k2 in range(self.K):
                 R[:,k2] += np.tensordot(F, H[:,:,k2], axes=([2,1], [0,1]))
 
             return R
@@ -1038,7 +1036,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             # Plot the rates on the right
             axs_rate = [plt.subplot2grid((self.K,4), (k,1), rowspan=1, colspan=rate_width)
-                        for k in xrange(self.K)]
+                        for k in range(self.K)]
             rate_lns = self.plot_rates(axs=axs_rate, data_index=data_index, T_slice=T_slice, color=color)
 
             plt.subplots_adjust(wspace=1.0)
@@ -1089,7 +1087,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             ax.get_yaxis().set_visible(False)
 
             # Layout the nodes in a circle
-            for k in xrange(self.K):
+            for k in range(self.K):
                 ax.text(rad*np.cos(ths[k]), rad*np.sin(ths[k]), "%d" % (k+1))
 
             ax.set_xlim(-1.25*rad, 1.35*rad)
@@ -1098,8 +1096,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
             # Draw lines connecting nodes
             lns = []
-            for k1 in xrange(self.K):
-                for k2 in xrange(self.K):
+            for k1 in range(self.K):
+                for k2 in range(self.K):
                     if k1 == k2:
                         continue
 
@@ -1120,8 +1118,8 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
         else:
             # Update given lns
             ind = 0
-            for k1 in xrange(self.K):
-                for k2 in xrange(self.K):
+            for k1 in range(self.K):
+                for k2 in range(self.K):
                     if k1 == k2:
                         continue
 
@@ -1154,7 +1152,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
             else:
                 assert len(axs) == self.K
 
-            for k in xrange(self.K):
+            for k in range(self.K):
                 ln = axs[k].plot(self.dt * np.arange(data.T),
                                  rates[:,k],
                                  color=color, lw=2)
@@ -1171,7 +1169,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                 lns.append(ln)
 
             if draw_events:
-                for k in xrange(self.K):
+                for k in range(self.K):
                     # Get event times and counts
                     tk = np.nonzero(data.S[:,k])[0]
                     ck = data.S[tk,k]
@@ -1181,7 +1179,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
 
         else:
             # Update given rate lns
-            for k in xrange(self.K):
+            for k in range(self.K):
                 lns[k][0].set_data((self.dt * np.arange(data.T), rates[:,k]))
 
         return lns
@@ -1518,8 +1516,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         G = standard_model.G
         t_basis = standard_model.basis.dt * np.arange(standard_model.basis.L)
         t_basis = np.clip(t_basis, 1e-6, self.dt_max-1e-6)
-        for k1 in xrange(K):
-            for k2 in xrange(K):
+        for k1 in range(K):
+            for k2 in range(K):
                 std_ir = standard_model.basis.basis.dot(G[k1,k2,:])
 
                 def loss(mutau):
@@ -1676,7 +1674,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
             from scipy.sparse.linalg import eigs
             maxeig = eigs(self.weight_model.W_effective, k=1)[0]
 
-        print "Max eigenvalue: ", maxeig
+        print("Max eigenvalue: ", maxeig)
         if maxeig < 1.0:
             return True
         else:
@@ -1815,7 +1813,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         # Compute rate for each process at intervals of dt
         t = np.concatenate([np.arange(0, T, step=dt), [T]])
         rate = np.zeros((t.size, self.K))
-        for k in xrange(self.K):
+        for k in range(self.K):
             rate[:,k] += self.bias_model.lambda0[k]
 
             # Get the deltas between the time points and the spikes
@@ -1839,8 +1837,8 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
     def compute_impulses(self, dt=1.0):
         dt = np.concatenate([np.arange(0, self.dt_max, step=dt), [self.dt_max]])
         ir = np.zeros((dt.size, self.K, self.K))
-        for k1 in xrange(self.K):
-            for k2 in xrange(self.K):
+        for k1 in range(self.K):
+            for k2 in range(self.K):
                 ir[:,k1,k2] = self.impulse_model.impulse(dt, k1, k2)
         return ir, dt
 

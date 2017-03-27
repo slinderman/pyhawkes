@@ -56,11 +56,11 @@ def test_geweke():
     tau_mean     = tau_samples[offset:, ...].mean(axis=0)
     lambda0_mean = lambda0_samples[offset:, ...].mean(axis=0)
 
-    print "A mean:        ", A_mean
-    print "W mean:        ", W_mean
-    print "mu mean:       ", mu_mean
-    print "tau mean:      ", tau_mean
-    print "lambda0 mean:  ", lambda0_mean
+    print("A mean:        ", A_mean)
+    print("W mean:        ", W_mean)
+    print("mu mean:       ", mu_mean)
+    print("tau mean:      ", tau_mean)
+    print("lambda0 mean:  ", lambda0_mean)
 
 
     # Plot the log probability over iterations
@@ -78,8 +78,8 @@ def test_geweke():
     plt.xlabel('lam0')
     plt.ylabel('p(lam0)')
 
-    print "Expected p(A):  ", model.network.P
-    print "Empirical p(A): ", A_samples.mean(axis=0)
+    print("Expected p(A):  ", model.network.P)
+    print("Empirical p(A): ", A_samples.mean(axis=0))
 
     # Plot the histogram of weight samples
     plt.figure()
@@ -130,7 +130,7 @@ def test_sample_nig():
     from pyhawkes.utils.utils import sample_nig
     mu_samples = \
         np.array([sample_nig(mu_0, lmbda_0, alpha_0, beta_0)[0]
-                  for _ in xrange(10000)])
+                  for _ in range(10000)])
 
     # Plot the histogram of impulse means
     plt.figure()

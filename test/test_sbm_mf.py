@@ -19,7 +19,7 @@ def test_sbm_mf(seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     C = 5
@@ -63,9 +63,9 @@ def test_sbm_mf(seed=None):
     N_iters = 20
     c_samples = []
     vlbs = []
-    for itr in xrange(N_iters):
+    for itr in range(N_iters):
         if itr % 5 == 0:
-            print "Iteration: ", itr
+            print("Iteration: ", itr)
 
         # Update the plot
         im.set_data(test_model.network.mf_m[perm,:])
@@ -80,8 +80,8 @@ def test_sbm_mf(seed=None):
         if itr > 0:
 
             if vlbs[-1] - vlbs[-2] < -1e-3:
-                print "VLBS are not increasing"
-                print np.array(vlbs)
+                print("VLBS are not increasing")
+                print(np.array(vlbs))
                 # import pdb; pdb.set_trace()
                 raise Exception("VLBS are not increasing!")
 
@@ -95,8 +95,8 @@ def test_sbm_mf(seed=None):
     c_samples = np.array(c_samples)
     vlbs = np.array(vlbs)
 
-    print "True c: ", true_model.network.c
-    print "Test c: ", c_samples[-10:, :]
+    print("True c: ", true_model.network.c)
+    print("Test c: ", c_samples[-10:, :])
 
     # Compute the adjusted mutual info score of the clusterings
     amis = []

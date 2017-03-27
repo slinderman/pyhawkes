@@ -1,6 +1,6 @@
 import numpy as np
 import os
-import cPickle
+import pickle
 import gzip
 # np.seterr(all='raise')
 
@@ -31,7 +31,7 @@ def demo(seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     ###########################################################
@@ -40,7 +40,7 @@ def demo(seed=None):
     ###########################################################
     data_path = os.path.join("data", "synthetic", "synthetic_K20_C4_T10000.pkl.gz")
     with gzip.open(data_path, 'r') as f:
-        S, true_model = cPickle.load(f)
+        S, true_model = pickle.load(f)
 
     T      = S.shape[0]
     K      = true_model.K
@@ -53,7 +53,7 @@ def demo(seed=None):
     ###########################################################
     if init_with_map:
         init_len   = T
-        print "Initializing with BFGS on first ", init_len, " time bins."
+        print("Initializing with BFGS on first ", init_len, " time bins.")
         init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B,
                                                      alpha=1.0, beta=1.0)
         init_model.add_data(S[:init_len, :])
@@ -95,12 +95,12 @@ def demo(seed=None):
     N_iters = 100
     vlbs = []
     samples = []
-    for itr in xrange(N_iters):
+    for itr in range(N_iters):
         vlbs.append(test_model.meanfield_coordinate_descent_step())
-        print "VB Iter: ", itr, "\tVLB: ", vlbs[-1]
+        print("VB Iter: ", itr, "\tVLB: ", vlbs[-1])
         if itr > 0:
             if (vlbs[-2] - vlbs[-1]) > 1e-1:
-                print "WARNING: VLB is not increasing!"
+                print("WARNING: VLB is not increasing!")
 
         # Resample from variational distribution and plot
         test_model.resample_from_mf()

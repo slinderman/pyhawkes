@@ -2,7 +2,7 @@
 Test harness for fitting the competing models.
 """
 import time
-import cPickle
+import pickle
 import copy
 import os
 import gzip
@@ -61,8 +61,8 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
     # Check for existing Gibbs results
     if os.path.exists(output_path):
         with gzip.open(output_path, 'r') as f:
-            print "Loading standard BFGS results from ", output_path
-            results = cPickle.load(f)
+            print("Loading standard BFGS results from ", output_path)
+            results = pickle.load(f)
     else:
         # Split into test and training
         xv_len      = 1000
@@ -71,7 +71,7 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
 
 
         def _fit(lmbda):
-            print "Fitting a standard Hawkes model using BFGS"
+            print("Fitting a standard Hawkes model using BFGS")
 
             test_model = StandardHawkesProcess(K=K, dt=dt, dt_max=dt_max, lmbda=lmbda, **model_args)
             test_model.add_data(S_train)
@@ -114,16 +114,16 @@ def fit_standard_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
 
         # Find the best
         for lmbda, xv_ll in zip(lmbdas, xv_lls):
-            print "Lambda: ", lmbda, "\tXV LL: ", xv_ll
+            print("Lambda: ", lmbda, "\tXV LL: ", xv_ll)
 
         best = np.argmax(xv_lls)
         results = xv_results[best]
-        print "Best: ", best
+        print("Best: ", best)
 
         # Save the model
         with gzip.open(output_path, 'w') as f:
-            print "Saving std BFGS results to ", output_path
-            cPickle.dump(results, f, protocol=-1)
+            print("Saving std BFGS results to ", output_path)
+            pickle.dump(results, f, protocol=-1)
 
     return results
 
@@ -135,8 +135,8 @@ def fit_nonlinear_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
     # Check for existing Gibbs results
     if os.path.exists(output_path):
         with gzip.open(output_path, 'r') as f:
-            print "Loading nonlinear BFGS results from ", output_path
-            results = cPickle.load(f)
+            print("Loading nonlinear BFGS results from ", output_path)
+            results = pickle.load(f)
     else:
 
         # Split into test and training
@@ -146,7 +146,7 @@ def fit_nonlinear_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
 
 
         def _fit(lmbda):
-            print "Fitting a nonlinear Hawkes model using BFGS"
+            print("Fitting a nonlinear Hawkes model using BFGS")
 
             test_model = ReluNonlinearHawkesProcess(K=K, dt=dt, dt_max=dt_max, lmbda=lmbda, **model_args)
             test_model.add_data(S_train)
@@ -189,16 +189,16 @@ def fit_nonlinear_hawkes_model_bfgs(S, S_test, dt, dt_max, output_path,
 
         # Find the best
         for lmbda, xv_ll in zip(lmbdas, xv_lls):
-            print "Lambda: ", lmbda, "\tXV LL: ", xv_ll
+            print("Lambda: ", lmbda, "\tXV LL: ", xv_ll)
 
         best = np.argmax(xv_lls)
         results = xv_results[best]
-        print "Best: ", best
+        print("Best: ", best)
 
         # Save the model
         with gzip.open(output_path, 'w') as f:
-            print "Saving nonlinear BFGS results to ", output_path
-            cPickle.dump(results, f, protocol=-1)
+            print("Saving nonlinear BFGS results to ", output_path)
+            pickle.dump(results, f, protocol=-1)
 
     return results
 
@@ -211,10 +211,10 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
     # Check for existing Gibbs results
     if os.path.exists(output_path):
         with gzip.open(output_path, 'r') as f:
-            print "Loading Gibbs results from ", output_path
-            results = cPickle.load(f)
+            print("Loading Gibbs results from ", output_path)
+            results = pickle.load(f)
     else:
-        print "Fitting the data with a network Hawkes model using Gibbs sampling"
+        print("Fitting the data with a network Hawkes model using Gibbs sampling")
 
         test_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max, **model_args)
         test_model.add_data(S)
@@ -261,8 +261,8 @@ def fit_spikeslab_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
 
         # Save the Gibbs samples
         with gzip.open(output_path, 'w') as f:
-            print "Saving Gibbs samples to ", output_path
-            cPickle.dump(results, f, protocol=-1)
+            print("Saving Gibbs samples to ", output_path)
+            pickle.dump(results, f, protocol=-1)
 
     return results
 
@@ -278,10 +278,10 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
     # Check for existing Gibbs results
     if os.path.exists(output_path):
         with gzip.open(output_path, 'r') as f:
-            print "Loading Gibbs results from ", output_path
-            results = cPickle.load(f)
+            print("Loading Gibbs results from ", output_path)
+            results = pickle.load(f)
     else:
-        print "Fitting the data with a continuous time network Hawkes model using Gibbs sampling"
+        print("Fitting the data with a continuous time network Hawkes model using Gibbs sampling")
 
         test_model = \
             ContinuousTimeNetworkHawkesModel(K, dt_max=dt_max, **model_args)
@@ -326,8 +326,8 @@ def fit_ct_network_hawkes_gibbs(S, S_test, dt, dt_max, output_path,
 
         # Save the Gibbs samples
         with gzip.open(output_path, 'w') as f:
-            print "Saving Gibbs samples to ", output_path
-            cPickle.dump(results, f, protocol=-1)
+            print("Saving Gibbs samples to ", output_path)
+            pickle.dump(results, f, protocol=-1)
 
     return results
 
@@ -340,10 +340,10 @@ def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
     # Check for existing Gibbs results
     if os.path.exists(output_path):
         with gzip.open(output_path, 'r') as f:
-            print "Loading VB results from ", output_path
-            results = cPickle.load(f)
+            print("Loading VB results from ", output_path)
+            results = pickle.load(f)
     else:
-        print "Fitting the data with a network Hawkes model using batch VB"
+        print("Fitting the data with a network Hawkes model using batch VB")
 
         test_model = DiscreteTimeNetworkHawkesModelGammaMixtureSBM(K=K, dt=dt, dt_max=dt_max,
                                                                              **model_args)
@@ -399,8 +399,8 @@ def fit_network_hawkes_vb(S, S_test, dt, dt_max, output_path,
 
         # Save the Gibbs samples
         with gzip.open(output_path, 'w') as f:
-            print "Saving VB samples to ", output_path
-            cPickle.dump(results, f, protocol=-1)
+            print("Saving VB samples to ", output_path)
+            pickle.dump(results, f, protocol=-1)
 
     return results
 
@@ -415,10 +415,10 @@ def fit_network_hawkes_svi(S, S_test, dt, dt_max, output_path,
     # Check for existing Gibbs results
     if os.path.exists(output_path):
         with gzip.open(output_path, 'r') as f:
-            print "Loading SVI results from ", output_path
-            results = cPickle.load(f)
+            print("Loading SVI results from ", output_path)
+            results = pickle.load(f)
     else:
-        print "Fitting the data with a network Hawkes model using SVI"
+        print("Fitting the data with a network Hawkes model using SVI")
 
         test_model = DiscreteTimeNetworkHawkesModelGammaMixtureSBM(K=K, dt=dt, dt_max=dt_max,
                                                                              **model_args)
@@ -477,8 +477,8 @@ def fit_network_hawkes_svi(S, S_test, dt, dt_max, output_path,
 
         # Save the Gibbs samples
         with gzip.open(output_path, 'w') as f:
-            print "Saving SVI samples to ", output_path
-            cPickle.dump(results, f, protocol=-1)
+            print("Saving SVI samples to ", output_path)
+            pickle.dump(results, f, protocol=-1)
 
     return results
 

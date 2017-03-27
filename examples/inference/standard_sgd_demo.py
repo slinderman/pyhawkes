@@ -39,7 +39,7 @@ def demo(seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     C = 1       # Number of clusters in the true data
@@ -56,7 +56,7 @@ def demo(seed=None):
     init_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, B=B, beta=1.0)
     init_model.add_data(S[:init_len, :])
 
-    print "Initializing with BFGS on first ", init_len, " time bins."
+    print("Initializing with BFGS on first ", init_len, " time bins.")
     init_model.fit_with_bfgs()
 
     # Make another model for inference
@@ -80,7 +80,7 @@ def demo(seed=None):
     learning_rate = 0.01 * np.ones(N_steps)
     momentum = 0.8 * np.ones(N_steps)
     prev_velocity = None
-    for itr in xrange(N_steps):
+    for itr in range(N_steps):
         W,ll,prev_velocity = test_model.sgd_step(prev_velocity, learning_rate[itr], momentum[itr])
         lls.append(ll)
 
@@ -92,11 +92,11 @@ def demo(seed=None):
 
     plt.ioff()
 
-    print "W true:        ", true_model.weight_model.A * true_model.weight_model.W
-    print "lambda0 true:  ", true_model.bias_model.lambda0
-    print ""
-    print "W test:        ", test_model.W
-    print "lambda0 test   ", test_model.bias
+    print("W true:        ", true_model.weight_model.A * true_model.weight_model.W)
+    print("lambda0 true:  ", true_model.bias_model.lambda0)
+    print("")
+    print("W test:        ", test_model.W)
+    print("lambda0 test   ", test_model.bias)
 
     plt.figure()
     plt.plot(np.arange(N_steps), lls)

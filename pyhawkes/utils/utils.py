@@ -36,7 +36,7 @@ def convert_continuous_to_discrete(S, C, dt, T_min, T_max):
 
     K = C.max()+1
     S_dt = np.zeros((T,K))
-    for k in xrange(K):
+    for k in range(K):
         S_dt[:,k] = np.histogram(S[C==k], bins)[0]
 
     assert S_dt.sum() == len(S)

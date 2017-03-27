@@ -1,7 +1,8 @@
 import os
-import cPickle
+import pickle
 
 import numpy as np
+import imp
 # np.random.seed(1111)
 np.seterr(over="raise")
 from scipy.io import loadmat
@@ -29,7 +30,7 @@ from graphistician.internals.utils import compute_optimal_rotation
 from pybasicbayes.util.text import progprint_xrange
 
 import pyhawkes.models
-reload(pyhawkes.models)
+imp.reload(pyhawkes.models)
 from pyhawkes.models import ContinuousTimeNetworkHawkesModel
 
 from pyhawkes.internals.network import LatentDistanceAdjacencyModel, ErdosRenyiFixedSparsity, ErdosRenyiModel
@@ -106,11 +107,11 @@ for network, name in zip(networks, names):
     results_file = os.path.join(results_dir, "%s.pkl" % name)
     if os.path.exists(results_file):
         with open(results_file, "r") as f:
-            result = cPickle.load(f)
+            result = pickle.load(f)
             results.append(result)
         continue
 
-    print "Fitting model with ", name, " network."
+    print("Fitting model with ", name, " network.")
     model = ContinuousTimeNetworkHawkesModel(
         K, dt_max=1.,
         network=network)
@@ -145,7 +146,7 @@ for network, name in zip(networks, names):
 
     # Save results
     with open(results_file, "w") as f:
-        cPickle.dump(result, f, protocol=-1)
+        pickle.dump(result, f, protocol=-1)
 
 def plot_results(result):
     lls, plls, Weffs, Ps, Ls = result
@@ -286,7 +287,7 @@ def plot_pred_lls(results):
         pll_samples = logsumexp((samples - homog_pll)/len(S_test), axis=1) - np.log(J)
         std_hll = pll_samples.std()
 
-        print "PLL: ", avg_pll, " +- ", std_hll
+        print("PLL: ", avg_pll, " +- ", std_hll)
         plt.bar(i, avg_pll)
     plt.show()
 
@@ -305,7 +306,7 @@ def plot_locations(result, offset=0):
 
     # toplot = np.random.choice(np.arange(K), size=4, replace=False)
     toplot = np.linspace(offset,K+offset, 4, endpoint=False).astype(np.int)
-    print toplot
+    print(toplot)
     wheel_cmap = gradient_cmap([colors[0], colors[3], colors[2], colors[1], colors[0]])
     plot_colors = [wheel_cmap((np.pi+pfs_th[node_perm[j]])/(2*np.pi)) for j in toplot]
 

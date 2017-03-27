@@ -1,5 +1,5 @@
 import gzip
-import cPickle
+import pickle
 import os
 
 
@@ -13,19 +13,19 @@ def analyze(data_path):
 
     if data_path.endswith(".gz"):
         with gzip.open(data_path, 'r') as f:
-            S, true_model = cPickle.load(f)
+            S, true_model = pickle.load(f)
     else:
         with open(data_path, 'r') as f:
-            S, true_model = cPickle.load(f)
+            S, true_model = pickle.load(f)
 
-    print "True model:"
-    print true_model
+    print("True model:")
+    print(true_model)
 
     T = float(S.shape[0])
     N = S.sum(axis=0)
-    print "lambda0: ", true_model.bias_model.lambda0.mean()
-    print "Average event count: ", N.mean(), " +- ", N.std()
-    print "Average event count: ", (N/T).mean(), " +- ", (N/T).std()
+    print("lambda0: ", true_model.bias_model.lambda0.mean())
+    print("Average event count: ", N.mean(), " +- ", N.std())
+    print("Average event count: ", (N/T).mean(), " +- ", (N/T).std())
 
 
 # seed = 2650533028

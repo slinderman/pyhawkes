@@ -40,7 +40,7 @@ from pyhawkes.internals.distributions import Discrete, Bernoulli, \
 #         """
 #         pass
 
-class _StochasticBlockModelBase(BayesianDistribution):
+class _StochasticBlockModelBase(BayesianDistribution, metaclass=abc.ABCMeta):
     """
     A stochastic block model is a clustered network model with
     K:          Number of nodes in the network
@@ -55,8 +55,6 @@ class _StochasticBlockModelBase(BayesianDistribution):
     alpha:      Shape parameter of gamma prior over v
     beta:       Scale parameter of gamma prior over v
     """
-
-    __metaclass__ = abc.ABCMeta
 
     def __init__(self, K, C,
                  c=None, m=None, pi=1.0,
@@ -214,8 +212,8 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         """
         Resample p given observations of the weights
         """
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
+        for c1 in range(self.C):
+            for c2 in range(self.C):
                 Ac1c2 = A[np.ix_(self.c==c1, self.c==c2)]
 
                 if not self.allow_self_connections:
@@ -231,8 +229,8 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
         Resample v given observations of the weights
         """
         # import pdb; pdb.set_trace()
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
+        for c1 in range(self.C):
+            for c2 in range(self.C):
                 Ac1c2 = A[np.ix_(self.c==c1, self.c==c2)]
                 Wc1c2 = W[np.ix_(self.c==c1, self.c==c2)]
                 alpha = self.alpha + Ac1c2.sum() * self.kappa
@@ -248,7 +246,7 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
             return
 
         # Sample each assignment in order
-        for k in xrange(self.K):
+        for k in range(self.K):
             # Compute unnormalized log probs of each connection
             lp = np.zeros(self.C)
 
@@ -256,7 +254,7 @@ class GibbsSBM(_StochasticBlockModelBase, GibbsSampling):
             lp += np.log(self.m)
 
             # Likelihood from network
-            for ck in xrange(self.C):
+            for ck in range(self.C):
                 c_temp = self.c.copy().astype(np.int)
                 c_temp[k] = ck
 
@@ -338,8 +336,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
             return self.P
 
         E_p = np.zeros((self.K, self.K))
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
+        for c1 in range(self.C):
+            for c2 in range(self.C):
                 # Get the KxK matrix of joint class assignment probabilities
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
@@ -367,8 +365,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
             E_ln_p = np.log(self.P)
         else:
             E_ln_p = np.zeros((self.K, self.K))
-            for c1 in xrange(self.C):
-                for c2 in xrange(self.C):
+            for c1 in range(self.C):
+                for c2 in range(self.C):
                     # Get the KxK matrix of joint class assignment probabilities
                     pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
@@ -390,8 +388,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
             E_ln_notp = np.log(1.0 - self.P)
         else:
             E_ln_notp = np.zeros((self.K, self.K))
-            for c1 in xrange(self.C):
-                for c2 in xrange(self.C):
+            for c1 in range(self.C):
+                for c2 in range(self.C):
                     # Get the KxK matrix of joint class assignment probabilities
                     pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
@@ -413,8 +411,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
             return self.V
 
         E_v = np.zeros((self.K, self.K))
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
+        for c1 in range(self.C):
+            for c2 in range(self.C):
                 # Get the KxK matrix of joint class assignment probabilities
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
@@ -431,8 +429,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
             return np.log(self.V)
 
         E_log_v = np.zeros((self.K, self.K))
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
+        for c1 in range(self.C):
+            for c2 in range(self.C):
                 # Get the KxK matrix of joint class assignment probabilities
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
@@ -462,7 +460,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         :return:
         """
         # Sample each assignment in order
-        for k in xrange(self.K):
+        for k in range(self.K):
             notk = np.concatenate((np.arange(k), np.arange(k+1,self.K)))
 
             # Compute unnormalized log probs of each connection
@@ -472,7 +470,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
             lp += self.expected_log_m()
 
             # Likelihood from network
-            for ck in xrange(self.C):
+            for ck in range(self.C):
 
                 # Compute expectations with respect to other block assignments, c_{\neg k}
                 # Initialize vectors for expected parameters
@@ -485,7 +483,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
                 E_v_cnotk_to_ck       = np.zeros(self.K-1)
                 E_ln_v_cnotk_to_ck    = np.zeros(self.K-1)
 
-                for cnotk in xrange(self.C):
+                for cnotk in range(self.C):
                     # Get the (K-1)-vector of other class assignment probabilities
                     p_cnotk = self.mf_m[notk,cnotk]
 
@@ -569,8 +567,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         :param E_A:
         :return:
         """
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
+        for c1 in range(self.C):
+            for c2 in range(self.C):
                 # Get the KxK matrix of joint class assignment probabilities
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
@@ -593,8 +591,8 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         :param E_W_given_A: Expected W given A
         :return:
         """
-        for c1 in xrange(self.C):
-            for c2 in xrange(self.C):
+        for c1 in range(self.C):
+            for c2 in range(self.C):
                 # Get the KxK matrix of joint class assignment probabilities
                 pc1c2 = self.mf_m[:,c1][:, None] * self.mf_m[:,c2][None, :]
 
@@ -679,7 +677,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         # Get the VLB of the expected class assignments
         if vlb_c:
             E_ln_m = self.expected_log_m()
-            for k in xrange(self.K):
+            for k in range(self.K):
                 # Add the cross entropy of p(c | m)
                 vlb += Discrete().negentropy(E_x=self.mf_m[k,:], E_ln_p=E_ln_m)
 
@@ -726,7 +724,7 @@ class MeanFieldSBM(_StochasticBlockModelBase, MeanField, MeanFieldSVI):
         self.v = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)
 
         self.c = np.zeros(self.K, dtype=np.int)
-        for k in xrange(self.K):
+        for k in range(self.K):
             self.c[k] = int(np.random.choice(self.C, p=self.mf_m[k,:]))
 
 class StochasticBlockModel(GibbsSBM, MeanFieldSBM):
@@ -868,7 +866,7 @@ class StochasticBlockModelFixedSparsity(StochasticBlockModel):
         self.v = np.random.gamma(self.mf_alpha, 1.0/self.mf_beta)
 
         self.c = np.zeros(self.K, dtype=np.int)
-        for k in xrange(self.K):
+        for k in range(self.K):
             self.c[k] = int(np.random.choice(self.C, p=self.mf_m[k,:]))
 
 

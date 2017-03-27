@@ -40,7 +40,7 @@ def get_boundaries():
                 
                 placemarks[pname] = (lats, lons)
 
-        print "Found %d placemarks" % N
+        print("Found %d placemarks" % N)
         return placemarks
 
 def convert_placemark_to_polygon(placemarks):
@@ -48,8 +48,8 @@ def convert_placemark_to_polygon(placemarks):
     ax = fig.add_subplot(111, aspect='equal')
 
     polys = {}
-    for (name, (lats,lons)) in placemarks.items():
-        ext = zip(lons,lats)
+    for (name, (lats,lons)) in list(placemarks.items()):
+        ext = list(zip(lons,lats))
         poly = Polygon(ext)
         
         # DEBUG - Plot the patch
@@ -74,7 +74,7 @@ def get_area_of_polys(polys):
     areas = np.zeros(len(polys))
     for k in np.arange(K):
         areas[k] = polys[k+1].area
-        print "Region %d:\tArea:%f" % (k,areas[k])
+        print("Region %d:\tArea:%f" % (k,areas[k]))
     return areas
 
 def save_results(polys, areas):

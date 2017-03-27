@@ -1,5 +1,6 @@
 
 import numpy as np
+import imp
 np.random.seed(1111)
 np.seterr(over="raise")
 import matplotlib.pyplot as plt
@@ -8,7 +9,7 @@ from pybasicbayes.util.general import ibincount
 from pybasicbayes.util.text import progprint_xrange
 
 import pyhawkes.models
-reload(pyhawkes.models)
+imp.reload(pyhawkes.models)
 
 
 # Create the model with these parameters
@@ -25,9 +26,9 @@ assert dt_model.check_stability()
 
 S_dt,_ = dt_model.generate(T=int(np.ceil(T/dt)), keep=False)
 
-print "sampled dataset with ", S_dt.sum(), "events"
+print("sampled dataset with ", S_dt.sum(), "events")
 
-print "DT LL: ", dt_model.heldout_log_likelihood(S_dt)
+print("DT LL: ", dt_model.heldout_log_likelihood(S_dt))
 
 # Convert S_test to continuous time
 S_ct = dt * np.concatenate([ibincount(S) for S in S_dt.T]).astype(float)
@@ -49,7 +50,7 @@ ct_model.add_data(S_ct, C_ct, T)
 ct_model.bias_model.lambda0 = dt_model.bias_model.lambda0
 ct_model.weight_model.A = dt_model.weight_model.A
 ct_model.weight_model.W = dt_model.weight_model.W
-print "CT LL: ", ct_model.heldout_log_likelihood(S_ct, C_ct, T)
+print("CT LL: ", ct_model.heldout_log_likelihood(S_ct, C_ct, T))
 
 # Fit the CT model
 ct_lls = [ct_model.log_likelihood()]

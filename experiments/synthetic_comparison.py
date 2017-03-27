@@ -2,7 +2,7 @@
 Compare the various algorithms on a synthetic dataset.
 """
 import time
-import cPickle
+import pickle
 import os
 import gzip
 import pprint
@@ -34,17 +34,17 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     assert os.path.exists(os.path.dirname(output_path)), "Output directory does not exist!"
 
     if data_path.endswith(".gz"):
         with gzip.open(data_path, 'r') as f:
-            S, true_model = cPickle.load(f)
+            S, true_model = pickle.load(f)
     else:
         with open(data_path, 'r') as f:
-            S, true_model = cPickle.load(f)
+            S, true_model = pickle.load(f)
 
     # If T_train is given, only use a fraction of the dataset
     if T_train is not None:
@@ -52,10 +52,10 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
 
     if test_path.endswith(".gz"):
         with gzip.open(test_path, 'r') as f:
-            S_test, test_model = cPickle.load(f)
+            S_test, test_model = pickle.load(f)
     else:
         with open(test_path, 'r') as f:
-            S_test, test_model = cPickle.load(f)
+            S_test, test_model = pickle.load(f)
 
     K      = true_model.K
     C      = true_model.C
@@ -69,7 +69,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
     use_parse_results = False
     if use_parse_results and  os.path.exists(output_path + ".parsed_results.pkl"):
         with open(output_path + ".parsed_results.pkl") as f:
-            auc_rocs, auc_prcs, plls, timestamps = cPickle.load(f)
+            auc_rocs, auc_prcs, plls, timestamps = pickle.load(f)
             timestamps['svi'] = np.array(timestamps['svi'])
         import pdb; pdb.set_trace()
 
@@ -128,7 +128,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                            gibbs_ss_samples=gibbs_ss_samples,
                            svi_models=svi_models,
                            vb_models=vb_models)
-        print "AUC-ROC"
+        print("AUC-ROC")
         pprint.pprint(auc_rocs)
 
         # Compute area under precisino recall curve of inferred network
@@ -139,7 +139,7 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                                    gibbs_ss_samples=gibbs_ss_samples,
                                    svi_models=svi_models,
                                    vb_models=vb_models)
-        print "AUC-PRC"
+        print("AUC-PRC")
         pprint.pprint(auc_prcs)
 
 
@@ -152,8 +152,8 @@ def run_comparison(data_path, test_path, output_path, T_train=None, seed=None):
                                      vb_models=vb_models)
 
         with open(output_path + ".parsed_results.pkl", 'w') as f:
-            print "Saving parsed results to ", output_path + ".parsed_results.pkl"
-            cPickle.dump((auc_rocs, auc_prcs, plls, timestamps), f, protocol=-1)
+            print("Saving parsed results to ", output_path + ".parsed_results.pkl")
+            pickle.dump((auc_rocs, auc_prcs, plls, timestamps), f, protocol=-1)
 
     plot_pred_ll_vs_time(plls, timestamps, Z=float(S.size), T_train=T_train)
 
@@ -167,12 +167,12 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path,
     """
     # Check for existing results
     if os.path.exists(out_path + ".bfgs.pkl"):
-        print "Existing BFGS results found. Loading from file."
+        print("Existing BFGS results found. Loading from file.")
         with open(output_path + ".bfgs.pkl", 'r') as f:
-            init_model, init_time = cPickle.load(f)
+            init_model, init_time = pickle.load(f)
 
     else:
-        print "Fitting the data with a standard Hawkes model"
+        print("Fitting the data with a standard Hawkes model")
         # betas = np.logspace(-3,-0.8,num=10)
         betas = np.array([0.01, 0.1, 1.0, 10.0, 20.0])
         # betas = np.concatenate(([0], betas))
@@ -191,7 +191,7 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path,
 
         start = time.clock()
         for i,beta in enumerate(betas):
-            print "Fitting with BFGS on first ", init_len, " time bins, beta = ", beta
+            print("Fitting with BFGS on first ", init_len, " time bins, beta = ", beta)
             init_model.beta = beta
             init_model.fit_with_bfgs()
             init_models.append(init_model.copy_sample())
@@ -205,21 +205,21 @@ def fit_standard_hawkes_model_bfgs(S, K, B, dt, dt_max, output_path,
         init_time = time.clock() - start
 
         # Take the best model
-        print "XV predictive log likelihoods: "
+        print("XV predictive log likelihoods: ")
         for beta, ll in zip(betas, xv_ll):
-            print "Beta: %.2f\tLL: %.2f" % (beta, ll)
+            print("Beta: %.2f\tLL: %.2f" % (beta, ll))
         best_ind = np.argmax(xv_ll)
-        print "Best beta: ", betas[best_ind]
+        print("Best beta: ", betas[best_ind])
         init_model = init_models[best_ind]
 
         if best_ind == 0 or best_ind == len(betas) - 1:
-            print "WARNING: Best BFGS model was for extreme value of beta. " \
-                  "Consider expanding the beta range."
+            print("WARNING: Best BFGS model was for extreme value of beta. " \
+                  "Consider expanding the beta range.")
 
         # Save the model (sans data)
         with open(output_path + ".bfgs.pkl", 'w') as f:
-            print "Saving BFGS results to ", (output_path + ".bfgs.pkl")
-            cPickle.dump((init_model, init_time), f, protocol=-1)
+            print("Saving BFGS results to ", (output_path + ".bfgs.pkl"))
+            pickle.dump((init_model, init_time), f, protocol=-1)
 
     return init_model, init_time
 
@@ -229,7 +229,7 @@ def fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max, init_model=None):
     :param S:
     :return:
     """
-    print "Fitting the data with a standard Hawkes model using SGD"
+    print("Fitting the data with a standard Hawkes model using SGD")
 
     # Make a new model for inference
     test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max, B=B)
@@ -252,7 +252,7 @@ def fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max, init_model=None):
     learning_rate = 0.01 * np.ones(N_steps)
     momentum = 0.8 * np.ones(N_steps)
     prev_velocity = None
-    for itr in xrange(N_steps):
+    for itr in range(N_steps):
         # W,ll,grad = test_model.gradient_descent_step(stepsz=0.001)
         W,ll,prev_velocity = test_model.sgd_step(prev_velocity, learning_rate[itr], momentum[itr])
         samples.append(test_model.copy_sample())
@@ -260,7 +260,7 @@ def fit_standard_hawkes_model_sgd(S, K, B, dt, dt_max, init_model=None):
         timestamps.append(time.clock())
 
         if itr % 1 == 0:
-            print "Iteration ", itr, "\t LL: ", ll
+            print("Iteration ", itr, "\t LL: ", ll)
             im.set_data(np.ones((K,K)) * test_model.W)
             plt.pause(0.001)
 
@@ -282,15 +282,15 @@ def load_partial_results(output_path, typ="gibbs"):
     # Check for existing Gibbs results
     if os.path.exists(output_path + ".%s.pkl" % typ):
         with open(output_path + ".%s.pkl" % typ, 'r') as f:
-            print "Loading %s results from " % typ, (output_path + ".%s.pkl" % typ)
-            (samples, timestamps) = cPickle.load(f)
+            print("Loading %s results from " % typ, (output_path + ".%s.pkl" % typ))
+            (samples, timestamps) = pickle.load(f)
             return samples, timestamps
     else:
         if os.path.exists(os.path.join(os.path.dirname(output_path),
                                        "%s_timestamps.pkl" % typ)):
             with open(os.path.join(os.path.dirname(output_path),
                                        "%s_timestamps.pkl" % typ), 'r') as f:
-                names_and_timestamps = dict(cPickle.load(f))
+                names_and_timestamps = dict(pickle.load(f))
 
         # Look for individual iteration files instead
         files = glob.glob(output_path + ".%s.itr*.pkl" % typ)
@@ -298,9 +298,9 @@ def load_partial_results(output_path, typ="gibbs"):
             full_samples = []
             for file in files:
                 with open(file, 'r') as f:
-                    print "Loading sample from ", file
+                    print("Loading sample from ", file)
                     try:
-                        res = cPickle.load(f)
+                        res = pickle.load(f)
                         if isinstance(res, tuple):
                             sample, timestamp = res
                         else:
@@ -308,7 +308,7 @@ def load_partial_results(output_path, typ="gibbs"):
                             timestamp = names_and_timestamps[os.path.basename(file)]
                         full_samples.append((file, sample, timestamp))
                     except:
-                        print "Failed to load file ", file
+                        print("Failed to load file ", file)
 
 
 
@@ -341,7 +341,7 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
     #         (samples, timestamps) = cPickle.load(f)
 
     else:
-        print "Fitting the data with a network Hawkes model using Gibbs sampling"
+        print("Fitting the data with a network Hawkes model using Gibbs sampling")
 
         # Make a new model for inference
         network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
@@ -362,32 +362,32 @@ def fit_network_hawkes_gibbs(S, K, C, B, dt, dt_max,
         samples = []
         lps = []
         timestamps = [time.clock()]
-        for itr in xrange(N_samples):
+        for itr in range(N_samples):
             lps.append(test_model.log_probability())
             # lps.append(test_model.log_likelihood())
             samples.append(test_model.resample_and_copy())
             timestamps.append(time.clock())
 
             if itr % 1 == 0:
-                print "Iteration ", itr, "\t LL: ", lps[-1]
+                print("Iteration ", itr, "\t LL: ", lps[-1])
             #    im.set_data(test_model.weight_model.A * \
             #                test_model.weight_model.W)
             #    plt.pause(0.001)
 
             # Save this sample
             with open(output_path + ".gibbs.itr%04d.pkl" % itr, 'w') as f:
-                cPickle.dump((samples[-1], timestamps[-1]-timestamps[0]), f, protocol=-1)
+                pickle.dump((samples[-1], timestamps[-1]-timestamps[0]), f, protocol=-1)
 
         # Save the Gibbs timestamps
         timestamps = np.array(timestamps)
         with open(output_path + ".gibbs.timestamps.pkl", 'w') as f:
-            print "Saving Gibbs samples to ", (output_path + ".gibbs.timestamps.pkl")
-            cPickle.dump(timestamps, f, protocol=-1)
+            print("Saving Gibbs samples to ", (output_path + ".gibbs.timestamps.pkl"))
+            pickle.dump(timestamps, f, protocol=-1)
 
         # Save the Gibbs samples
         with open(output_path + ".gibbs.pkl", 'w') as f:
-            print "Saving Gibbs samples to ", (output_path + ".gibbs.pkl")
-            cPickle.dump((samples, timestamps[1:] - timestamps[0]), f, protocol=-1)
+            print("Saving Gibbs samples to ", (output_path + ".gibbs.pkl"))
+            pickle.dump((samples, timestamps[1:] - timestamps[0]), f, protocol=-1)
 
     return samples, timestamps
 
@@ -402,7 +402,7 @@ def fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
 
 
     else:
-        print "Fitting the data with a spike and slab network Hawkes model using Gibbs sampling"
+        print("Fitting the data with a spike and slab network Hawkes model using Gibbs sampling")
 
         # Make a new model for inference
         network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0, 'p': p,
@@ -420,30 +420,30 @@ def fit_network_hawkes_gibbs_ss(S, K, C, B, dt, dt_max,
         samples = []
         lps = []
         timestamps = [time.clock()]
-        for itr in xrange(N_samples):
+        for itr in range(N_samples):
             lps.append(test_model.log_probability())
             samples.append(test_model.resample_and_copy())
             timestamps.append(time.clock())
 
-            print test_model.network.v
+            print(test_model.network.v)
 
             if itr % 1 == 0:
-                print "Iteration ", itr, "\t LP: ", lps[-1]
+                print("Iteration ", itr, "\t LP: ", lps[-1])
 
             # Save this sample
             with open(output_path + ".gibbs_ss.itr%04d.pkl" % itr, 'w') as f:
-                cPickle.dump((samples[-1], timestamps[-1]-timestamps[0]), f, protocol=-1)
+                pickle.dump((samples[-1], timestamps[-1]-timestamps[0]), f, protocol=-1)
 
         # Save the Gibbs timestamps
         timestamps = np.array(timestamps)
         with open(output_path + ".gibbs_ss.timestamps.pkl", 'w') as f:
-            print "Saving spike and slab Gibbs samples to ", (output_path + ".gibbs_ss.timestamps.pkl")
-            cPickle.dump(timestamps, f, protocol=-1)
+            print("Saving spike and slab Gibbs samples to ", (output_path + ".gibbs_ss.timestamps.pkl"))
+            pickle.dump(timestamps, f, protocol=-1)
 
         # Save the Gibbs samples
         with open(output_path + ".gibbs_ss.pkl", 'w') as f:
-            print "Saving Gibbs samples to ", (output_path + ".gibbs_ss.pkl")
-            cPickle.dump((samples, timestamps[1:] - timestamps[0]), f, protocol=-1)
+            print("Saving Gibbs samples to ", (output_path + ".gibbs_ss.pkl"))
+            pickle.dump((samples, timestamps[1:] - timestamps[0]), f, protocol=-1)
 
     return samples, timestamps
 
@@ -465,7 +465,7 @@ def fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
     #             timestamps = np.array(timestamps)
 
     else:
-        print "Fitting the data with a network Hawkes model using Batch VB"
+        print("Fitting the data with a network Hawkes model using Batch VB")
 
         # Make a new model for inference
         network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
@@ -490,9 +490,9 @@ def fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
         samples = []
         start = time.clock()
         timestamps = []
-        for itr in xrange(N_iters):
+        for itr in range(N_iters):
             vlbs.append(test_model.meanfield_coordinate_descent_step())
-            print "Batch VB Iter: ", itr, "\tVLB: ", vlbs[-1]
+            print("Batch VB Iter: ", itr, "\tVLB: ", vlbs[-1])
             samples.append(test_model.copy_sample())
             timestamps.append(time.clock())
 
@@ -502,13 +502,13 @@ def fit_network_hawkes_vb(S, K, C, B, dt, dt_max,
 
             # Save this sample
             with open(output_path + ".vb.itr%04d.pkl" % itr, 'w') as f:
-                cPickle.dump((samples[-1], timestamps[-1] - start), f, protocol=-1)
+                pickle.dump((samples[-1], timestamps[-1] - start), f, protocol=-1)
 
         # Save the Gibbs samples
         timestamps = np.array(timestamps)
         with gzip.open(output_path + ".vb.pkl.gz", 'w') as f:
-            print "Saving VB samples to ", (output_path + ".vb.pkl.gz")
-            cPickle.dump((samples, timestamps - start), f, protocol=-1)
+            print("Saving VB samples to ", (output_path + ".vb.pkl.gz"))
+            pickle.dump((samples, timestamps - start), f, protocol=-1)
 
     return samples, timestamps
 
@@ -522,7 +522,7 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         samples, timestamps = samples_and_timestamps
 
     else:
-        print "Fitting the data with a network Hawkes model using SVI"
+        print("Fitting the data with a network Hawkes model using SVI")
 
         # Make a new model for inference
         network_hypers = {'C': C, 'alpha': 1.0, 'beta': 1.0/20.0}
@@ -549,8 +549,8 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
         stepsize = (np.arange(N_iters) + delay)**(-forgetting_rate)
         start = time.clock()
         timestamps = []
-        for itr in xrange(N_iters):
-            print "SVI Iter: ", itr, "\tStepsize: ", stepsize[itr]
+        for itr in range(N_iters):
+            print("SVI Iter: ", itr, "\tStepsize: ", stepsize[itr])
             test_model.sgd_step(minibatchsize=minibatchsize, stepsize=stepsize[itr])
             test_model.resample_from_mf()
             samples.append(test_model.copy_sample())
@@ -562,13 +562,13 @@ def fit_network_hawkes_svi(S, K, C, B, dt, dt_max,
 
             # Save this sample
             with open(output_path + ".svi.itr%04d.pkl" % itr, 'w') as f:
-                cPickle.dump((samples[-1], timestamps[-1] -start), f, protocol=-1)
+                pickle.dump((samples[-1], timestamps[-1] -start), f, protocol=-1)
 
         # Save the Gibbs samples
         timestamps = np.array(timestamps)
         with gzip.open(output_path + ".svi.pkl.gz", 'w') as f:
-            print "Saving SVI samples to ", (output_path + ".svi.pkl.gz")
-            cPickle.dump((samples, timestamps - start), f, protocol=-1)
+            print("Saving SVI samples to ", (output_path + ".svi.pkl.gz"))
+            pickle.dump((samples, timestamps - start), f, protocol=-1)
 
     return samples, timestamps
 
@@ -740,7 +740,7 @@ def compute_predictive_ll(S_test, S_train,
             plls['sgd'] = sgd_model.heldout_log_likelihood(S_test)
 
     if gibbs_samples is not None:
-        print "Computing predictive log likelihood for Gibbs samples"
+        print("Computing predictive log likelihood for Gibbs samples")
         # Compute log(E[pred likelihood]) on second half of samplese
         offset       = 0
         # Preconvolve with the Gibbs model's basis
@@ -754,7 +754,7 @@ def compute_predictive_ll(S_test, S_train,
         plls['gibbs'] = np.array(plls['gibbs'])
 
     if gibbs_ss_samples is not None:
-        print "Computing predictive log likelihood for spike and slab Gibbs samples"
+        print("Computing predictive log likelihood for spike and slab Gibbs samples")
         # Compute log(E[pred likelihood]) on second half of samplese
         offset       = 0
         # Preconvolve with the Gibbs model's basis
@@ -769,7 +769,7 @@ def compute_predictive_ll(S_test, S_train,
 
 
     if vb_models is not None:
-        print "Computing predictive log likelihood for VB iterations"
+        print("Computing predictive log likelihood for VB iterations")
         # Compute predictive likelihood over samples from VB model
         N_models  = len(vb_models)
         N_samples = 10
@@ -778,7 +778,7 @@ def compute_predictive_ll(S_test, S_train,
 
         vb_plls = np.zeros((N_models, N_samples))
         for i, vb_model in enumerate(vb_models):
-            for j in xrange(N_samples):
+            for j in range(N_samples):
                 vb_model.resample_from_mf()
                 vb_plls[i,j] = vb_model.heldout_log_likelihood(S_test, F=F_test)
 
@@ -786,7 +786,7 @@ def compute_predictive_ll(S_test, S_train,
         plls['vb'] = -np.log(N_samples) + logsumexp(vb_plls, axis=1)
 
     if svi_models is not None:
-        print "Computing predictive log likelihood for SVI iterations"
+        print("Computing predictive log likelihood for SVI iterations")
         # Compute predictive likelihood over samples from VB model
         N_models  = len(svi_models)
         N_samples = 10
@@ -800,7 +800,7 @@ def compute_predictive_ll(S_test, S_train,
                 svi_plls[i,:] = np.nan
                 continue
 
-            for j in xrange(N_samples):
+            for j in range(N_samples):
                 svi_model.resample_from_mf()
                 svi_plls[i,j] = svi_model.heldout_log_likelihood(S_test, F=F_test)
 
@@ -831,7 +831,7 @@ def plot_pred_ll_vs_time(plls, timestamps, Z=1.0, T_train=None, nbins=4):
     plt.grid()
 
     # Compute the max and min time in seconds
-    print "Homog PLL: ", plls['homog']
+    print("Homog PLL: ", plls['homog'])
 
     # DEBUG
     plls['homog'] = 0.0

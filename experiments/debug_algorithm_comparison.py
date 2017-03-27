@@ -1,7 +1,7 @@
 """
 Compare the various algorithms on a synthetic dataset.
 """
-import cPickle
+import pickle
 import os
 import copy
 import gzip
@@ -22,10 +22,10 @@ import harness
 
 def load_data(data_path, test_path):
     with gzip.open(data_path, 'r') as f:
-        S, true_model = cPickle.load(f)
+        S, true_model = pickle.load(f)
 
     with gzip.open(test_path, 'r') as f:
-        S_test, test_model = cPickle.load(f)
+        S_test, test_model = pickle.load(f)
 
     return S, S_test, true_model
 
@@ -82,21 +82,21 @@ def plot_impulse_responses(models, results):
         if "continuous" in str(smpl.__class__).lower():
             t, irs = smpl.impulses
 
-            for k1 in xrange(K):
-                for k2 in xrange(K):
+            for k1 in range(K):
+                for k2 in range(K):
                     plt.subplot(K,K,k1*K + k2 + 1)
                     plt.plot(t, W[k1,k2] * irs[:,k1,k2], color=col[i], lw=2)
         else:
             irs = smpl.impulses
-            for k1 in xrange(K):
-                for k2 in xrange(K):
+            for k1 in range(K):
+                for k2 in range(K):
                     plt.subplot(K,K,k1*K + k2 + 1)
                     plt.plot(W[k1,k2] * irs[:,k1,k2], color=col[i], lw=2)
 
         y_max = max(y_max, (W*irs).max())
 
-    for k1 in xrange(K):
-        for k2 in xrange(K):
+    for k1 in range(K):
+        for k2 in range(K):
             plt.subplot(K,K,k1*K+k2+1)
             plt.ylim(0,y_max*1.05)
     plt.show()
@@ -123,7 +123,7 @@ if __name__ == "__main__":
 
     if seed is None:
         seed = np.random.randint(2**32)
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     assert os.path.exists(os.path.dirname(output_dir)), "Output directory does not exist!"

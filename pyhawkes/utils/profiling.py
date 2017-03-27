@@ -1,6 +1,6 @@
-from __future__ import division
+
 import numpy as np
-import sys, StringIO, inspect, os, functools, time, collections
+import sys, io, inspect, os, functools, time, collections
 
 try:
     import line_profiler
@@ -15,5 +15,5 @@ try:
     def show_line_stats(stream=None):
         _prof.print_stats(stream=stream)
 except ImportError:
-    print "Failed to load line profiler"
+    print("Failed to load line profiler")
     line_profiled = lambda x: x

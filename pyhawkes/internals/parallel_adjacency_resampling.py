@@ -45,7 +45,7 @@ def _resample_column_of_A(k2):
 
     A_col = model.A[:,k2].copy()
     W_col = W[:,k2]
-    for k1 in xrange(K):
+    for k1 in range(K):
         # Compute the log likelihood of the events given W and A=0
         A_col[k1] = 0
         # ll0 = sum([d.log_likelihood_single_process(k2) for d in data])
@@ -111,7 +111,7 @@ def _ct_resample_column_of_A(k2):
     K = model.K
     A_col = model.A[:,k2].copy()
 
-    for k1 in xrange(K):
+    for k1 in range(K):
         # Handle deterministic models
         if p[k1,k2] == 0:
             A_col[k1] = 0

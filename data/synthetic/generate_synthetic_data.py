@@ -1,4 +1,4 @@
-import cPickle
+import pickle
 import os
 import gzip
 import numpy as np
@@ -16,7 +16,7 @@ def generate_synthetic_data(seed=None):
     if seed is None:
         seed = np.random.randint(2**32)
 
-    print "Setting seed to ", seed
+    print("Setting seed to ", seed)
     np.random.seed(seed)
 
     # Create a true model
@@ -146,8 +146,8 @@ def generate_synthetic_data(seed=None):
     out_name = 'synthetic_K%d_C%d_T%d.pkl.gz' % (K,C,T)
     out_path = os.path.join(out_dir, out_name)
     with gzip.open(out_path, 'w') as f:
-        print "Saving output to ", out_path
-        cPickle.dump((S, true_model), f, protocol=-1)
+        print("Saving output to ", out_path)
+        pickle.dump((S, true_model), f, protocol=-1)
 
     # Sample test data
     S_test,_ = true_model.generate(T=T_test, keep=False)
@@ -157,8 +157,8 @@ def generate_synthetic_data(seed=None):
     out_name = 'synthetic_test_K%d_C%d_T%d.pkl.gz' % (K,C,T_test)
     out_path = os.path.join(out_dir, out_name)
     with gzip.open(out_path, 'w') as f:
-        print "Saving output to ", out_path
-        cPickle.dump((S_test, true_model), f, protocol=-1)
+        print("Saving output to ", out_path)
+        pickle.dump((S_test, true_model), f, protocol=-1)
 
 
 # demo(2203329564)
