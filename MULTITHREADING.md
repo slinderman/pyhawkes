@@ -3,7 +3,7 @@
 This is a set of instructions for installing pyhawkes with high-performance multithreading.
 For Mac OS X users, this assumes that you are using [Homebrew](https://brew.sh/) for package management.
 
-# Install GSL and GNU compilers
+## Install GSL and GNU compilers
 
 For OS X users with Homebrew:
 

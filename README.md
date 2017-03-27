@@ -66,12 +66,14 @@ see how those methods can be used, look in `examples/inference`.
 
 Installation
 ===
-To check out, run
+For a basic (but lower performance) installation run
+
+    pip install pyhawkes
+
+To install from source run
 
     git clone git@github.com:slinderman/pyhawkes.git
-
-To perform a basic installation, run
-
+    cd pyhawkes
     pip install -e .
 
 This will be rather slow, however, since the default version does not do

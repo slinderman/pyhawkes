@@ -1,0 +1,5 @@
+recursive-include pyhawkes *.pyx
+recursive-include pyhawkes *.cpp
+recursive-include pyhawkes *.c
+recursive-include pyhawkes *.h
+recursive-include pyhawkes *.pxd
