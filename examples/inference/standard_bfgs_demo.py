@@ -4,19 +4,14 @@ import matplotlib.pyplot as plt
 from pyhawkes.models import DiscreteTimeNetworkHawkesModelSpikeAndSlab, DiscreteTimeStandardHawkesModel
 from pyhawkes.utils.basis import IdentityBasis
 
-def sample_from_network_hawkes(C, K, T, dt, dt_max, B):
+def sample_from_network_hawkes(K, T, dt, dt_max, B):
     # Create a true model
-    p = 0.8 * np.eye(C)
-    v = 10.0 * np.eye(C) + 20.0 * (1-np.eye(C))
-    c = (0.0 * (np.arange(K) < 10) + 1.0 * (np.arange(K)  >= 10)).astype(np.int)
-    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(C=C, K=K, dt=dt, dt_max=dt_max,
-                                                            B=B, c=c, p=p, v=v)
+    true_model = DiscreteTimeNetworkHawkesModelSpikeAndSlab(K=K, dt=dt, dt_max=dt_max, B=B,
+                                                            network_hypers=dict(p=0.1))
 
     # Plot the true network
     plt.ion()
-    plot_network(true_model.weight_model.A,
-                 true_model.weight_model.W,
-                 vmax=0.5)
+    true_model.plot_network()
 
     # Sample from the true model
     S,R = true_model.generate(T=T)
@@ -30,26 +25,24 @@ def demo(seed=None):
 
     :return:
     """
-    raise NotImplementedError("This example needs to be updated.")
-
     if seed is None:
         seed = np.random.randint(2**32)
 
     print("Setting seed to ", seed)
     np.random.seed(seed)
 
-    C = 1       # Number of clusters in the true data
-    K = 10      # Number of nodes
-    T = 1000    # Number of time bins to simulate
-    dt = 0.02   # Time bin size
-    dt_max = 0.08
-    B = 3       # Number of basis functions
+    K = 5       # Number of nodes
+    T = 10000     # Number of time bins to simulate
+    dt = 1       # Time bin size
+    dt_max = 50  # Impulse response length
+    B = 1        # Number of basis functions
 
     # Sample from a sparse network Hawkes model
-    S, true_model = sample_from_network_hawkes(C, K, T, dt, dt_max, B)
+    S, true_model = sample_from_network_hawkes(K, T, dt, dt_max, B)
 
     # Make a new model for inference
-    test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=False)
+    # test_basis = IdentityBasis(dt, dt_max, allow_instantaneous=False)
+    test_basis = true_model.basis
     test_model = DiscreteTimeStandardHawkesModel(K=K, dt=dt, dt_max=dt_max+dt,
                                                  beta=1.0,
                                                  basis=test_basis,
@@ -61,15 +54,18 @@ def demo(seed=None):
 
     test_model.fit_with_bfgs()
 
-    print("W true:        ", true_model.weight_model.A * true_model.weight_model.W)
     print("lambda0 true:  ", true_model.bias_model.lambda0)
-    print("ll true:       ", true_model.log_likelihood())
-    print("")
-    print("W test:        ", test_model.W)
     print("lambda0 test   ", test_model.bias)
+
+    print("")
+    print("W true:        ", true_model.weight_model.A * true_model.weight_model.W)
+    print("W test:        ", test_model.W)
+
+    print("")
+    print("ll true:       ", true_model.log_likelihood())
     print("ll test:       ", test_model.log_likelihood())
 
-    plot_network(np.ones((K,K)), test_model.W, vmax=0.5)
+    # test_model.plot_network()
 
     # Plot the rates
     plt.figure()
@@ -77,6 +73,8 @@ def demo(seed=None):
         plt.subplot(3,1,k+1)
         plt.plot(np.arange(T) * dt, true_model.compute_rate(proc=k), '-b')
         plt.plot(np.arange(T) * dt, test_model.compute_rate(ks=k), '-r')
+        lim = plt.ylim()
+        plt.ylim(0, 1.25*lim[1])
 
     plt.ioff()
     plt.show()
