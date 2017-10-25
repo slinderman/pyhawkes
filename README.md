@@ -49,7 +49,7 @@ fig, handles = test_model.plot(color="#e41a1c")
 # Run a Gibbs sampler
 N_samples = 100
 lps = []
-for itr in xrange(N_samples):
+for itr in range(N_samples):
     test_model.resample_model()
     lps.append(test_model.log_probability())
 
