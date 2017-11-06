@@ -40,7 +40,7 @@ def convert_continuous_to_discrete(S, C, dt, T_min, T_max):
         S_dt[:,k] = np.histogram(S[C==k], bins)[0]
 
     assert S_dt.sum() == len(S)
-    return S_dt
+    return S_dt.astype(np.int)
 
 def get_unique_file_name(filedir, filename):
     """
