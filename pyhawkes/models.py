@@ -1177,7 +1177,7 @@ class _DiscreteTimeNetworkHawkesModelBase(object):
                     ck = data.S[tk,k]
 
                     # Stem plot
-                    axs[k].stem(tk+self.dt/2., ck, '-k', markerfmt="ko", lw=2)
+                    axs[k].stem(tk+self.dt/2., ck, '-k', markerfmt="ko")
 
         else:
             # Update given rate lns

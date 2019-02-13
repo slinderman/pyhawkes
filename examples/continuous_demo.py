@@ -71,6 +71,8 @@ for itr in progprint_xrange(N_samples, perline=25):
 
 
 plt.figure()
-plt.plot(ct_lls, 'b')
-plt.plot(dt_lls, 'r')
+plt.plot(ct_lls, 'b', label="continuous time")
+plt.plot(dt_lls, 'r', label="discrete time")
+plt.xlabel("iteration")
+plt.ylabel("log likelihood")
 plt.show()
