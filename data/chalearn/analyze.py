@@ -6,7 +6,7 @@ import os
 import gzip
 import pprint
 import numpy as np
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 from scipy.special import gammaln
 import matplotlib.pyplot as plt
 

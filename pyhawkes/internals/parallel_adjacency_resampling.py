@@ -5,7 +5,7 @@ This is a dummy module to facilitate joblib Parallel
  processes can reference them. No copying needed!
 """
 import numpy as np
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 
 # Set these as module level global variables
 model = None
