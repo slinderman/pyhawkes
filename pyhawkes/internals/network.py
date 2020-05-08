@@ -5,7 +5,7 @@ import abc
 
 import numpy as np
 from scipy.special import gammaln, psi
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 
 from pybasicbayes.abstractions import \
     BayesianDistribution, GibbsSampling, MeanField, MeanFieldSVI
