@@ -25,14 +25,19 @@ if __name__ == "__main__":
     # See data/synthetic/generate.py to create more.
     ###########################################################
     data_path = os.path.join("data", "synthetic", "synthetic_K20_C4_T10000.pkl.gz")
-    with gzip.open(data_path, 'r') as f:
-        S, true_model = pickle.load(f)
+    with gzip.open(data_path, 'rb') as f:
+        S, true_model = pickle.load(f, encoding="latin1")
+        #covert 64int to 32int dytpes - for subsequent TxK array
+        if S.dtype == np.int64 and true_model == np.int64:
+            S, true_model = S.astype(np.int32)
 
+ 
     T      = S.shape[0]
     K      = true_model.K
     B      = true_model.B
     dt     = true_model.dt
     dt_max = true_model.dt_max
+
 
     ###########################################################
     # Initialize with MAP estimation on a standard Hawkes model
