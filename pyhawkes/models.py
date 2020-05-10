@@ -1422,7 +1422,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
                  weight_hypers={},
                  network=None, network_hypers={}):
         """
-        Initialize a discrete time network Hawkes model with K processes.
+        Initialize a continuous time network Hawkes model with K processes.
 
         :param K:  Number of processes
         """
@@ -1711,6 +1711,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
         W = self.weight_model.W_effective
         mu, tau = self.impulse_model.mu, self.impulse_model.tau
 
+        # Python version
         # lmbda_manual = np.zeros(N)
         # impulse = self.impulse_model.impulse
         # # Resample parents
@@ -1830,8 +1831,7 @@ class ContinuousTimeNetworkHawkesModel(ModelGibbsSampling):
             # Compute the impulse responses onto process k for each delta
             imps = self.impulse_model.impulse(deltas[t_deltas, n_deltas],
                                               senders,
-                                              k
-                                              )
+                                              k)
             rate[t_deltas, k] += imps
 
         return rate, t
