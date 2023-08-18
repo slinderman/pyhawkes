@@ -102,12 +102,8 @@ class DiscreteTimeStandardHawkesModel(object):
 
     def initialize_to_background_rate(self):
         if len(self.data_list) > 0:
-            N = 0
-            T = 0
-            for S,_ in self.data_list:
-                N += S.sum(axis=0)
-                T += S.shape[0] * self.dt
-
+            N = np.sum([S.sum(axis=0) for S,_ in self.data_list])
+            T = np,sum([S.shape[0] * self.dt for S,_ in self.data_list])
             lambda0 = N / float(T)
             self.weights[:,0] = lambda0
 
